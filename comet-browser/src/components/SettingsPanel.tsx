@@ -27,7 +27,7 @@ import McpSettings from './McpSettings';
 import PermissionSettings from './PermissionSettings';
 import AutomationSettings from './AutomationSettings';
 
-const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () => void, defaultSection?: string }) => {
+const SettingsPanel = ({ onClose, defaultSection = 'profile', popupMode = false }: { onClose: () => void, defaultSection?: string, popupMode?: boolean }) => {
     const store = useAppStore();
     const setUser = useAppStore((state: BrowserState) => state.setUser);
     const fetchHistory = useAppStore((state: BrowserState) => state.fetchHistory);
@@ -37,6 +37,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
     const { isGuestMode, setGuestMode } = useAppStore();
     const [showFirebaseConfig, setShowFirebaseConfig] = useState(false);
     const [showMysqlConfig, setShowMysqlConfig] = useState(false);
+    const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac');
 
     useEffect(() => {
         if (store.settingsSection && store.settingsSection !== activeSection) {
@@ -147,11 +148,11 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
     ];
 
     return (
-        <div className="fixed inset-0 z-[1500] flex items-center justify-center p-4 md:p-12 bg-black/60 backdrop-blur-3xl no-drag-region">
+        <div className={popupMode ? "h-full w-full p-2 no-drag-region" : "fixed inset-0 z-[1500] flex items-center justify-center p-4 md:p-12 bg-black/60 backdrop-blur-3xl no-drag-region"}>
             <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                className="w-full max-w-6xl h-[85vh] bg-[#020205] border border-white/5 rounded-[2.5rem] overflow-hidden flex shadow-[0_30px_100px_rgba(0,0,0,0.8)] no-drag-region"
+                className={`${popupMode ? 'w-full h-full rounded-[1.75rem]' : 'w-full max-w-6xl h-[85vh] rounded-[2.5rem]'} bg-[#020205] border border-white/5 overflow-hidden flex shadow-[0_30px_100px_rgba(0,0,0,0.8)] no-drag-region`}
             >
                 {/* Navigation Sidebar */}
                 <div className="w-72 bg-white/[0.01] border-r border-white/5 p-8 flex flex-col gap-2">
@@ -343,11 +344,66 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                     <div className="flex items-center gap-4 mb-4">
                                         <Lock size={20} className="text-white/60" />
                                         <div>
-                                            <h3 className="text-sm font-black text-white uppercase tracking-wide">Privacy Settings</h3>
-                                            <p className="text-xs text-white/40">Configure browser privacy options</p>
+                                            <h3 className="text-sm font-black text-white uppercase tracking-wide">{isMac ? 'macOS Privacy & Permissions' : 'Privacy Settings'}</h3>
+                                            <p className="text-xs text-white/40">
+                                                {isMac ? 'Manage browser privacy and macOS system access for automation.' : 'Configure browser privacy options'}
+                                            </p>
                                         </div>
                                     </div>
-                                    <p className="text-white/60 text-sm">Configure macOS permissions in the Permissions section to enable shell commands and automation features.</p>
+                                    <p className="text-white/60 text-sm">
+                                        {isMac
+                                            ? 'Open the Permissions section to grant Accessibility, Screen Recording, and automation access so desktop control and shell tasks can run correctly.'
+                                            : 'Open the Permissions section to control shell and automation access.'}
+                                    </p>
+                                    <div className="mt-8 pt-6 border-t border-white/5 space-y-4">
+                                        <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                                            <div className="flex items-start gap-3">
+                                                <div className="mt-0.5 text-white/60">
+                                                    {store.enableAiOverview ? <Eye size={16} /> : <EyeOff size={16} />}
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-xs font-black uppercase tracking-widest text-white">AI Overview</h4>
+                                                    <p className="text-[11px] text-white/50">Show contextual AI summary panel for pages and selected text.</p>
+                                                </div>
+                                            </div>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={store.enableAiOverview}
+                                                    onChange={() => store.setEnableAiOverview(!store.enableAiOverview)}
+                                                    className="sr-only peer"
+                                                />
+                                                <div className="relative w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full peer peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-space-accent-neon" />
+                                            </label>
+                                        </div>
+
+                                        <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                                            <div className="flex items-start gap-3">
+                                                <Shield size={16} className="mt-0.5 text-white/60" />
+                                                <div>
+                                                    <h4 className="text-xs font-black uppercase tracking-widest text-white">Ad Blocker</h4>
+                                                    <p className="text-[11px] text-white/50">Block ads and common trackers while browsing.</p>
+                                                </div>
+                                            </div>
+                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={store.enableAdblocker}
+                                                    onChange={() => store.setEnableAdblocker(!store.enableAdblocker)}
+                                                    className="sr-only peer"
+                                                />
+                                                <div className="relative w-11 h-6 bg-white/10 rounded-full peer peer-checked:after:translate-x-full peer peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-deep-space-accent-neon" />
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div className="mt-5">
+                                        <button
+                                            onClick={() => setActiveSection('permissions')}
+                                            className="px-5 py-2.5 bg-white/5 border border-white/10 text-white/80 hover:text-white hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                        >
+                                            Open Permissions
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}

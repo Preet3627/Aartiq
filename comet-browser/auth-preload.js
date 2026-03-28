@@ -10,7 +10,9 @@ const createTrafficLights = () => {
     display: 'flex',
     gap: '6px',
     zIndex: '10000000',
-    pointerEvents: 'none',
+    pointerEvents: 'auto',
+    userSelect: 'none',
+    WebkitAppRegion: 'no-drag',
   });
 
   const colors = [
@@ -31,10 +33,23 @@ const createTrafficLights = () => {
       border: 'none',
       background: color,
       outline: 'none',
-      cursor: action === 'close' ? 'pointer' : 'default',
-      pointerEvents: action === 'close' ? 'auto' : 'none',
+      cursor: 'pointer',
+      pointerEvents: 'auto',
+      touchAction: 'manipulation',
       boxShadow: '0 0 0 1px rgba(0,0,0,0.12) inset',
+      WebkitAppRegion: 'no-drag',
     });
+
+    const handleWindowAction = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      ipcRenderer.send('auth-window-action', action);
+    };
+
+    btn.addEventListener('click', handleWindowAction);
+    btn.addEventListener('pointerdown', (event) => event.stopPropagation());
+    btn.addEventListener('mousedown', (event) => event.stopPropagation());
+    btn.addEventListener('touchstart', (event) => event.stopPropagation(), { passive: true });
     wrapper.appendChild(btn);
   });
 
@@ -58,28 +73,40 @@ const createDragOverlay = () => {
   return overlay;
 };
 
-  window.addEventListener('DOMContentLoaded', () => {
-    const body = document.body || document.documentElement;
-    if (!body) return;
+const attachOverlays = () => {
+  const body = document.body || document.documentElement;
+  if (!body) return;
 
-    if (!document.getElementById('comet-auth-drag')) {
-      body.appendChild(createDragOverlay());
-    }
+  if (!document.getElementById('comet-auth-drag')) {
+    body.appendChild(createDragOverlay());
+  }
 
-    if (!document.getElementById('comet-auth-traffic')) {
-      const traffic = createTrafficLights();
-      body.appendChild(traffic);
-    }
+  if (!document.getElementById('comet-auth-traffic')) {
+    const traffic = createTrafficLights();
+    body.appendChild(traffic);
+  }
+};
+
+const observeDom = () => {
+  const target = document.body || document.documentElement;
+  if (!target) return;
+  const observer = new MutationObserver(() => attachOverlays());
+  observer.observe(target, { childList: true, subtree: true });
+};
+
+window.addEventListener('DOMContentLoaded', () => {
+  attachOverlays();
+  observeDom();
 
   window.addEventListener('keyup', (event) => {
     if (event.key === 'Escape' || event.key === 'Esc') {
-      ipcRenderer.send('close-auth-window');
+      ipcRenderer.send('auth-window-action', 'close');
     }
   });
 
   document.addEventListener('click', (event) => {
     if (event.target && event.target.dataset && event.target.dataset.action === 'close') {
-      ipcRenderer.send('close-auth-window');
+      ipcRenderer.send('auth-window-action', 'close');
     }
   });
 });

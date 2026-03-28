@@ -291,10 +291,15 @@ export const useAppStore = create<BrowserState>()(
             authToken: null,
             setLocalPhotoURL: (url: string | null) => set({ localPhotoURL: url }),
             githubToken: null,
-            clientId: '',
+            clientId: '601898745585-8g9t0k72gq4q1a4s1o4d1t6t7e5v4c4g.apps.googleusercontent.com',
             clientSecret: '',
-            redirectUri: '',
+            redirectUri: 'https://browser.ponsrischool.in/oauth2callback',
             fetchAppConfig: async () => {
+                const fallbackConfig = {
+                    clientId: '601898745585-8g9t0k72gq4q1a4s1o4d1t6t7e5v4c4g.apps.googleusercontent.com',
+                    clientSecret: '',
+                    redirectUri: 'https://browser.ponsrischool.in/oauth2callback'
+                };
                 try {
                     const res = await fetch('https://browser.ponsrischool.in/api/config', {
                         headers: {
@@ -304,9 +309,9 @@ export const useAppStore = create<BrowserState>()(
                     if (res.ok) {
                         const config = await res.json();
                         const update = {
-                            clientId: config.googleClientId || '601898745585-8g9t0k72gq4q1a4s1o4d1t6t7e5v4c4g.apps.googleusercontent.com',
-                            clientSecret: config.googleClientSecret || '',
-                            redirectUri: config.googleRedirectUri || 'https://browser.ponsrischool.in/oauth2callback'
+                            clientId: config.googleClientId || fallbackConfig.clientId,
+                            clientSecret: config.googleClientSecret || fallbackConfig.clientSecret,
+                            redirectUri: config.googleRedirectUri || fallbackConfig.redirectUri
                         };
                         set({
                             ...update,
@@ -314,9 +319,12 @@ export const useAppStore = create<BrowserState>()(
                         });
                         if (window.electronAPI) window.electronAPI.saveGoogleConfig(update);
                         console.log('App config synced and persisted:', config);
+                    } else {
+                        set(fallbackConfig);
                     }
                 } catch (e) {
-                    console.error('Failed to sync app config:', e);
+                    set(fallbackConfig);
+                    console.warn('Failed to sync app config, using fallback config:', e);
                 }
             },
 
@@ -794,14 +802,12 @@ export const useAppStore = create<BrowserState>()(
 
             // Shortcuts
             updateShortcut: (action, accelerator) => {
-                set((state) => ({
-                    shortcuts: state.shortcuts.map(s =>
-                        s.action === action ? { ...s, accelerator } : s
-                    )
-                }));
-                // Call main process to update global shortcut
+                const updatedShortcuts = get().shortcuts.map(s =>
+                    s.action === action ? { ...s, accelerator } : s
+                );
+                set({ shortcuts: updatedShortcuts });
                 if (window.electronAPI) {
-                    window.electronAPI.updateShortcuts([{ action, accelerator }]);
+                    window.electronAPI.updateShortcuts(updatedShortcuts);
                 }
             },
             setHasSeenWelcomePage: (seen) => set({ hasSeenWelcomePage: seen }),
@@ -1007,6 +1013,9 @@ export const useAppStore = create<BrowserState>()(
                 sidebarSide: state.sidebarSide,
                 selectedEngine: state.selectedEngine,
                 aiProvider: state.aiProvider,
+                enableAIAssist: state.enableAIAssist,
+                enableAiOverview: state.enableAiOverview,
+                enableAdblocker: state.enableAdblocker,
                 bookmarks: state.bookmarks,
                 history: state.history,
                 tabs: state.tabs,

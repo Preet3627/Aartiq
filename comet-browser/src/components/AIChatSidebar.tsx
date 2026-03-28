@@ -119,6 +119,34 @@ interface Attachment {
   filename: string;
 }
 
+type ClickableDomElement = {
+  index: number;
+  tagName: string;
+  text: string;
+  selector?: string;
+  href?: string | null;
+  ariaLabel?: string | null;
+  title?: string | null;
+  rect?: { x: number; y: number; width: number; height: number };
+};
+
+type PageDomInfo = {
+  success: boolean;
+  url?: string;
+  title?: string;
+  bodyText?: string;
+  links?: Array<{ href: string; text: string }>;
+  forms?: Array<{ action: string; method: string; inputs: Array<{ name: string; type: string; placeholder: string }> }>;
+  clickableElements?: ClickableDomElement[];
+  error?: string;
+};
+
+type ExtractedSearchResult = {
+  title: string;
+  url: string;
+  snippet?: string;
+};
+
 type RefusedIntent = 'credential_login' | 'session_export' | 'file_exfiltration';
 interface RefusedIntentRecord {
   intent: RefusedIntent;
@@ -315,6 +343,219 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [ocrSearchResults, setOCRSearchResults] = useState<DOMSearchResult[]>([]);
   const [ocrSearchQuery, setOCRSearchQuery] = useState<string>('');
   const [ocrSearchLoading, setOCRSearchLoading] = useState(false);
+
+  const extractActivePageOcrText = useCallback(async (): Promise<string> => {
+    let ocrText = '';
+
+    if (window.electronAPI?.captureBrowserViewScreenshot) {
+      try {
+        const screenshotData = await window.electronAPI.captureBrowserViewScreenshot();
+        if (screenshotData) {
+          const { data } = await Tesseract.recognize(screenshotData, 'eng', {
+            logger: (m: any) => {
+              if (m.status === 'recognizing text') {
+                setPdfProgress(Math.round(m.progress * 100));
+              }
+            }
+          });
+          ocrText = data?.text || '';
+        }
+      } catch (e) {
+        console.warn('[AI] Browser OCR capture failed', e);
+      }
+    }
+
+    if (!ocrText && window.electronAPI?.visionDescribe) {
+      try {
+        const visionRes = await window.electronAPI.visionDescribe('Extract visible text, buttons, links, and important page content from this browser tab.');
+        ocrText = typeof visionRes === 'string' ? visionRes : ((visionRes as any)?.description || '');
+      } catch (e) {
+        console.warn('[AI] Vision fallback failed', e);
+      }
+    }
+
+    if (!ocrText && window.electronAPI?.ocrScreenText) {
+      try {
+        const ocrRes = await window.electronAPI.ocrScreenText();
+        ocrText = typeof ocrRes === 'string' ? ocrRes : ((ocrRes as any)?.text || '');
+      } catch (e) {
+        console.warn('[AI] Screen OCR fallback failed', e);
+      }
+    }
+
+    return scrubbedContent(ocrText || '');
+  }, []);
+
+  const withTimeout = useCallback(async <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+        })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }, []);
+
+  const ensureBrowserContextReady = useCallback(async () => {
+    setActiveView('browser');
+    if (!window.electronAPI) return;
+    window.electronAPI.showAllViews?.();
+    window.dispatchEvent(new Event('resize'));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }, [setActiveView]);
+
+  const readPageContentSmart = useCallback(async (domTimeoutMs = 7000): Promise<{ method: 'dom' | 'ocr'; content: string; error?: string }> => {
+    await ensureBrowserContextReady();
+    if (!window.electronAPI?.extractPageContent) {
+      const ocrOnlyText = await extractActivePageOcrText();
+      if (ocrOnlyText.length > 40) {
+        return { method: 'ocr', content: ocrOnlyText };
+      }
+      return { method: 'ocr', content: '', error: 'DOM reader unavailable and OCR returned no usable text' };
+    }
+    try {
+      const domRes = await withTimeout(window.electronAPI.extractPageContent(), domTimeoutMs, 'DOM read timeout');
+      const domText = scrubbedContent(domRes?.content || '');
+      if (domText.length > 80) {
+        return { method: 'dom', content: domText };
+      }
+    } catch (err: any) {
+      console.warn('[AI] DOM read timed out or failed, switching to OCR fallback:', err?.message || err);
+    }
+
+    const ocrText = await extractActivePageOcrText();
+    if (ocrText.length > 40) {
+      return { method: 'ocr', content: ocrText };
+    }
+
+    return { method: 'ocr', content: '', error: 'No readable page content from DOM or OCR' };
+  }, [ensureBrowserContextReady, extractActivePageOcrText, withTimeout]);
+
+  const buildClickableElementsSummary = useCallback((pageInfo?: PageDomInfo | null): string => {
+    const clickableElements = (pageInfo?.clickableElements || [])
+      .filter((element) => (element.text || element.ariaLabel || element.title || '').trim().length > 0)
+      .slice(0, 12);
+
+    if (clickableElements.length === 0) {
+      return '';
+    }
+
+    return clickableElements.map((element, index) => {
+      const label = element.text || element.ariaLabel || element.title || '(unlabeled control)';
+      const selector = element.selector ? ` selector=${element.selector}` : '';
+      const href = element.href ? ` href=${element.href}` : '';
+      return `${index + 1}. <${element.tagName}> "${label}"${selector}${href}`;
+    }).join('\n');
+  }, []);
+
+  const getActivePageAutomationContext = useCallback(async (): Promise<string> => {
+    if (!window.electronAPI?.getCurrentUrl || !window.electronAPI?.getPageDomInfo) {
+      return '';
+    }
+
+    try {
+      const liveUrl = await window.electronAPI.getCurrentUrl();
+      const pageInfo = await window.electronAPI.getPageDomInfo(activeTabId) as PageDomInfo;
+
+      if (!liveUrl && !pageInfo?.success) {
+        return '';
+      }
+
+      const clickableSummary = buildClickableElementsSummary(pageInfo);
+      const linkSummary = (pageInfo?.links || [])
+        .filter((link) => link.href)
+        .slice(0, 8)
+        .map((link, index) => `${index + 1}. ${link.text || link.href} -> ${link.href}`)
+        .join('\n');
+
+      const textSnippet = scrubbedContent(pageInfo?.bodyText || '').slice(0, 1200);
+
+      return [
+        '[ACTIVE PAGE CONTEXT]',
+        `URL: ${liveUrl || pageInfo?.url || currentUrl || 'Unknown'}`,
+        `TITLE: ${pageInfo?.title || 'Unknown'}`,
+        clickableSummary ? `[CLICKABLE ELEMENTS]\n${clickableSummary}` : '',
+        linkSummary ? `[VISIBLE LINKS]\n${linkSummary}` : '',
+        textSnippet ? `[VISIBLE PAGE TEXT]\n${textSnippet}` : '',
+        'Use CLICK_ELEMENT with selector when available. If only button text is known, CLICK_ELEMENT may use the text label as a fallback.'
+      ].filter(Boolean).join('\n');
+    } catch (e) {
+      console.warn('[AI] Failed to build active page automation context', e);
+      return '';
+    }
+  }, [activeTabId, buildClickableElementsSummary, currentUrl]);
+
+  const openSearchLinksAndAnalyze = useCallback(async (query: string) => {
+    if (!window.electronAPI) {
+      return { results: [] as ExtractedSearchResult[], openedPages: [] as string[] };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 2200));
+
+    const extraction = await window.electronAPI.extractSearchResults();
+    const results = ((extraction?.results || []) as ExtractedSearchResult[])
+      .filter((result) => result?.url && result?.title)
+      .slice(0, 4);
+
+    const openedPages: string[] = [];
+
+    for (const result of results.slice(0, 2)) {
+      store.addTab(result.url, 'ai-search-result');
+      setActiveView('browser');
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+
+      let resolvedUrl = result.url;
+      let pageTitle = result.title;
+      let domSnippet = '';
+
+      try {
+        resolvedUrl = await window.electronAPI.getCurrentUrl();
+      } catch {
+        resolvedUrl = result.url;
+      }
+
+      try {
+        const pageInfo = await window.electronAPI.getPageDomInfo() as PageDomInfo;
+        pageTitle = pageInfo?.title || pageTitle;
+        domSnippet = scrubbedContent(pageInfo?.bodyText || '').slice(0, 1400);
+      } catch (e) {
+        console.warn('[AI] Failed to inspect opened search result DOM', e);
+      }
+
+      if (!domSnippet) {
+        try {
+          const pageRes = await window.electronAPI.extractPageContent();
+          domSnippet = scrubbedContent(pageRes?.content || '').slice(0, 1400);
+        } catch (e) {
+          console.warn('[AI] Failed to extract opened search result content', e);
+        }
+      }
+
+      const ocrSnippet = (await extractActivePageOcrText()).slice(0, 1400);
+      const pageSummary = [
+        `TITLE: ${pageTitle}`,
+        `URL: ${resolvedUrl}`,
+        domSnippet ? `[DOM]\n${domSnippet}` : '',
+        ocrSnippet ? `[OCR]\n${ocrSnippet}` : ''
+      ].filter(Boolean).join('\n');
+
+      if (pageSummary) {
+        openedPages.push(pageSummary);
+        await BrowserAI.addToVectorMemory(pageSummary, {
+          type: 'opened_search_result',
+          query,
+          url: resolvedUrl,
+          title: pageTitle
+        });
+      }
+    }
+
+    return { results, openedPages };
+  }, [extractActivePageOcrText, setActiveView, store]);
 
   // Scheduling State - controlled by props or local
   const [localSchedulingIntent, setLocalSchedulingIntent] = useState<SchedulingIntent | null>(null);
@@ -668,6 +909,8 @@ I couldn't schedule the task. The background service may not be running. Please 
         console.warn('Failed to fetch browser state for LLM context', e);
       }
 
+      const activePageContext = await getActivePageAutomationContext();
+
       // LLM Request — Build context with REAL data injected
       const aiId = addThinkingStep('LLM Processing...');
 
@@ -677,6 +920,7 @@ I couldn't schedule the task. The background service may not be running. Please 
       const contextBlock = [
         searchContextSummary !== 'No recent context available.' ? `[📚 RECENT CONTEXT — CHECK THIS BEFORE SEARCHING!]\n${searchContextSummary}` : '',
         browserStateContext,
+        activePageContext,
         contextItems.length > 0
           ? `[RAG MEMORY]\n${contextItems.map(c => c.text).join('\n')}`
           : '',
@@ -811,7 +1055,7 @@ I couldn't schedule the task. The background service may not be running. Please 
       setIsLoading(false);
       setIsThinking(false);
     }
-  }, [inputMessage, attachments, messages, aiProvider, currentUrl, addThinkingStep, resolveThinkingStep, getStreamingResponse, isAiSetup, fetchRealSearchContext]);
+  }, [inputMessage, attachments, messages, aiProvider, currentUrl, addThinkingStep, resolveThinkingStep, getStreamingResponse, isAiSetup, fetchRealSearchContext, getActivePageAutomationContext]);
 
   const processNextCommand = useCallback(async () => {
     console.log('[AI] processNextCommand called, current index:', currentCommandIndex, 'queue length:', commandQueue.length);
@@ -1061,10 +1305,12 @@ I couldn't schedule the task. The background service may not be running. Please 
         case 'WEB_SEARCH': {
           let query = command.value.trim().replace(/^["'](.*)["']$/, '$1') || 'Comet AI Browser';
           let searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+          let isDirectUrl = false;
           
           // If the AI mistakenly uses WEB_SEARCH but provides a direct URL, handle it as a direct navigation
           if (query.match(/^https?:\/\/[^\s]+/i) || query.match(/^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}(\/.*)?$/)) {
              searchUrl = query.startsWith('http') ? query : `https://${query}`;
+             isDirectUrl = true;
              query = `Opening URL: ${searchUrl}`; // Just for logging
           }
 
@@ -1073,28 +1319,55 @@ I couldn't schedule the task. The background service may not be running. Please 
           store.addTab(searchUrl, 'ai-session'); // ✨ ALWAYS create a new tab for deep web searches
           output = `Opened new tab for: "${query}"`;
 
-          // Fetch real results and store in vector memory for LLM context
-          const results = await window.electronAPI.webSearchRag(query);
-          if (results && results.length > 0) {
-            const snippets = (results as string[])
-              .map((r) => r.trim())
+          if (!isDirectUrl) {
+            const { results: extractedResults, openedPages } = await openSearchLinksAndAnalyze(query);
+            const ragResults = await window.electronAPI.webSearchRag(query);
+            const ragSnippets = (ragResults || [])
+              .map((result: string) => result.trim())
               .filter(Boolean)
-              .slice(0, 6); // More snippets = richer context for LLM
+              .slice(0, 6);
 
-            // ✅ Store in BrowserAI so the synthesis step gets REAL data
-            const fullSnippet = `[WEB_SEARCH RESULTS for "${query}"]\n${snippets.join('\n---\n')}`;
-            await BrowserAI.addToVectorMemory(fullSnippet, {
-              type: 'web_search',
-              query,
-              timestamp: Date.now()
-            });
+            if (extractedResults.length > 0 || ragSnippets.length > 0 || openedPages.length > 0) {
+              const extractedSummary = extractedResults.length > 0
+                ? extractedResults.map((result, index) => `${index + 1}. ${result.title}\nURL: ${result.url}\nSnippet: ${result.snippet || 'No snippet available'}`).join('\n\n')
+                : '';
+              const openedSummary = openedPages.length > 0
+                ? openedPages.map((page, index) => `OPENED RESULT ${index + 1}\n${page}`).join('\n\n')
+                : '';
+              const ragSummary = ragSnippets.length > 0
+                ? ragSnippets.join('\n---\n')
+                : '';
 
-            output = `Search results for "${query}":\n${snippets.join('\n')}`;
-          } else {
+              const fullSnippet = [
+                `[WEB_SEARCH RESULTS for "${query}"]`,
+                extractedSummary ? `[EXTRACTED LINKS]\n${extractedSummary}` : '',
+                openedSummary ? `[OPENED RESULT PAGES]\n${openedSummary}` : '',
+                ragSummary ? `[SUPPLEMENTAL SEARCH SNIPPETS]\n${ragSummary}` : ''
+              ].filter(Boolean).join('\n\n');
+
+              await BrowserAI.addToVectorMemory(fullSnippet, {
+                type: 'web_search',
+                query,
+                url: searchUrl,
+                timestamp: Date.now()
+              });
+
+              output = [
+                `Search results for "${query}":`,
+                extractedSummary ? `[Top Links]\n${extractedSummary}` : '',
+                openedSummary ? `[Opened + OCR/DOM Analysis]\n${openedSummary}` : '',
+                ragSummary ? `[Extra Search Snippets]\n${ragSummary}` : ''
+              ].filter(Boolean).join('\n\n');
+              break;
+            }
+          }
+
+          {
             // Fallback: wait for the search page to load slightly and try DOM / OCR extraction
             await new Promise(resolve => setTimeout(resolve, 1500));
             try {
-              const domRes = await window.electronAPI.extractPageContent();
+              await ensureBrowserContextReady();
+              const domRes = await withTimeout(window.electronAPI.extractPageContent(), 7000, 'Web search DOM fallback timeout');
               if (domRes && domRes.content && domRes.content.length > 100) {
                 const scrubbed = scrubbedContent(domRes.content).substring(0, 1000); // 🚀 Truncate fallback DOM
                 output = `Search results for "${query}" (fallback DOM snippet):\n${scrubbed}...`;
@@ -1151,27 +1424,27 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
 
         case 'READ_PAGE_CONTENT': {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          const res = await window.electronAPI.extractPageContent();
-          if (res.content) {
-            const scrubbed = scrubbedContent(res.content);
-            output = `Page content read successfully (${scrubbed.length} chars):\n${scrubbed.substring(0, 4000)}...`;
-            await BrowserAI.addToVectorMemory(scrubbed, { type: 'page_content', url: currentUrl });
-            
+          const readResult = await readPageContentSmart(7500);
+          if (readResult.content) {
+            const scrubbed = scrubbedContent(readResult.content);
+            const label = readResult.method === 'dom' ? 'PAGE_CONTENT_DOM' : 'PAGE_CONTENT_OCR_FALLBACK';
+            output = `Page content read (${readResult.method.toUpperCase()}) (${scrubbed.length} chars):\n${scrubbed.substring(0, 4000)}...`;
+            await BrowserAI.addToVectorMemory(scrubbed, { type: 'page_content', source: readResult.method, url: currentUrl });
+
             // Store in context for reuse
             searchContextStore.addPageContent(currentUrl, currentUrl, scrubbed);
-            
+
             setMessages(prev => {
               const last = prev[prev.length - 1];
               if (last && last.role === 'model') {
                 const updated = [...prev];
-                updated[prev.length - 1] = { ...last, isOcr: true, ocrLabel: 'PAGE_CONTENT', ocrText: scrubbed };
+                updated[prev.length - 1] = { ...last, isOcr: true, ocrLabel: label, ocrText: scrubbed };
                 return updated;
               }
-              return [...prev, { role: 'model', content: '', isOcr: true, ocrLabel: 'PAGE_CONTENT', ocrText: scrubbed } as ExtendedChatMessage];
+              return [...prev, { role: 'model', content: '', isOcr: true, ocrLabel: label, ocrText: scrubbed } as ExtendedChatMessage];
             });
           } else {
-            output = `Error reading page: ${res.error}`;
+            output = `Error reading page: ${readResult.error || 'Unknown error'}`;
           }
           break;
         }
@@ -2120,11 +2393,11 @@ I've successfully executed the following real tasks:
         case 'EXTRACT_DATA': {
           const selector = command.value.split('|')[0].trim();
           try {
-            const res = await window.electronAPI.extractPageContent();
-            if (res && res.content) {
-              const scrubbed = scrubbedContent(res.content);
+            const readResult = await readPageContentSmart(7000);
+            if (readResult.content) {
+              const scrubbed = scrubbedContent(readResult.content);
               output = `Extracted data from page (${scrubbed.length} chars):\n${scrubbed.substring(0, 4000)}...`;
-              await BrowserAI.addToVectorMemory(scrubbed, { type: 'extracted_data', selector, url: currentUrl });
+              await BrowserAI.addToVectorMemory(scrubbed, { type: 'extracted_data', source: readResult.method, selector, url: currentUrl });
             } else {
               output = `No data found for selector: ${selector}.`;
             }
@@ -2147,7 +2420,8 @@ I've successfully executed the following real tasks:
           setDOMSearchResults([]);
           
           try {
-            const res = await window.electronAPI.searchDOM(query);
+            await ensureBrowserContextReady();
+            const res = await withTimeout(window.electronAPI.searchDOM(query), 7000, 'DOM search timeout');
             if (res.error) {
               output = `DOM search failed: ${res.error}`;
               setDOMSearchLoading(false);
@@ -2170,8 +2444,22 @@ I've successfully executed the following real tasks:
             }
             resolveThinkingStep(searchStepId, 'done', `${res.results?.length || 0} results found`);
           } catch (e: any) {
-            output = `DOM search error: ${e.message}`;
-            resolveThinkingStep(searchStepId, 'error', e.message);
+            const ocrText = await extractActivePageOcrText();
+            if (ocrText) {
+              const fallbackMatches = ocrText
+                .split('\n')
+                .map((line) => line.trim())
+                .filter((line) => line.toLowerCase().includes(query.toLowerCase()))
+                .slice(0, 10)
+                .map((line, idx) => ({ text: line, context: line, xpath: `ocr://${idx + 1}`, score: 1, tag: 'ocr' as const }));
+              setOCRSearchQuery(query);
+              setOCRSearchResults(fallbackMatches);
+              output = `DOM search timed out/failed, OCR fallback used. Found ${fallbackMatches.length} OCR matches for "${query}".`;
+              resolveThinkingStep(searchStepId, 'done', `OCR fallback (${fallbackMatches.length} matches)`);
+            } else {
+              output = `DOM search error: ${e.message}`;
+              resolveThinkingStep(searchStepId, 'error', e.message);
+            }
           } finally {
             setDOMSearchLoading(false);
           }
@@ -2262,7 +2550,8 @@ I've successfully executed the following real tasks:
           const readStepId = addThinkingStep('Reading secure DOM...');
           
           try {
-            const res = await window.electronAPI.extractSecureDOM();
+            await ensureBrowserContextReady();
+            const res = await withTimeout(window.electronAPI.extractSecureDOM(), 8000, 'Secure DOM read timeout');
             if (res.error) {
               output = `DOM read failed: ${res.error}`;
               resolveThinkingStep(readStepId, 'error', res.error);
@@ -2307,8 +2596,25 @@ I've successfully executed the following real tasks:
               resolveThinkingStep(readStepId, 'done', `${(res.content || '').length} chars processed`);
             }
           } catch (e: any) {
-            output = `DOM read error: ${e.message}`;
-            resolveThinkingStep(readStepId, 'error', e.message);
+            const fallback = await readPageContentSmart(5000);
+            if (fallback.content) {
+              const fallbackMode = fallback.method === 'dom' ? 'DOM' : 'OCR';
+              output = `Secure DOM read timed out/failed, ${fallbackMode} fallback used (${fallback.content.length} chars).\n\n${fallback.content.substring(0, 4000)}...`;
+              setMessages(prev => {
+                const last = prev[prev.length - 1];
+                const label = fallback.method === 'dom' ? 'DOM_READ_DOM_FALLBACK' : 'DOM_READ_OCR_FALLBACK';
+                if (last && last.role === 'model') {
+                  const updated = [...prev];
+                  updated[prev.length - 1] = { ...last, isOcr: true, ocrLabel: label, ocrText: fallback.content };
+                  return updated;
+                }
+                return [...prev, { role: 'model', content: '', isOcr: true, ocrLabel: label, ocrText: fallback.content } as ExtendedChatMessage];
+              });
+              resolveThinkingStep(readStepId, 'done', `Fallback ${fallback.method.toUpperCase()} read`);
+            } else {
+              output = `DOM read error: ${e.message}`;
+              resolveThinkingStep(readStepId, 'error', e.message);
+            }
           }
           break;
         }
@@ -2354,7 +2660,7 @@ I've successfully executed the following real tasks:
       processingQueueRef.current = false;
       setCurrentCommandIndex(prev => prev + 1);
     }
-  }, [commandQueue, currentCommandIndex, activeTabId, router, storeSetTheme, setActiveView, currentUrl, requestActionPermission, preloadCometIconLocal, addThinkingStep, resolveThinkingStep, fetchRealSearchContext]);
+  }, [commandQueue, currentCommandIndex, activeTabId, router, storeSetTheme, setActiveView, currentUrl, requestActionPermission, preloadCometIconLocal, addThinkingStep, resolveThinkingStep, fetchRealSearchContext, openSearchLinksAndAnalyze]);
 
   const formatMessageForExport = (m: ExtendedChatMessage) => {
     let result = `${m.role.toUpperCase()}:\n`;

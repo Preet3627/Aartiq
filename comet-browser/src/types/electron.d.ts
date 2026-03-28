@@ -40,6 +40,25 @@ declare global {
                 };
                 error?: string;
             }>;
+            getPageDomInfo: (tabId?: string) => Promise<{
+                success: boolean;
+                url?: string;
+                title?: string;
+                bodyText?: string;
+                links?: Array<{ href: string; text: string }>;
+                forms?: Array<{ action: string; method: string; inputs: Array<{ name: string; type: string; placeholder: string }> }>;
+                clickableElements?: Array<{
+                    index: number;
+                    tagName: string;
+                    text: string;
+                    selector?: string;
+                    href?: string | null;
+                    ariaLabel?: string | null;
+                    title?: string | null;
+                    rect?: { x: number; y: number; width: number; height: number };
+                }>;
+                error?: string;
+            }>;
             searchDOM: (query: string) => Promise<{
                 results: Array<{
                     text: string;
@@ -60,6 +79,7 @@ declare global {
             sendInputEvent: (input: any) => Promise<void>;
             openDevTools: () => void;
             changeZoom: (deltaY: number) => void;
+            resetZoom: () => void;
             onAudioStatusChanged: (callback: (isPlaying: boolean) => void) => () => void;
 
             // Download APIs
@@ -117,6 +137,9 @@ declare global {
             // Chat & File Export
             exportChatAsTxt: (messages: ChatMessage[]) => Promise<boolean>;
             exportChatAsPdf: (messages: ChatMessage[]) => Promise<boolean>;
+            sendAiOverviewData: (data: any) => void;
+            sendDownloadPanelData: (data: any) => void;
+            closeAiOverview: () => void;
 
             // MCP Support
             mcpCommand: (command: string, data: any) => Promise<any>;
@@ -171,7 +194,7 @@ declare global {
             onTabSuspended: (callback: (tabId: string) => void) => () => void;
             onTabResumed: (callback: (tabId: string) => void) => () => void;
             onResumeTabAndActivate: (callback: (tabId: string) => void) => () => void;
-            extractSearchResults: (tabId: string) => Promise<{ success: boolean; results?: any[]; error?: string }>;
+            extractSearchResults: (tabId?: string) => Promise<{ success: boolean; results?: any[]; error?: string }>;
             addNewTab: (url: string) => void;
 
             // Shell Commands
@@ -186,7 +209,7 @@ declare global {
             onOpenUnifiedSearch: (callback: () => void) => () => void;
 
             // Element Control (deprecated - use performCrossAppClick instead)
-            clickElement: (selector: string) => Promise<{ success: boolean; error?: string }>;
+            clickElement: (selector: string) => Promise<{ success: boolean; error?: string; matchedBy?: string; tagName?: string; text?: string; rect?: { x: number; y: number; width: number; height: number } }>;
             typeText: (selector: string, text: string) => Promise<{ success: boolean; error?: string }>;
             fillForm: (data: any) => Promise<{ success: boolean; error?: string }>;
             findAndClickText: (targetText: string) => Promise<{ success: boolean; x?: number; y?: number; error?: string; foundText?: string }>;
@@ -263,6 +286,8 @@ declare global {
             openPopupWindow: (type: string, options?: any) => void;
             closePopupWindow: (type: string) => void;
             closeAllPopups: () => void;
+            getAiOverviewData: () => Promise<any>;
+            getDownloadPanelData: () => Promise<any>;
             onLoadAuthToken: (callback: (token: string) => void) => () => void;
             saveAuthToken: (args: { token: string }) => void;
             getAuthToken: () => Promise<string | null>;

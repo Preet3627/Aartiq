@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getOpenTabs: () => ipcRenderer.invoke('get-open-tabs'),
   extractPageContent: () => ipcRenderer.invoke('extract-page-content'),
   extractSecureDOM: () => ipcRenderer.invoke('extract-secure-dom'),
+  getPageDomInfo: (tabId) => ipcRenderer.invoke('dom-get-page-info', { tabId }),
   searchDOM: (query) => ipcRenderer.invoke('search-dom', query),
   getSelectedText: () => ipcRenderer.invoke('get-selected-text'),
   findAndClickText: (targetText) => ipcRenderer.invoke('find-and-click-text', targetText),
@@ -51,6 +52,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendInputEvent: (input) => ipcRenderer.invoke('send-input-event', input),
   openDevTools: () => ipcRenderer.send('open-dev-tools'),
   changeZoom: (deltaY) => ipcRenderer.send('change-zoom', deltaY),
+  resetZoom: () => ipcRenderer.send('reset-zoom'),
   executeJavaScript: (code) => ipcRenderer.invoke('execute-javascript', code),
   clickElement: (selector) => ipcRenderer.invoke('click-element', selector),
   typeText: (selector, text) => ipcRenderer.invoke('type-text', { selector, text }),
@@ -153,6 +155,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openPopupWindow: (type, options) => ipcRenderer.send('open-popup-window', { type, options }),
   closePopupWindow: (type) => ipcRenderer.send('close-popup-window', type),
   closeAllPopups: () => ipcRenderer.send('close-all-popups'),
+  getAiOverviewData: () => ipcRenderer.invoke('get-ai-overview-data'),
+  getDownloadPanelData: () => ipcRenderer.invoke('get-download-panel-data'),
   onLoadAuthToken: (callback) => {
     const subscription = (event, token) => callback(token);
     ipcRenderer.on('load-auth-token', subscription);
@@ -211,6 +215,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Chat & File Export
   exportChatAsTxt: (messages) => ipcRenderer.invoke('export-chat-txt', messages),
   exportChatAsPdf: (messages) => ipcRenderer.invoke('export-chat-pdf', messages),
+  sendAiOverviewData: (data) => ipcRenderer.send('send-ai-overview-to-sidebar', data),
+  sendDownloadPanelData: (data) => ipcRenderer.send('send-download-panel-data', data),
+  closeAiOverview: () => ipcRenderer.send('close-ai-overview'),
 
   // MCP Support
   mcpCommand: (command, data) => ipcRenderer.invoke('mcp-command', { command, data }),

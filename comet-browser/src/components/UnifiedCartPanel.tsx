@@ -1,9 +1,17 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ShoppingCart, X, ScanLine } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 
-const UnifiedCartPanel = ({ onClose, onScan }: { onClose: () => void, onScan: () => void }) => {
+const UnifiedCartPanel = ({
+    onClose,
+    onScan,
+    popupMode = false,
+}: {
+    onClose: () => void,
+    onScan: () => void,
+    popupMode?: boolean,
+}) => {
     const store = useAppStore();
 
     return (
@@ -11,14 +19,17 @@ const UnifiedCartPanel = ({ onClose, onScan }: { onClose: () => void, onScan: ()
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className={`absolute top-20 ${store.sidebarSide === 'right' && store.sidebarOpen ? 'right-[290px]' : 'right-4'} w-96 glass-vibrant z-[1000] rounded-[2rem] p-8 shadow-3xl bg-black/40 border border-white/10`}
+            className={popupMode
+                ? 'h-full w-full glass-vibrant rounded-[2rem] p-8 shadow-3xl bg-black/80 border border-white/10'
+                : `absolute top-20 ${store.sidebarSide === 'right' && store.sidebarOpen ? 'right-[290px]' : 'right-4'} w-96 glass-vibrant z-[1000] rounded-[2rem] p-8 shadow-3xl bg-black/40 border border-white/10`
+            }
         >
-            <div className="flex items-center justify-between mb-8">
+            <div className={`flex items-center justify-between mb-8 ${popupMode ? 'drag-region' : ''}`}>
                 <div>
                     <h3 className="text-xl font-black uppercase tracking-tighter text-white">Unified Cart</h3>
                     <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest">Cross-Site AI Manager</p>
                 </div>
-                <div className="flex gap-2">
+                <div className={`flex gap-2 ${popupMode ? 'no-drag-region' : ''}`}>
                     <button onClick={onScan} className="p-3 bg-deep-space-accent-neon/10 text-deep-space-accent-neon rounded-2xl hover:bg-deep-space-accent-neon/20 transition-all" title="Scan Page for Products">
                         <ScanLine size={18} />
                     </button>

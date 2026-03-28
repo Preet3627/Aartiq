@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, BrowserView, session, shell, clipboard, dialog, globalShortcut, Menu, protocol, desktopCapturer, screen, nativeImage, net } = require('electron');
+const { app, BrowserWindow, ipcMain, WebContentsView, session, shell, clipboard, dialog, globalShortcut, Menu, protocol, desktopCapturer, screen, nativeImage, net } = require('electron');
 const QRCode = require('qrcode');
 const contextMenuRaw = require('electron-context-menu');
 const contextMenu = contextMenuRaw.default || contextMenuRaw;
@@ -125,7 +125,7 @@ let networkCheckInterval;
 let clipboardCheckInterval;
 let activeTabId = null;
 let isOnline = true;
-const tabViews = new Map(); // Map of tabId -> BrowserView
+const tabViews = new Map(); // Map of tabId -> WebContentsView
 const audibleTabs = new Set(); // Track tabs currently playing audio
 const suspendedTabs = new Set(); // Track suspended tabs
 let adBlocker = null;
@@ -148,6 +148,12 @@ const isMac = process.platform === 'darwin';
 const openWindows = new Set();
 let mainWindow = null;
 let macSidebarWindow = null;
+let popupWindows = new Map();
+let popupViews = new Map();
+let latestAiOverviewData = null;
+let latestDownloadPanelData = [];
+let lastRegisteredShortcutsSignature = '';
+const embeddedPopupTypes = new Set(['ai-overview', 'downloads', 'clipboard', 'cart', 'unified-cart', 'search', 'search-apps', 'extensions', 'plugins', 'translate', 'context-menu', 'rightclick']);
 
 const getTopWindow = () => {
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
@@ -178,6 +184,87 @@ const registerWindow = (win) => {
       mainWindow = openWindows.size ? Array.from(openWindows).pop() : null;
     }
   });
+};
+
+function broadcastAiOverviewData() {
+  if (!latestAiOverviewData) return;
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('ai-overview-data', latestAiOverviewData);
+  }
+
+  const popup = popupWindows.get('ai-overview');
+  if (popup && !popup.isDestroyed()) {
+    popup.webContents.send('ai-overview-data', latestAiOverviewData);
+  }
+
+  const popupView = popupViews.get('ai-overview');
+  if (popupView && !popupView.webContents.isDestroyed()) {
+    popupView.webContents.send('ai-overview-data', latestAiOverviewData);
+  }
+}
+
+function broadcastDownloadPanelData() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('download-panel-data', latestDownloadPanelData);
+  }
+
+  const popup = popupWindows.get('downloads');
+  if (popup && !popup.isDestroyed()) {
+    popup.webContents.send('download-panel-data', latestDownloadPanelData);
+  }
+
+  const popupView = popupViews.get('downloads');
+  if (popupView && !popupView.webContents.isDestroyed()) {
+    popupView.webContents.send('download-panel-data', latestDownloadPanelData);
+  }
+}
+
+const hasChildView = (view) => Boolean(mainWindow && view && mainWindow.contentView.children.includes(view));
+
+const addChildView = (view) => {
+  if (!mainWindow || !view) return;
+  mainWindow.contentView.addChildView(view);
+};
+
+const removeChildView = (view) => {
+  if (!mainWindow || !view) return;
+  mainWindow.contentView.removeChildView(view);
+};
+
+const bringPopupViewsToFront = () => {
+  if (!mainWindow) return;
+  for (const view of popupViews.values()) {
+    if (view && !view.webContents.isDestroyed()) {
+      mainWindow.contentView.addChildView(view);
+    }
+  }
+};
+
+const sendPopupClosed = (type) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('popup-closed', type);
+  }
+  if (type === 'ai-overview') {
+    latestAiOverviewData = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ai-overview-closed');
+    }
+  }
+};
+
+const destroyPopupView = (type) => {
+  const view = popupViews.get(type);
+  if (!view) return;
+
+  popupViews.delete(type);
+  removeChildView(view);
+
+  if (!view.webContents.isDestroyed()) {
+    view.webContents.destroy();
+  }
+
+  sendPopupClosed(type);
 };
 
 const toggleMacSidebarWindow = () => {
@@ -1373,29 +1460,68 @@ const AiGateway = {
 };
 
 ipcMain.handle('extract-search-results', async (event, tabId) => {
-  const view = tabViews.get(tabId);
+  const targetTabId = tabId || activeTabId;
+  const view = tabViews.get(targetTabId);
   if (!view) return { error: 'No active view for extraction' };
 
   try {
     const results = await view.webContents.executeJavaScript(`
       (() => {
-        const organicResults = Array.from(document.querySelectorAll('div.g, li.g, div.rc')); // Common Google search result selectors
-        const extracted = [];
-        for (let i = 0; i < Math.min(3, organicResults.length); i++) {
-          const result = organicResults[i];
-          const titleElement = result.querySelector('h3');
-          const linkElement = result.querySelector('a');
-          const snippetElement = result.querySelector('span.st, div.s > div > span'); // Common snippet selectors
+        const selectors = [
+          'div.g a[href] h3',
+          'main a[href] h3',
+          'article a[href] h3',
+          '.result__title a[href]',
+          '.result__a[href]',
+          'a[data-ved] h3',
+          'a[href] h2'
+        ];
+        const anchors = [];
+        const seen = new Set();
 
-          if (titleElement && linkElement) {
-            extracted.push({
-              title: titleElement.innerText,
-              url: linkElement.href,
-              snippet: snippetElement ? snippetElement.innerText : ''
-            });
-          }
+        const pushAnchor = (anchor) => {
+          if (!anchor || !anchor.href || seen.has(anchor.href)) return;
+          if (!/^https?:/i.test(anchor.href)) return;
+          seen.add(anchor.href);
+          anchors.push(anchor);
+        };
+
+        selectors.forEach((selector) => {
+          document.querySelectorAll(selector).forEach((node) => {
+            pushAnchor(node.closest('a'));
+          });
+        });
+
+        if (anchors.length === 0) {
+          document.querySelectorAll('a[href]').forEach((anchor) => {
+            const text = (anchor.innerText || anchor.textContent || '').trim();
+            if (text.length > 25 && /^https?:/i.test(anchor.href)) {
+              pushAnchor(anchor);
+            }
+          });
         }
-        return extracted;
+
+        return anchors.slice(0, 8).map((anchor) => {
+          const container = anchor.closest('div.g, li.g, article, main article, .result, [data-snc]') || anchor.parentElement || anchor;
+          const title = (
+            anchor.querySelector('h3, h2')?.innerText ||
+            anchor.getAttribute('aria-label') ||
+            anchor.innerText ||
+            anchor.textContent ||
+            anchor.href
+          ).trim();
+          const snippet = (
+            container.querySelector('.VwiC3b, .yXK7lf, .MUxGbd, .result__snippet, .st, span, p')?.innerText ||
+            container.innerText ||
+            ''
+          ).replace(/\\s+/g, ' ').trim();
+
+          return {
+            title,
+            url: anchor.href,
+            snippet: snippet.slice(0, 500)
+          };
+        }).filter((item) => item.title && item.url);
       })();
     `);
     return { success: true, results };
@@ -1495,6 +1621,15 @@ async function createWindow() {
 
   registerWindow(mainWindow);
 
+  const notifyWindowLayoutChanged = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('window-layout-changed', {
+      isFullScreen: mainWindow.isFullScreen(),
+      isMaximized: mainWindow.isMaximized(),
+      bounds: mainWindow.getContentBounds(),
+    });
+  };
+
   // CRITICAL: Multiple safeguards to ensure window ALWAYS shows
   let windowShown = false;
 
@@ -1584,6 +1719,12 @@ async function createWindow() {
       app.quit();
     }
   });
+
+  mainWindow.on('resize', notifyWindowLayoutChanged);
+  mainWindow.on('maximize', notifyWindowLayoutChanged);
+  mainWindow.on('unmaximize', notifyWindowLayoutChanged);
+  mainWindow.on('enter-full-screen', notifyWindowLayoutChanged);
+  mainWindow.on('leave-full-screen', notifyWindowLayoutChanged);
 
   // Delayed initialization for startup safety
   setTimeout(() => {
@@ -1920,7 +2061,14 @@ ipcMain.on('close-window', (event) => {
 });
 ipcMain.on('toggle-fullscreen', (event) => {
   const win = BrowserWindow.fromWebContents(event.sender);
-  if (win) win.setFullScreen(!win.isFullScreen());
+  if (win) {
+    win.setFullScreen(!win.isFullScreen());
+    win.webContents.send('window-layout-changed', {
+      isFullScreen: win.isFullScreen(),
+      isMaximized: win.isMaximized(),
+      bounds: win.getContentBounds(),
+    });
+  }
 });
 
 // Persistent Storage Handlers
@@ -2063,10 +2211,15 @@ ipcMain.on('open-auth-window', (event, authUrl) => {
       width: 540,
       height: 780,
       frame: false,
+      titleBarStyle: 'hidden',
+      titleBarOverlay: false,
       transparent: true,
       backgroundColor: '#02030a',
       hasShadow: true,
       resizable: true,
+      closable: true,
+      minimizable: true,
+      maximizable: true,
       parent: mainWindow,
       modal: true,
       show: false,
@@ -2134,8 +2287,33 @@ ipcMain.on('open-auth-window', (event, authUrl) => {
 ipcMain.on('close-auth-window', () => {
   if (authWindow && !authWindow.isDestroyed()) {
     authWindow.close();
+    if (!authWindow.isDestroyed()) {
+      authWindow.destroy();
+    }
   }
   authWindow = null;
+});
+
+ipcMain.on('auth-window-action', (event, action) => {
+  if (!authWindow || authWindow.isDestroyed()) return;
+
+  if (action === 'close') {
+    authWindow.close();
+    return;
+  }
+
+  if (action === 'minimize') {
+    authWindow.minimize();
+    return;
+  }
+
+  if (action === 'zoom') {
+    if (authWindow.isMaximized()) {
+      authWindow.unmaximize();
+    } else {
+      authWindow.maximize();
+    }
+  }
 });
 
 ipcMain.on('raycast-update-state', (event, state) => {
@@ -2147,12 +2325,12 @@ ipcMain.on('raycast-update-state', (event, state) => {
   }
 });
 
-// Multi-BrowserView Management
+// Multi-WebContentsView Management
 ipcMain.on('create-view', (event, { tabId, url }) => {
   if (tabViews.has(tabId)) return; // Prevent redundant creation
 
   const chromeUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-  const newView = new BrowserView({
+  const newView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, 'view_preload.js'),
       nodeIntegration: false,
@@ -2203,7 +2381,7 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
 
   // ERROR-PROOFING: Handle page load failures gracefully
   newView.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.warn(`[BrowserView] Tab ${tabId} failed to load: ${errorCode} - ${errorDescription}`);
+    console.warn(`[WebContentsView] Tab ${tabId} failed to load: ${errorCode} - ${errorDescription}`);
     // Common non-critical errors to ignore
     const nonCritical = [-3, -7, -8, -9, -105, -106]; // ABORTED, CONNECTION_FAILED, etc.
     if (nonCritical.includes(errorCode)) return;
@@ -2211,17 +2389,17 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
   });
 
   newView.webContents.on('render-process-gone', (event, details) => {
-    console.error(`[BrowserView] Tab ${tabId} render process gone: ${details.reason}`);
+    console.error(`[WebContentsView] Tab ${tabId} render process gone: ${details.reason}`);
     mainWindow.webContents.send('tab-crashed', { tabId, reason: details.reason });
   });
 
   newView.webContents.on('unresponsive', () => {
-    console.warn(`[BrowserView] Tab ${tabId} became unresponsive`);
+    console.warn(`[WebContentsView] Tab ${tabId} became unresponsive`);
     mainWindow.webContents.send('tab-unresponsive', { tabId });
   });
 
   newView.webContents.on('responsive', () => {
-    console.log(`[BrowserView] Tab ${tabId} became responsive again`);
+    console.log(`[WebContentsView] Tab ${tabId} became responsive again`);
     mainWindow.webContents.send('tab-responsive', { tabId });
   });
 
@@ -2250,7 +2428,7 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
     }
   });
 
-  // Handle fullscreen requests from the BrowserView
+  // Handle fullscreen requests from the web view
   newView.webContents.on('enter-html-fullscreen-window', () => {
     if (mainWindow) {
       mainWindow.setFullScreen(true);
@@ -2284,7 +2462,7 @@ ipcMain.on('resume-tab', (event, { tabId, url }) => {
   if (suspendedTabs.has(tabId)) {
     suspendedTabs.delete(tabId);
     // The 'create-view' handler will be called by the frontend,
-    // which will create a new BrowserView for the tab.
+    // which will create a new WebContentsView for the tab.
     if (mainWindow) {
       mainWindow.webContents.send('tab-resumed', tabId);
     }
@@ -2321,17 +2499,17 @@ ipcMain.on('activate-view', (event, { tabId, bounds }) => {
   if (activeTabId && tabViews.has(activeTabId)) {
     const oldView = tabViews.get(activeTabId);
     if (oldView) {
-      mainWindow.removeBrowserView(oldView);
+      removeChildView(oldView);
     }
   }
 
   const newView = tabViews.get(tabId);
   if (newView) {
     if (bounds.width === 0 || bounds.height === 0) {
-      mainWindow.removeBrowserView(newView);
+      removeChildView(newView);
     } else {
-      if (!mainWindow.getBrowserViews().includes(newView)) {
-        mainWindow.addBrowserView(newView);
+      if (!hasChildView(newView)) {
+        addChildView(newView);
       }
       const roundedBounds = {
         x: Math.round(bounds.x),
@@ -2340,6 +2518,7 @@ ipcMain.on('activate-view', (event, { tabId, bounds }) => {
         height: Math.round(bounds.height),
       };
       newView.setBounds(roundedBounds);
+      bringPopupViewsToFront();
     }
   }
   activeTabId = tabId;
@@ -2349,7 +2528,7 @@ ipcMain.on('destroy-view', (event, tabId) => {
   const view = tabViews.get(tabId);
   if (view) {
     if (activeTabId === tabId) {
-      mainWindow.removeBrowserView(view);
+      removeChildView(view);
       activeTabId = null;
     }
     view.webContents.destroy();
@@ -2365,10 +2544,10 @@ ipcMain.on('set-browser-view-bounds', (event, bounds) => {
   const view = tabViews.get(activeTabId);
   if (view && mainWindow) {
     if (bounds.width === 0 || bounds.height === 0) {
-      mainWindow.removeBrowserView(view);
+      removeChildView(view);
     } else {
-      if (!mainWindow.getBrowserViews().includes(view)) {
-        mainWindow.addBrowserView(view);
+      if (!hasChildView(view)) {
+        addChildView(view);
       }
       const roundedBounds = {
         x: Math.round(bounds.x),
@@ -2377,6 +2556,7 @@ ipcMain.on('set-browser-view-bounds', (event, bounds) => {
         height: Math.round(bounds.height),
       };
       view.setBounds(roundedBounds);
+      bringPopupViewsToFront();
     }
   }
 });
@@ -2396,7 +2576,7 @@ ipcMain.on('navigate-browser-view', async (event, { tabId, url }) => {
       return; // Success
     } catch (err) {
       lastError = err;
-      console.warn(`[BrowserView] Navigation attempt ${attempt} failed: ${err.message}`);
+      console.warn(`[WebContentsView] Navigation attempt ${attempt} failed: ${err.message}`);
       if (attempt < maxRetries) {
         await new Promise(r => setTimeout(r, 500)); // Wait before retry
       }
@@ -2404,12 +2584,12 @@ ipcMain.on('navigate-browser-view', async (event, { tabId, url }) => {
   }
   
   // All retries failed - try loading a fallback/error page
-  console.error(`[BrowserView] Navigation failed after ${maxRetries} attempts: ${url}`);
+  console.error(`[WebContentsView] Navigation failed after ${maxRetries} attempts: ${url}`);
   try {
     const fallbackUrl = `data:text/html,<html><head><title>Navigation Error</title></head><body style="font-family:sans-serif;padding:40px;text-align:center;background:#fafafa;"><h2 style="color:#dc2626;">⚠️ Could not load this page</h2><p>The page <strong>${escapeHtml(url.substring(0, 50))}...</strong> could not be loaded.</p><p style="color:#666;">This may be due to a network issue or the site being unavailable.</p><button onclick="window.history.back()" style="padding:12px 24px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;margin-top:20px;">Go Back</button></body></html>`;
     await view.webContents.loadURL(fallbackUrl);
   } catch (fallbackErr) {
-    console.error('[BrowserView] Even fallback page failed:', fallbackErr);
+    console.error('[WebContentsView] Even fallback page failed:', fallbackErr);
   }
 });
 
@@ -2441,6 +2621,13 @@ ipcMain.on('change-zoom', (event, deltaY) => {
     if (newZoom >= 0.5 && newZoom <= 3.0) {
       view.webContents.setZoomFactor(newZoom);
     }
+  }
+});
+
+ipcMain.on('reset-zoom', () => {
+  const view = tabViews.get(activeTabId);
+  if (view) {
+    view.webContents.setZoomFactor(1.0);
   }
 });
 
@@ -3069,8 +3256,32 @@ ipcMain.handle('get-google-config', () => {
 });
 
 ipcMain.on('send-ai-overview-to-sidebar', (event, data) => {
-  if (mainWindow) {
-    mainWindow.webContents.send('ai-overview-data', data);
+  latestAiOverviewData = data;
+  broadcastAiOverviewData();
+});
+
+ipcMain.handle('get-ai-overview-data', () => latestAiOverviewData);
+
+ipcMain.on('send-download-panel-data', (event, data) => {
+  latestDownloadPanelData = data || [];
+  broadcastDownloadPanelData();
+});
+
+ipcMain.handle('get-download-panel-data', () => latestDownloadPanelData);
+
+ipcMain.on('close-ai-overview', () => {
+  latestAiOverviewData = null;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('ai-overview-closed');
+  }
+
+  const popup = popupWindows.get('ai-overview');
+  if (popup && !popup.isDestroyed()) {
+    popup.close();
+  }
+
+  if (popupViews.has('ai-overview')) {
+    destroyPopupView('ai-overview');
   }
 });
 
@@ -4909,7 +5120,7 @@ ipcMain.removeHandler('generate-pdf');
     if (activeTabId && tabViews.has(activeTabId)) {
       const view = tabViews.get(activeTabId);
       if (view && mainWindow) {
-        mainWindow.removeBrowserView(view);
+        removeChildView(view);
       }
     }
   });
@@ -4918,7 +5129,8 @@ ipcMain.removeHandler('generate-pdf');
     if (activeTabId && tabViews.has(activeTabId)) {
       const view = tabViews.get(activeTabId);
       if (view && mainWindow) {
-        mainWindow.addBrowserView(view);
+        addChildView(view);
+        bringPopupViewsToFront();
       }
     }
   });
@@ -5073,48 +5285,6 @@ ipcMain.removeHandler('generate-pdf');
       return;
     }
     p2pSyncService.sendSignal(signal, remoteDeviceId);
-  });
-
-  // IPC handler to update global shortcuts
-  ipcMain.on('update-shortcuts', (event, shortcuts) => {
-    // Unregister all existing shortcuts to prevent conflicts
-    globalShortcut.unregisterAll();
-
-    shortcuts.forEach(s => {
-      try {
-        if (s.accelerator) {
-          // Skip accelerators with non-ASCII characters (e.g. Alt+Ø) to prevent Electron crashes
-          if (/[^\x00-\x7F]/.test(s.accelerator)) {
-            console.warn(`[Hotkey] Skipping invalid shortcut signature: ${s.accelerator}`);
-            return;
-          }
-
-          globalShortcut.register(s.accelerator, () => {
-            if (mainWindow) {
-              if (mainWindow.isMinimized()) mainWindow.restore();
-              mainWindow.focus();
-
-              // Handle zoom actions directly in main process for better responsiveness
-              if (s.action === 'zoom-in') {
-                const view = tabViews.get(activeTabId);
-                if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() + 0.1);
-              } else if (s.action === 'zoom-out') {
-                const view = tabViews.get(activeTabId);
-                if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() - 0.1);
-              } else if (s.action === 'zoom-reset') {
-                const view = tabViews.get(activeTabId);
-                if (view) view.webContents.setZoomFactor(1.0);
-              } else {
-                // Send other shortcut actions to the renderer
-                mainWindow.webContents.send('execute-shortcut', s.action);
-              }
-            }
-          });
-        }
-      } catch (e) {
-        console.error(`Failed to register shortcut ${s.accelerator}:`, e);
-      }
-    });
   });
 
   ipcMain.handle('scan-folder', async (event, folderPath, types) => {
@@ -5599,7 +5769,9 @@ ipcMain.removeHandler('generate-pdf');
        const MobileNotifier = require('./src/service/mobile-notifier.js');
 
        const StorageManagerClass = Storage.StorageManager;
-       storageManager = new StorageManagerClass();
+       const documentsPath = app.getPath('documents') || path.join(os.homedir(), 'Documents');
+       const automationStoragePath = path.join(documentsPath, 'Comet-AI');
+       storageManager = new StorageManagerClass(automationStoragePath);
        await storageManager.initialize();
 
        taskQueue = new TaskQueue(storageManager);
@@ -5759,18 +5931,151 @@ ipcMain.removeHandler('generate-pdf');
   // ============================================================================
   // POPUP WINDOW SYSTEM - Fix for panels appearing behind browser view
   // ============================================================================
-  let popupWindows = new Map(); // Track all popup windows
-
   /**
    * Creates a popup window that appears on top of the browser view
    * This solves the z-index issue where panels appear behind the webview
    */
+  function getPopupUrl(type) {
+    const baseUrl = isDev
+      ? 'http://localhost:3003'
+      : `file://${path.join(__dirname, 'out', 'index.html')}`;
+
+    let route = '';
+    switch (type) {
+      case 'settings':
+        route = isDev ? '/?panel=settings' : '/settings';
+        break;
+      case 'extensions':
+      case 'plugins':
+        route = isDev ? '/?panel=extensions' : '/extensions';
+        break;
+      case 'profile':
+        route = isDev ? '/?panel=profile' : '/profile';
+        break;
+      case 'downloads':
+        route = isDev ? '/?panel=downloads' : '/downloads';
+        break;
+      case 'clipboard':
+        route = isDev ? '/?panel=clipboard' : '/clipboard';
+        break;
+      case 'cart':
+      case 'unified-cart':
+        route = isDev ? '/?panel=cart' : '/cart';
+        break;
+      case 'search':
+      case 'search-apps':
+        route = isDev ? '/?panel=apps' : '/apps';
+        break;
+      case 'translate':
+        route = isDev ? '/?panel=translate' : '/translate';
+        break;
+      case 'ai-overview':
+        route = isDev ? '/?panel=ai-overview' : '/ai-overview';
+        break;
+      case 'context-menu':
+      case 'rightclick':
+        route = isDev ? '/?panel=context-menu' : '/context-menu';
+        break;
+      default:
+        route = `/${type}`;
+    }
+
+    if (isDev) {
+      return `${baseUrl}${route}`;
+    }
+
+    const routePathIndex = route === '/' ? '/index.html' : `${route}/index.html`;
+    const routePathHtml = route === '/' ? '/index.html' : `${route}.html`;
+    const fullPathIndex = path.join(__dirname, 'out', routePathIndex);
+    const fullPathHtml = path.join(__dirname, 'out', routePathHtml);
+
+    if (fs.existsSync(fullPathIndex)) {
+      return `file://${fullPathIndex}`;
+    }
+    if (fs.existsSync(fullPathHtml)) {
+      return `file://${fullPathHtml}`;
+    }
+    return `file://${path.join(__dirname, 'out', 'index.html')}#${route}`;
+  }
+
+  function normalizeAttachedPopupBounds(options = {}) {
+    const mainBounds = mainWindow.getBounds();
+    const width = Math.round(options.width || 500);
+    const height = Math.round(options.height || 500);
+    const rawX = typeof options.x === 'number' ? options.x - mainBounds.x : mainBounds.width - width - 24;
+    const rawY = typeof options.y === 'number' ? options.y - mainBounds.y : 80;
+
+    return {
+      x: Math.max(0, Math.min(Math.round(rawX), Math.max(0, mainBounds.width - width))),
+      y: Math.max(0, Math.min(Math.round(rawY), Math.max(0, mainBounds.height - height))),
+      width,
+      height,
+    };
+  }
+
+  function createAttachedPopupView(type, options = {}) {
+    const { closeOnBlur = false } = options;
+    const bounds = normalizeAttachedPopupBounds(options);
+
+    if (popupViews.has(type)) {
+      const existing = popupViews.get(type);
+      if (existing && !existing.webContents.isDestroyed()) {
+        existing.setBounds(bounds);
+        addChildView(existing);
+        existing.webContents.focus();
+        return existing;
+      }
+      popupViews.delete(type);
+    }
+
+    const popupView = new WebContentsView({
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: false,
+      },
+    });
+
+    popupView.setBackgroundColor('#00000000');
+    popupView.setBounds(bounds);
+    addChildView(popupView);
+    popupViews.set(type, popupView);
+    popupView.webContents.loadURL(getPopupUrl(type));
+    popupView.webContents.focus();
+
+    if (closeOnBlur) {
+      popupView.webContents.on('blur', () => {
+        if (popupViews.get(type) === popupView) {
+          destroyPopupView(type);
+        }
+      });
+    }
+
+    popupView.webContents.on('destroyed', () => {
+      if (popupViews.get(type) === popupView) {
+        popupViews.delete(type);
+        sendPopupClosed(type);
+      }
+    });
+
+    return popupView;
+  }
+
   function createPopupWindow(type, options = {}) {
-    // Close existing popup of the same type
+    if (embeddedPopupTypes.has(type)) {
+      return createAttachedPopupView(type, options);
+    }
+
+    const { closeOnBlur = false, ...windowOptions } = options;
     if (popupWindows.has(type)) {
       const existing = popupWindows.get(type);
       if (existing && !existing.isDestroyed()) {
-        existing.close();
+        existing.setAlwaysOnTop(true, 'screen-saturation');
+        existing.show();
+        existing.focus();
+        existing.moveTop();
+        return existing;
       }
       popupWindows.delete(type);
     }
@@ -5780,7 +6085,9 @@ ipcMain.removeHandler('generate-pdf');
       height: 700,
       frame: false,
       transparent: true,
+      roundedCorners: true,
       backgroundColor: '#00000000',
+      hasShadow: true,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         nodeIntegration: false,
@@ -5797,74 +6104,12 @@ ipcMain.removeHandler('generate-pdf');
       show: false,
     };
 
-    const popup = new BrowserWindow({ ...defaultOptions, ...options });
+    const popup = new BrowserWindow({ ...defaultOptions, ...windowOptions });
 
     // Ensure popup appears above BrowserView by removing parent and using alwaysOnTop
     popup.setAlwaysOnTop(true, 'screen-saturation');
 
-    // Load the appropriate content
-    const baseUrl = isDev
-      ? 'http://localhost:3003'
-      : `file://${path.join(__dirname, 'out', 'index.html')}`;
-
-    let route = '';
-    switch (type) {
-      case 'settings':
-        route = isDev ? '/?panel=settings' : '/settings';
-        break;
-      case 'extensions':
-      case 'plugins': // Handle 'plugins' as an alias for 'extensions'
-        route = isDev ? '/?panel=extensions' : '/extensions';
-        break;
-      case 'profile':
-        route = isDev ? '/?panel=profile' : '/profile';
-        break;
-      case 'downloads':
-        route = isDev ? '/?panel=downloads' : '/downloads';
-        break;
-      case 'clipboard':
-        route = isDev ? '/?panel=clipboard' : '/clipboard';
-        break;
-      case 'cart':
-      case 'unified-cart':
-        route = '/cart';
-        break;
-      case 'search':
-      case 'search-apps':
-        route = isDev ? '/?panel=apps' : '/apps';
-        break;
-      case 'translate':
-        route = isDev ? '/?panel=translate' : '/translate';
-        break;
-      case 'context-menu':
-      case 'rightclick':
-        route = isDev ? '/?panel=context-menu' : '/context-menu';
-        break;
-      default:
-        route = `/${type}`;
-    }
-
-    let url;
-    if (isDev) {
-      url = `${baseUrl}${route}`;
-    } else {
-      // Check for both folder/index.html and folder.html (Next.js export behavior)
-      const routePathIndex = route === '/' ? '/index.html' : `${route}/index.html`;
-      const routePathHtml = route === '/' ? '/index.html' : `${route}.html`;
-
-      const fullPathIndex = path.join(__dirname, 'out', routePathIndex);
-      const fullPathHtml = path.join(__dirname, 'out', routePathHtml);
-
-      if (fs.existsSync(fullPathIndex)) {
-        url = `file://${fullPathIndex}`;
-      } else if (fs.existsSync(fullPathHtml)) {
-        url = `file://${fullPathHtml}`;
-      } else {
-        // Fallback to hash routing if file doesn't exist
-        url = `file://${path.join(__dirname, 'out', 'index.html')}#${route}`;
-      }
-    }
-
+    const url = getPopupUrl(type);
     console.log(`[Main] Loading popup URL: ${url}`);
     popup.loadURL(url);
 
@@ -5875,8 +6120,17 @@ ipcMain.removeHandler('generate-pdf');
       popup.moveTop();
     });
 
+    if (closeOnBlur) {
+      popup.on('blur', () => {
+        if (!popup.isDestroyed()) {
+          popup.close();
+        }
+      });
+    }
+
     popup.on('closed', () => {
       popupWindows.delete(type);
+      sendPopupClosed(type);
     });
 
     popupWindows.set(type, popup);
@@ -5889,6 +6143,11 @@ ipcMain.removeHandler('generate-pdf');
   });
 
   ipcMain.on('close-popup-window', (event, type) => {
+    if (popupViews.has(type)) {
+      destroyPopupView(type);
+      return;
+    }
+
     if (popupWindows.has(type)) {
       const popup = popupWindows.get(type);
       if (popup && !popup.isDestroyed()) {
@@ -5899,6 +6158,7 @@ ipcMain.removeHandler('generate-pdf');
   });
 
   ipcMain.on('close-all-popups', () => {
+    Array.from(popupViews.keys()).forEach((type) => destroyPopupView(type));
     popupWindows.forEach((popup, type) => {
       if (popup && !popup.isDestroyed()) {
         popup.close();
@@ -5940,6 +6200,7 @@ ipcMain.removeHandler('generate-pdf');
     createPopupWindow('downloads', {
       width: 400,
       height: 600,
+      closeOnBlur: true,
     });
   });
 
@@ -5947,6 +6208,7 @@ ipcMain.removeHandler('generate-pdf');
     createPopupWindow('clipboard', {
       width: 450,
       height: 650,
+      closeOnBlur: true,
     });
   });
 
@@ -5954,6 +6216,7 @@ ipcMain.removeHandler('generate-pdf');
     createPopupWindow('cart', {
       width: 500,
       height: 700,
+      closeOnBlur: true,
     });
   });
 
@@ -5961,6 +6224,7 @@ ipcMain.removeHandler('generate-pdf');
     createPopupWindow('search', {
       width: 600,
       height: 500,
+      closeOnBlur: true,
       ...options
     });
   });
@@ -5996,15 +6260,110 @@ ipcMain.removeHandler('generate-pdf');
     try {
       const result = await view.webContents.executeJavaScript(`
       (() => {
-        const el = document.querySelector('${selector}');
-        if (el) {
+        const rawTarget = ${JSON.stringify(selector || '')}.trim();
+
+        const normalize = (value) => (value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+        const isVisible = (el) => {
+          if (!el) return false;
+          const rect = el.getBoundingClientRect();
+          const style = window.getComputedStyle(el);
+          return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+        };
+        const clickElement = (el, matchedBy) => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+          const rect = el.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+
+          if (typeof el.focus === 'function') {
+            el.focus({ preventScroll: true });
+          }
+
+          ['pointerover', 'mouseover', 'mousemove', 'pointerdown', 'mousedown', 'pointerup', 'mouseup'].forEach((type) => {
+            el.dispatchEvent(new MouseEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+              clientX: centerX,
+              clientY: centerY,
+              view: window
+            }));
+          });
+
           el.click();
-          return true;
+          return {
+            success: true,
+            matchedBy,
+            tagName: el.tagName.toLowerCase(),
+            text: (el.innerText || el.textContent || el.value || '').trim().slice(0, 160),
+            rect: {
+              x: Math.round(rect.x),
+              y: Math.round(rect.y),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height)
+            }
+          };
+        };
+
+        let element = null;
+        if (rawTarget) {
+          try {
+            element = document.querySelector(rawTarget);
+          } catch (e) {
+            element = null;
+          }
         }
-        return false;
+
+        if (element && isVisible(element)) {
+          return clickElement(element, 'selector');
+        }
+
+        const normalizedTarget = normalize(rawTarget);
+        if (!normalizedTarget) {
+          return { success: false, error: 'Missing selector or button text' };
+        }
+
+        const candidates = Array.from(document.querySelectorAll(
+          'button, a, [role="button"], input[type="button"], input[type="submit"], input[type="reset"], summary, label'
+        )).filter(isVisible);
+
+        let bestMatch = null;
+        let bestScore = -1;
+
+        for (const candidate of candidates) {
+          const textCandidates = [
+            candidate.innerText,
+            candidate.textContent,
+            candidate.getAttribute('aria-label'),
+            candidate.getAttribute('title'),
+            candidate.getAttribute('name'),
+            candidate.getAttribute('value'),
+            candidate.getAttribute('placeholder')
+          ].filter(Boolean);
+
+          const haystack = normalize(textCandidates.join(' '));
+          if (!haystack) continue;
+
+          let score = 0;
+          if (haystack === normalizedTarget) score += 200;
+          if (haystack.startsWith(normalizedTarget)) score += 120;
+          if (haystack.includes(normalizedTarget)) score += 80;
+          if (normalizedTarget.includes(haystack)) score += 40;
+          if (candidate.tagName.toLowerCase() === 'button') score += 10;
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = candidate;
+          }
+        }
+
+        if (bestMatch) {
+          return clickElement(bestMatch, 'text');
+        }
+        return { success: false, error: 'Element not found: ' + rawTarget };
       })()
     `);
-      return { success: result };
+      return result;
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -6647,6 +7006,33 @@ ipcMain.removeHandler('generate-pdf');
     try {
       const pageInfo = await view.webContents.executeJavaScript(`
         (() => {
+          const escapeSelectorValue = (value) => String(value || '').replace(/"/g, '\\"');
+          const isVisible = (el) => {
+            const rect = el.getBoundingClientRect();
+            const style = window.getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+          };
+          const buildSelector = (el) => {
+            if (!el || !el.tagName) return '';
+            const tag = el.tagName.toLowerCase();
+            if (el.id) return '#' + CSS.escape(el.id);
+            const dataTestId = el.getAttribute('data-testid');
+            if (dataTestId) return tag + '[data-testid="' + escapeSelectorValue(dataTestId) + '"]';
+            const name = el.getAttribute('name');
+            if (name) return tag + '[name="' + escapeSelectorValue(name) + '"]';
+            const ariaLabel = el.getAttribute('aria-label');
+            if (ariaLabel) return tag + '[aria-label="' + escapeSelectorValue(ariaLabel) + '"]';
+            const classNames = Array.from(el.classList || []).slice(0, 2).map((cls) => '.' + CSS.escape(cls)).join('');
+            if (classNames) return tag + classNames;
+            if (el.parentElement) {
+              const siblings = Array.from(el.parentElement.children).filter((child) => child.tagName === el.tagName);
+              if (siblings.length > 1) {
+                return tag + ':nth-of-type(' + (siblings.indexOf(el) + 1) + ')';
+              }
+            }
+            return tag;
+          };
+
           return {
             url: window.location.href,
             title: document.title,
@@ -6664,12 +7050,19 @@ ipcMain.removeHandler('generate-pdf');
                 placeholder: i.placeholder
               }))
             })),
-            clickableElements: Array.from(document.querySelectorAll('button, a, [role="button"]')).slice(0, 30).map((el, i) => ({
-              index: i,
-              tagName: el.tagName.toLowerCase(),
-              text: (el.textContent || '').trim().substring(0, 100),
-              rect: el.getBoundingClientRect()
-            }))
+            clickableElements: Array.from(document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"], input[type="reset"], summary'))
+              .filter(isVisible)
+              .slice(0, 40)
+              .map((el, i) => ({
+                index: i,
+                tagName: el.tagName.toLowerCase(),
+                text: (el.textContent || el.value || '').trim().substring(0, 120),
+                selector: buildSelector(el),
+                href: el.href || null,
+                ariaLabel: el.getAttribute('aria-label') || null,
+                title: el.getAttribute('title') || null,
+                rect: el.getBoundingClientRect()
+              }))
           };
         })()
       `);
@@ -7090,8 +7483,6 @@ ipcMain.removeHandler('generate-pdf');
   // GLOBAL HOTKEY - Register global shortcuts
   // ============================================================================
   function registerGlobalShortcuts(shortcuts) {
-    globalShortcut.unregisterAll();
-
     // Default shortcuts if none provided
     const spotlightShortcut = process.platform === 'darwin' ? 'Option+Space' : 'Alt+Space';
     const defaultShortcuts = [
@@ -7102,10 +7493,25 @@ ipcMain.removeHandler('generate-pdf');
     ];
 
     const shortcutsToRegister = (shortcuts && shortcuts.length > 0) ? shortcuts : defaultShortcuts;
+    const normalizedShortcuts = shortcutsToRegister
+      .filter((s) => s?.accelerator && !/[^\x00-\x7F]/.test(s.accelerator))
+      .map((s) => ({ accelerator: s.accelerator, action: s.action }));
+    const signature = JSON.stringify(normalizedShortcuts);
+
+    if (signature === lastRegisteredShortcutsSignature) {
+      return;
+    }
+
+    lastRegisteredShortcutsSignature = signature;
+    globalShortcut.unregisterAll();
 
     shortcutsToRegister.forEach(s => {
       try {
         if (!s.accelerator) return;
+        if (/[^\x00-\x7F]/.test(s.accelerator)) {
+          console.warn(`[Hotkey] Skipping invalid shortcut signature: ${s.accelerator}`);
+          return;
+        }
 
         globalShortcut.register(s.accelerator, () => {
           console.log(`[Hotkey] Triggered: ${s.action} (${s.accelerator})`);
@@ -7139,6 +7545,21 @@ ipcMain.removeHandler('generate-pdf');
             const view = tabViews.get(activeTabId);
             if (view) view.webContents.print();
             else if (mainWindow) mainWindow.webContents.print();
+          } else if (s.action === 'zoom-in') {
+            const view = tabViews.get(activeTabId);
+            if (view) {
+              view.webContents.setZoomFactor(Math.min(3.0, view.webContents.getZoomFactor() + 0.1));
+            }
+          } else if (s.action === 'zoom-out') {
+            const view = tabViews.get(activeTabId);
+            if (view) {
+              view.webContents.setZoomFactor(Math.max(0.5, view.webContents.getZoomFactor() - 0.1));
+            }
+          } else if (s.action === 'zoom-reset') {
+            const view = tabViews.get(activeTabId);
+            if (view) {
+              view.webContents.setZoomFactor(1.0);
+            }
           } else if (mainWindow) {
             mainWindow.webContents.send('execute-shortcut', s.action);
           }
@@ -7224,6 +7645,7 @@ ipcMain.removeHandler('generate-pdf');
     }
 
     // Unregister all shortcuts
+    lastRegisteredShortcutsSignature = '';
     globalShortcut.unregisterAll();
   });
 

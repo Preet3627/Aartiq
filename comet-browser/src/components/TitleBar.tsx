@@ -16,14 +16,14 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
     const handleMinimize = () => window.electronAPI?.minimizeWindow();
     const handleMaximize = () => window.electronAPI?.maximizeWindow();
     const handleClose = () => window.electronAPI?.closeWindow();
-    const handleToggleFullscreen = () => window.electronAPI?.toggleFullscreen();
     const store = useAppStore();
     const router = useRouter(); // Initialize useRouter
 
     const [isMac, setIsMac] = useState(false);
 
     useEffect(() => {
-        setIsMac(navigator.userAgent.toLowerCase().includes('mac'));
+        const platform = window.electronAPI?.getPlatform?.() || navigator.platform || navigator.userAgent;
+        setIsMac(String(platform).toLowerCase().includes('mac') || String(platform).toLowerCase().includes('darwin'));
     }, []);
 
     const [isSigningIn, setIsSigningIn] = useState(false);
@@ -106,7 +106,7 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
                     </button>
                 </div>
             ) : (
-                <div className="w-[60px]" /> // Spacer to prevent overlap with native macOS traffic lights
+                <div className="w-[72px] shrink-0" /> // Keep native macOS traffic-light space reserved
             )}
             {/* Comet AI Logo and Text */}
             <div className="flex items-center gap-2 px-3 drag-region">

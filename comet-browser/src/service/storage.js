@@ -7,16 +7,22 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { app } = require('electron');
 
 class StorageManager {
     constructor(basePath) {
-        this.basePath = basePath;
-        this.tasksFile = path.join(basePath, 'tasks.json');
-        this.queueFile = path.join(basePath, 'queue.json');
-        this.logsDir = path.join(basePath, 'logs');
-        this.resultsDir = path.join(basePath, 'results');
-        this.publicDir = path.join(basePath, 'public');
+        const documentsPath = (app && typeof app.getPath === 'function')
+            ? app.getPath('documents')
+            : path.join(os.homedir(), 'Documents');
+        this.basePath = (typeof basePath === 'string' && basePath.trim())
+            ? basePath
+            : path.join(documentsPath, 'Comet-AI');
+        this.tasksFile = path.join(this.basePath, 'tasks.json');
+        this.queueFile = path.join(this.basePath, 'queue.json');
+        this.logsDir = path.join(this.basePath, 'logs');
+        this.resultsDir = path.join(this.basePath, 'results');
+        this.publicDir = path.join(this.basePath, 'public');
         
         // In-memory cache
         this.tasksCache = new Map();

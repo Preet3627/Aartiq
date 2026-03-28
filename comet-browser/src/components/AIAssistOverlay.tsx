@@ -17,6 +17,7 @@ interface AIAssistOverlayProps {
     selectedOllamaModel?: string;
     onOllamaModelSelect?: (model: string) => void;
     onOllamaModelsUpdate?: (models: { name: string; modified_at?: string }[]) => void;
+    mode?: 'overlay' | 'window';
 }
 
 const AIAssistOverlay = ({
@@ -24,8 +25,10 @@ const AIAssistOverlay = ({
     statusMessage, durationMs, onClose, onRefresh,
     availableOllamaModels = [], selectedOllamaModel,
     onOllamaModelSelect, onOllamaModelsUpdate,
+    mode = 'overlay',
 }: AIAssistOverlayProps) => {
     const [ollamaInput, setOllamaInput] = useState(selectedOllamaModel || '');
+    const isWindowMode = mode === 'window';
 
     useEffect(() => {
         setOllamaInput(selectedOllamaModel || '');
@@ -51,13 +54,29 @@ const AIAssistOverlay = ({
         if (!ollamaInput) return;
         onOllamaModelSelect?.(ollamaInput);
     };
+
+    const getSourceHostname = (rawUrl: unknown) => {
+        if (typeof rawUrl !== 'string') return 'local-context';
+        const value = rawUrl.trim();
+        if (!value) return 'local-context';
+        try {
+            return new URL(value).hostname || 'local-context';
+        } catch {
+            try {
+                return new URL(`https://${value}`).hostname || 'local-context';
+            } catch {
+                return 'local-context';
+            }
+        }
+    };
+
     return (
-        <div className="fixed top-28 right-8 w-[450px] z-[99999] pointer-events-none">
+        <div className={isWindowMode ? "h-full w-full p-4" : "fixed top-28 right-8 w-[450px] z-[99999] pointer-events-none"}>
             <motion.div
                 initial={{ opacity: 0, scale: 0.9, x: 50, filter: 'blur(20px)' }}
                 animate={{ opacity: 1, scale: 1, x: 0, filter: 'blur(0px)' }}
                 exit={{ opacity: 0, scale: 0.9, x: 50, filter: 'blur(20px)' }}
-                className="pointer-events-auto bg-[#070812]/95 backdrop-blur-3xl border border-white/10 rounded-[3rem] shadow-[0_40px_120px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col relative"
+                className={`pointer-events-auto bg-[#070812]/95 backdrop-blur-3xl border border-white/10 shadow-[0_40px_120px_rgba(0,0,0,0.9)] overflow-hidden flex flex-col relative ${isWindowMode ? 'h-full rounded-[2rem]' : 'rounded-[3rem]'}`}
             >
                 {/* Neural Glow Background */}
                 <div className="absolute top-0 right-0 w-64 h-64 bg-deep-space-accent-neon/5 blur-[100px] rounded-full -mr-20 -mt-20 pointer-events-none" />
@@ -182,7 +201,7 @@ const AIAssistOverlay = ({
                                             <div className="flex items-center gap-2">
                                                 <div className="w-1.5 h-1.5 rounded-full bg-deep-space-accent-neon shadow-[0_0_8px_#00ffff]" />
                                                 <span className="text-[10px] font-bold text-white/40 truncate max-w-[150px]">
-                                                    {new URL(s.metadata.url).hostname}
+                                                    {getSourceHostname(s?.metadata?.url)}
                                                 </span>
                                             </div>
                                             <ExternalLink size={10} className="text-white/20 group-hover:text-deep-space-accent-neon transition-colors" />

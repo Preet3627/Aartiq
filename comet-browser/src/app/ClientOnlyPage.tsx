@@ -36,6 +36,8 @@ import P2PSyncManager from '@/components/P2PSyncManager';
 import WelcomeScreen from '@/components/WelcomeScreen';
 import SpotlightSearchOverlay from '@/components/SpotlightSearchOverlay';
 import SchedulingModal from '@/components/ai/SchedulingModal';
+import DownloadsPanel, { type DownloadItem } from '@/components/DownloadsPanel';
+import ExtensionManager from '@/components/ExtensionManager';
 
 import CloudSyncConsent from "@/components/CloudSyncConsent";
 import NoNetworkGame from "@/components/DinoGame";
@@ -65,6 +67,10 @@ interface AiOverviewState {
 import { fetchAiOverview } from '@/lib/aiManager';
 import type { AiOverviewResponse } from '@/lib/aiManager';
 import { getRecommendedGeminiModel } from '@/lib/modelRegistry';
+
+function normalizeOverviewQuery(rawQuery: string) {
+  return rawQuery.trim().replace(/\s+/g, ' ').toLowerCase();
+}
 
 const SidebarIcon = ({ icon, label, active, onClick, collapsed }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, collapsed: boolean }) => (
   <button
@@ -142,6 +148,7 @@ export default function Home() {
   const [suggestions, setSuggestions] = useState<any[]>([]); // New state for additional suggestions
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean } | null>(null);
   const [aiOverview, setAiOverview] = useState<AiOverviewState | null>(null);
+  const lastAutoAiOverviewQueryRef = useRef<string>('');
   const [showTabSwitcher, setShowTabSwitcher] = useState(false);
   const [railVisible, setRailVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -153,7 +160,7 @@ export default function Home() {
   const [downloadStatus, setDownloadStatus] = useState<'idle' | 'in_progress' | 'completed' | 'failed'>('idle');
   const [showDownloads, setShowDownloads] = useState(false);
   const [showExtensionsPopup, setShowExtensionsPopup] = useState(false);
-  const [downloads, setDownloads] = useState<Array<{ name: string, status: string, progress?: number, path?: string }>>([]);
+  const [downloads, setDownloads] = useState<DownloadItem[]>([]);
   const [activeManager, setActiveManager] = useState<string | null>(null);
   const [isReadingAloud, setIsReadingAloud] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
@@ -178,11 +185,15 @@ export default function Home() {
   const [isAmbientPlaying, setIsAmbientPlaying] = useState(false);
   const [inputValue, setInputValue] = useState(store.currentUrl); // New state for input field's raw value
   const [showSpotlightSearch, setShowSpotlightSearch] = useState(false); // New state for global spotlight search
-  const [isPopupWindow, setIsPopupWindow] = useState(false);
   const [activeExtensions, setActiveExtensions] = useState<any[]>([]);
   const [isBrowserDisabled, setIsBrowserDisabled] = useState(false);
   const [showSchedulingModal, setShowSchedulingModal] = useState(false);
   const [schedulingIntent, setSchedulingIntent] = useState<SchedulingIntent | null>(null);
+  const panelQuery = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('panel') : null;
+  const isPopupWindow = Boolean(panelQuery);
+  const clientId = store.clientId;
+  const hasSeenWelcomePage = store.hasSeenWelcomePage;
+  const currentUser = store.user;
 
   const handleSettingsClose = useCallback(() => {
     setShowSettings(false);
@@ -246,42 +257,91 @@ export default function Home() {
       setShowSettings(false);
     } else if (item.popup) {
       switch (item.popup) {
-        case 'plugins': setShowExtensionsPopup(true); setIsBrowserDisabled(true); break;
+        case 'plugins': setShowExtensionsPopup(true); break;
         case 'settings': openSettingsPanel(); break;
-        case 'clipboard': setShowClipboard(true); setIsBrowserDisabled(true); break;
+        case 'clipboard': setShowClipboard(true); break;
         case 'translate': openTranslateDialog(); break;
-        case 'search': setShowSpotlightSearch(true); setIsBrowserDisabled(true); break;
-        case 'downloads': setShowDownloads(true); setIsBrowserDisabled(true); break;
-        case 'cart': setShowCart(true); setIsBrowserDisabled(true); break;
+        case 'search': setShowSpotlightSearch(true); break;
+        case 'downloads': setShowDownloads(true); break;
+        case 'cart': setShowCart(true); break;
       }
     }
   };
 
   useEffect(() => {
-    store.setActiveView('browser');
-
-    // Handle panel query parameter for deep-linking (e.g., from popup windows)
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const panel = params.get('panel');
-      if (panel) {
-        setIsPopupWindow(true);
-        const settingsPanels = ['settings', 'profile', 'extensions', 'downloads', 'clipboard', 'history', 'performance', 'sync', 'account'];
-        if (settingsPanels.includes(panel)) {
-          openSettingsPanel(panel === 'settings' ? 'profile' : panel);
-        } else if (panel === 'cart') {
-          setShowCart(true);
-          setIsBrowserDisabled(true);
-        } else if (panel === 'translate') {
-          openTranslateDialog();
-          window.electronAPI?.bringWindowToTop();
-        } else if (panel === 'search' || panel === 'apps') {
-          setShowSpotlightSearch(true);
-          setIsBrowserDisabled(true);
-        }
-      }
+    const settingsPanels = ['settings', 'profile', 'history', 'performance', 'sync', 'account'];
+    if (panelQuery && settingsPanels.includes(panelQuery)) {
+      setSettingsSection(panelQuery === 'settings' ? 'profile' : panelQuery);
     }
-  }, []);
+  }, [panelQuery]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI || panelQuery !== 'ai-overview') return;
+
+    let active = true;
+    window.electronAPI.getAiOverviewData?.().then((data) => {
+      if (active && data) {
+        setAiOverview(data);
+      }
+    });
+
+    const cleanup = window.electronAPI.on('ai-overview-data', (data: AiOverviewState | null) => {
+      if (active) {
+        setAiOverview(data);
+      }
+    });
+
+    return () => {
+      active = false;
+      cleanup?.();
+    };
+  }, [panelQuery]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI || panelQuery !== 'downloads') return;
+
+    let active = true;
+    window.electronAPI.getDownloadPanelData?.().then((data) => {
+      if (active && Array.isArray(data)) {
+        setDownloads(data);
+      }
+    });
+
+    const cleanup = window.electronAPI.on('download-panel-data', (data: DownloadItem[]) => {
+      if (active && Array.isArray(data)) {
+        setDownloads(data);
+      }
+    });
+
+    return () => {
+      active = false;
+      cleanup?.();
+    };
+  }, [panelQuery]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI || isPopupWindow) return;
+
+    const cleanupOverview = window.electronAPI.on('ai-overview-closed', () => {
+      if (aiOverview?.query) {
+        lastAutoAiOverviewQueryRef.current = normalizeOverviewQuery(aiOverview.query);
+      }
+      setAiOverview(null);
+    });
+
+    const cleanupPopupClosed = window.electronAPI.on('popup-closed', (type: string) => {
+      if (type === 'downloads') setShowDownloads(false);
+      if (type === 'clipboard') setShowClipboard(false);
+      if (type === 'search' || type === 'search-apps') setShowSpotlightSearch(false);
+      if (type === 'extensions' || type === 'plugins') setShowExtensionsPopup(false);
+      if (type === 'unified-cart' || type === 'cart') setShowCart(false);
+    });
+
+    return () => {
+      cleanupOverview?.();
+      cleanupPopupClosed?.();
+    };
+  }, [aiOverview?.query, isPopupWindow, normalizeOverviewQuery]);
 
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -294,7 +354,6 @@ export default function Home() {
       setIsDownloading(true);
       setDownloadStatus('in_progress');
       setShowDownloads(true);
-      setIsBrowserDisabled(true);
     });
 
     const cleanProgress = window.electronAPI.on('download-progress', ({ name, progress }: { name: string, progress: number }) => {
@@ -358,15 +417,7 @@ export default function Home() {
   }, []);
 
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    }
+    window.electronAPI?.toggleFullscreen();
   };
 
   const handleReadAloud = async () => {
@@ -485,11 +536,16 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+    if (!window.electronAPI) return;
+
+    const handleWindowLayoutChange = (payload?: { isFullScreen?: boolean }) => {
+      setIsFullscreen(Boolean(payload?.isFullScreen));
+      window.dispatchEvent(new Event('resize'));
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
     };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+
+    const cleanup = window.electronAPI.on('window-layout-changed', handleWindowLayoutChange);
+    return () => cleanup?.();
   }, []);
 
   const rightClickTimerRef = useRef<any>(null);
@@ -559,7 +615,7 @@ export default function Home() {
         setShowTabSwitcher(true);
       }
 
-      if (e.ctrlKey) {
+      if (e.ctrlKey || e.metaKey) {
         if (e.key === '=' || e.key === '+') {
           e.preventDefault();
           window.electronAPI?.changeZoom(-1);
@@ -568,12 +624,7 @@ export default function Home() {
           window.electronAPI?.changeZoom(1);
         } else if (e.key === '0') {
           e.preventDefault();
-          // Reset zoom logic - we'll handle this in main.js
-          const shortcuts = [
-            { accelerator: 'CommandOrControl+0', action: 'zoom-reset' }
-          ];
-          // Since the main process already handles zoom-reset via globalShortcut, 
-          // we just need to make sure the key event doesn't propagate if we're in the browser.
+          window.electronAPI?.resetZoom();
         }
       }
     };
@@ -639,7 +690,7 @@ export default function Home() {
 
   const runAiOverview = useCallback(async (rawQuery: string) => {
     const query = rawQuery.trim();
-    if (!query || !store.enableAIAssist) return null;
+    if (!query || !store.enableAiOverview) return null;
     const providerId = store.aiProvider || 'ollama';
     const modelName = resolveProviderModel(providerId);
 
@@ -711,10 +762,137 @@ export default function Home() {
     return response;
   }, [
     resolveProviderModel,
-    store.enableAIAssist,
+    store.enableAiOverview,
     store.aiProvider,
     store.localLlmMode,
   ]);
+
+  const runAutoAiOverviewIfNew = useCallback((rawQuery: string) => {
+    const normalizedQuery = normalizeOverviewQuery(rawQuery);
+    if (!normalizedQuery || !store.enableAiOverview) return;
+    if (normalizedQuery === lastAutoAiOverviewQueryRef.current) return;
+    lastAutoAiOverviewQueryRef.current = normalizedQuery;
+    runAiOverview(rawQuery);
+  }, [runAiOverview, store.enableAiOverview]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI || isPopupWindow) return;
+
+    const isBrowserOverlayMode = store.activeView === 'browser';
+    if (!isBrowserOverlayMode) {
+      window.electronAPI.closePopupWindow('ai-overview');
+      return;
+    }
+
+    if (aiOverview) {
+      window.electronAPI.openPopupWindow('ai-overview', {
+        width: 500,
+        height: 720,
+        x: Math.max(40, window.screenX + window.innerWidth - 540),
+        y: Math.max(80, window.screenY + 88),
+        frame: false,
+        transparent: true,
+        resizable: true,
+        closeOnBlur: true,
+      });
+      window.electronAPI.sendAiOverviewData(aiOverview);
+    } else {
+      window.electronAPI.closePopupWindow('ai-overview');
+    }
+  }, [aiOverview, isPopupWindow, store.activeView]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI || isPopupWindow) return;
+
+    if (store.activeView !== 'browser') {
+      window.electronAPI.closePopupWindow('downloads');
+      return;
+    }
+
+    if (showDownloads) {
+      window.electronAPI.openPopupWindow('downloads', {
+        width: 408,
+        height: 588,
+        x: Math.max(40, window.screenX + window.innerWidth - 436),
+        y: Math.max(80, window.screenY + 92),
+        frame: false,
+        transparent: true,
+        resizable: true,
+        closeOnBlur: true,
+      });
+      window.electronAPI.sendDownloadPanelData(downloads);
+    } else {
+      window.electronAPI.closePopupWindow('downloads');
+    }
+  }, [downloads, isPopupWindow, showDownloads, store.activeView]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI || isPopupWindow) return;
+
+    if (store.activeView !== 'browser') {
+      ['clipboard', 'search', 'unified-cart', 'extensions'].forEach((type) => window.electronAPI.closePopupWindow(type));
+      return;
+    }
+
+    if (showClipboard) {
+      window.electronAPI.openPopupWindow('clipboard', {
+        width: 470,
+        height: 680,
+        x: Math.max(40, window.screenX + window.innerWidth - 500),
+        y: Math.max(80, window.screenY + 92),
+        frame: false,
+        transparent: true,
+        resizable: true,
+        closeOnBlur: true,
+      });
+    } else {
+      window.electronAPI.closePopupWindow('clipboard');
+    }
+
+    if (showSpotlightSearch) {
+      window.electronAPI.openPopupWindow('search', {
+        width: 900,
+        height: 520,
+        frame: false,
+        transparent: true,
+        resizable: false,
+        x: Math.max(40, window.screenX + Math.round((window.innerWidth - 900) / 2)),
+        y: Math.max(80, window.screenY + 96),
+        closeOnBlur: true,
+      });
+    } else {
+      window.electronAPI.closePopupWindow('search');
+    }
+
+    if (showCart) {
+      window.electronAPI.openPopupWindow('unified-cart', {
+        width: 600,
+        height: 540,
+        frame: false,
+        transparent: true,
+        resizable: true,
+        x: Math.max(40, window.screenX + window.innerWidth - 640),
+        y: Math.max(80, window.screenY + 92),
+        closeOnBlur: true,
+      });
+    } else {
+      window.electronAPI.closePopupWindow('unified-cart');
+    }
+
+    if (showExtensionsPopup) {
+      window.electronAPI.openPopupWindow('extensions', {
+        width: 1120,
+        height: 820,
+        frame: false,
+        transparent: true,
+        x: Math.max(40, window.screenX + Math.round((window.innerWidth - 1120) / 2)),
+        y: Math.max(70, window.screenY + 60),
+        closeOnBlur: true,
+      });
+    } else {
+      window.electronAPI.closePopupWindow('extensions');
+    }
+  }, [isPopupWindow, showCart, showClipboard, showExtensionsPopup, showSpotlightSearch, store.activeView]);
 
   // Apply Theme
   useEffect(() => {
@@ -736,13 +914,13 @@ export default function Home() {
 
   // AI Query Interception
   useEffect(() => {
-    if (window.electronAPI && store.enableAIAssist && store.enableAiOverview) {
+    if (window.electronAPI && store.enableAiOverview) {
       const cleanup = window.electronAPI.onAiQueryDetected((query: any) => {
-        runAiOverview(query);
+        runAutoAiOverviewIfNew(String(query || ''));
       });
       return cleanup;
     }
-  }, [store.enableAIAssist, store.enableAiOverview, runAiOverview]);
+  }, [store.enableAiOverview, runAutoAiOverviewIfNew]);
 
   // Automatic Sidebar & AI Scaling
   useEffect(() => {
@@ -810,15 +988,19 @@ export default function Home() {
   // Debounced Predictor and Suggestions Fetcher
   useEffect(() => {
     const timer = setTimeout(async () => {
-      if (isTyping && inputValue.length > 1) { // Trigger on 2+ chars
+      const suggestionQuery = extractSuggestionQuery(inputValue);
+
+      if (isTyping && suggestionQuery.length > 1) { // Trigger on 2+ chars
         // Fetch URL prediction
-        const preds = await BrowserAI.predictUrl(inputValue, store.history.map(h => h.url));
+        const preds = /^https?:\/\//i.test(inputValue.trim())
+          ? []
+          : await BrowserAI.predictUrl(suggestionQuery, store.history.map(h => h.url));
         setUrlPrediction(preds[0] || null);
 
         // Fetch additional suggestions
         if (window.electronAPI) {
-          const webSuggestions = await window.electronAPI.getSuggestions(inputValue);
-          const appSearch = await window.electronAPI.searchApplications(inputValue);
+          const webSuggestions = await window.electronAPI.getSuggestions(suggestionQuery);
+          const appSearch = await window.electronAPI.searchApplications(suggestionQuery);
           const appSuggestions = appSearch.success ? appSearch.results.map((app: any) => ({
             type: 'app',
             text: app.name,
@@ -919,6 +1101,9 @@ export default function Home() {
           case 'open-settings': setShowSettings(true); break;
           case 'new-incognito-tab': store.addIncognitoTab(); break;
           case 'toggle-spotlight': setShowSpotlightSearch(prev => !prev); break;
+          case 'zoom-in': window.electronAPI?.changeZoom(-1); break;
+          case 'zoom-out': window.electronAPI?.changeZoom(1); break;
+          case 'zoom-reset': window.electronAPI?.resetZoom(); break;
         }
       });
 
@@ -1013,8 +1198,9 @@ export default function Home() {
     if (url.includes('.') && !url.includes(' ') && !url.startsWith('http')) {
       url = `https://${url}`;
     } else if (!url.startsWith('http')) {
+      const aiQuery = url.trim();
       url = `${searchEngines[store.selectedEngine as keyof typeof searchEngines].url}${encodeURIComponent(url)}`;
-      if (store.enableAIAssist) runAiOverview(store.currentUrl.trim());
+      if (store.enableAiOverview && aiQuery) runAutoAiOverviewIfNew(aiQuery);
     }
 
     if (newTab) {
@@ -1038,6 +1224,56 @@ export default function Home() {
     }
     setSuggestions([]); // Clear suggestions after selection
     setIsTyping(false); // Stop typing state
+  };
+
+  const formatSuggestionMeta = (suggestion: any) => {
+    if (!suggestion?.url) return '';
+
+    if (suggestion.type === 'app') {
+      return suggestion.url;
+    }
+
+    try {
+      const parsed = new URL(suggestion.url);
+      const readablePath = parsed.pathname && parsed.pathname !== '/' ? parsed.pathname : '';
+      return `${parsed.hostname}${readablePath}`;
+    } catch {
+      return suggestion.url;
+    }
+  };
+
+  const getSuggestionLabel = (type: string) => {
+    if (type === 'search') return 'Search';
+    if (type === 'history') return 'History';
+    if (type === 'bookmark') return 'Bookmark';
+    if (type === 'app') return 'App';
+    return 'Result';
+  };
+
+  const getSuggestionTitle = (suggestion: any) => {
+    if (!suggestion) return '';
+    if (suggestion.type === 'search') return `Search ${store.selectedEngine.charAt(0).toUpperCase()}${store.selectedEngine.slice(1)}`;
+    if (suggestion.type === 'history') return 'Recent Page';
+    if (suggestion.type === 'bookmark') return 'Saved Bookmark';
+    return suggestion.text;
+  };
+
+  const getSuggestionDescription = (suggestion: any) => {
+    if (!suggestion) return '';
+    if (suggestion.type === 'search') return extractSuggestionQuery(inputValue);
+    return formatSuggestionMeta(suggestion);
+  };
+
+  const extractSuggestionQuery = (value: string) => {
+    const trimmedValue = value.trim();
+    if (!trimmedValue) return '';
+
+    try {
+      const parsed = new URL(trimmedValue);
+      return parsed.searchParams.get('q') || parsed.searchParams.get('query') || trimmedValue;
+    } catch {
+      return trimmedValue;
+    }
   };
 
 
@@ -1067,7 +1303,6 @@ export default function Home() {
   const handleCartScan = async () => {
     if (!window.electronAPI) return;
     setShowCart(true);
-    setIsBrowserDisabled(true);
     try {
       const result = await window.electronAPI.executeJavaScript(`
         (function() {
@@ -1104,8 +1339,11 @@ export default function Home() {
 
     const railWidth = railVisible ? 70 : 0;
     const aiSidebarWidth = !store.sidebarOpen ? 0 : (store.isSidebarCollapsed ? 70 : store.sidebarWidth);
-
-    const headerHeight = 40 + 56;
+    // Reserve only the exact strip needed for the URL suggestions dropdown instead of hiding the whole page.
+    const suggestionPanelHeight = store.activeView === 'browser' && isTyping && suggestions.length > 0
+      ? Math.min(suggestions.length, 6) * 40 + 12
+      : 0;
+    const headerHeight = 40 + 56 + suggestionPanelHeight;
 
     let x = 0;
     if (store.sidebarSide === 'left') {
@@ -1123,36 +1361,64 @@ export default function Home() {
       width: Math.max(0, Math.round(width)),
       height: Math.max(0, Math.round(height))
     };
-  }, [store.sidebarOpen, store.isSidebarCollapsed, store.sidebarWidth, store.sidebarSide, railVisible, store.hasCompletedStartupSetup]);
+  }, [store.sidebarOpen, store.isSidebarCollapsed, store.sidebarWidth, store.sidebarSide, railVisible, store.hasCompletedStartupSetup, store.activeView, isTyping, suggestions.length]);
+
+  const syncBrowserViewBounds = useCallback(() => {
+    if (!window.electronAPI || isPopupWindow || store.activeView !== 'browser') return;
+
+    const bounds = calculateBounds();
+    window.electronAPI.setBrowserViewBounds(bounds);
+
+    if (store.activeTabId) {
+      window.electronAPI.activateView({ tabId: store.activeTabId, bounds });
+    }
+  }, [calculateBounds, isPopupWindow, store.activeTabId, store.activeView]);
 
   useEffect(() => {
-    if (window.electronAPI) {
-      const bounds = calculateBounds();
-      window.electronAPI.setBrowserViewBounds(bounds);
-    }
-    window.addEventListener('resize', calculateBounds);
-    return () => window.removeEventListener('resize', calculateBounds);
-  }, [calculateBounds]);
+    if (!window.electronAPI || isPopupWindow) return;
+
+    syncBrowserViewBounds();
+    window.addEventListener('resize', syncBrowserViewBounds);
+    return () => window.removeEventListener('resize', syncBrowserViewBounds);
+  }, [isPopupWindow, syncBrowserViewBounds]);
+
+  // Reliability: when returning from non-browser views, force a quick re-sync so
+  // DOM extraction/search IPC always targets a live active BrowserView.
+  useEffect(() => {
+    if (!window.electronAPI || isPopupWindow) return;
+    if (store.activeView !== 'browser' || !store.activeTabId) return;
+
+    window.electronAPI.showAllViews();
+    syncBrowserViewBounds();
+    const timer = window.setTimeout(() => {
+      syncBrowserViewBounds();
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [isPopupWindow, store.activeTabId, store.activeView, syncBrowserViewBounds]);
 
   // View Management Effects
   useEffect(() => {
+    if (!window.electronAPI || isPopupWindow) return;
+
     if (window.electronAPI) {
       store.tabs.forEach(tab => {
         window.electronAPI.createView({ tabId: tab.id, url: tab.url });
       });
 
       if (store.activeTabId) {
-        const bounds = calculateBounds();
-        window.electronAPI.activateView({ tabId: store.activeTabId, bounds });
+        syncBrowserViewBounds();
       }
     }
-  }, []);
+  }, [isPopupWindow, store.activeTabId, store.tabs, syncBrowserViewBounds]);
 
   useEffect(() => {
+    if (!window.electronAPI || isPopupWindow) return;
+
     if (window.electronAPI) {
+      const usesNativeUtilityPopups = store.activeView === 'browser';
       // Only hide BrowserView for full-screen overlays that completely cover the page
       // Small overlays (context menu, AI overview, etc.) will use z-[9999] to appear on top
-      const hasFullScreenOverlay = !store.hasSeenWelcomePage || !store.hasCompletedStartupSetup || showSettings || activeManager !== null || showCamera || showDownloads || showCart || showExtensionsPopup || showClipboard || showSpotlightSearch || aiOverview || (isTyping && suggestions.length > 0) || showTranslateDialog || showSchedulingModal;
+      const hasFullScreenOverlay = !store.hasSeenWelcomePage || !store.hasCompletedStartupSetup || showSettings || activeManager !== null || showCamera || (!usesNativeUtilityPopups && showDownloads) || (!usesNativeUtilityPopups && showCart) || (!usesNativeUtilityPopups && showExtensionsPopup) || (!usesNativeUtilityPopups && showClipboard) || (!usesNativeUtilityPopups && showSpotlightSearch) || showTranslateDialog || showSchedulingModal;
 
       if (hasFullScreenOverlay) {
         window.electronAPI.hideAllViews();
@@ -1161,16 +1427,15 @@ export default function Home() {
 
       // Keep BrowserView visible for browser mode, small overlays will layer on top
       if (store.activeView === 'browser' && store.activeTabId) {
-        const bounds = calculateBounds();
-        window.electronAPI.activateView({ tabId: store.activeTabId, bounds });
+        syncBrowserViewBounds();
       } else {
         window.electronAPI.hideAllViews();
       }
     }
   }, [
+    isPopupWindow,
     store.activeTabId,
     store.activeView,
-    calculateBounds,
     showSettings,
     activeManager,
     showCamera,
@@ -1179,13 +1444,13 @@ export default function Home() {
     showExtensionsPopup,
     showClipboard,
     showSpotlightSearch,
-    aiOverview,
     isTyping,
     suggestions.length,
     store.hasSeenWelcomePage,
     store.hasCompletedStartupSetup,
     showTranslateDialog,
-    showSchedulingModal
+    showSchedulingModal,
+    syncBrowserViewBounds
   ]);
 
   useEffect(() => {
@@ -1379,8 +1644,10 @@ export default function Home() {
   // Auto-trigger Google Login if no user and not already seen welcome page
   // Auto-trigger Google Login - Use Store Config
   useEffect(() => {
+    if (isPopupWindow) return;
+
     // 1. Fetch App Config first
-    if (!store.clientId) {
+    if (!clientId) {
       store.fetchAppConfig();
     }
 
@@ -1402,20 +1669,43 @@ export default function Home() {
       store.setHasSeenWelcomePage(true);
     }
     */
-  }, [store.user, store.hasSeenWelcomePage, store.clientId]);
+  }, [isPopupWindow, currentUser, hasSeenWelcomePage, clientId]);
 
   // Early return for standalone popup windows
   if (isPopupWindow) {
-    const params = new URLSearchParams(window.location.search);
-    const panel = params.get('panel');
+    const panel = panelQuery;
+    const closePopupWindow = () => window.close();
+    const shellClassName = panel === 'search' || panel === 'apps'
+      ? 'h-screen w-full bg-transparent flex items-start justify-center p-2 overflow-hidden'
+      : 'h-screen w-full bg-transparent flex items-start justify-end p-2 overflow-hidden';
+    const renderPopupShell = (content: React.ReactNode, panelClassName = 'w-full h-full') => (
+      <div className={shellClassName} onMouseDown={closePopupWindow}>
+        <div className={`${panelClassName} rounded-[22px] overflow-hidden border border-white/10 bg-[linear-gradient(180deg,rgba(14,20,30,0.74),rgba(7,10,18,0.48))] backdrop-blur-3xl shadow-[0_24px_64px_rgba(0,0,0,0.32)]`} onMouseDown={(e) => e.stopPropagation()}>
+          {content}
+        </div>
+      </div>
+    );
 
     return (
-      <div className="h-screen w-full bg-black flex flex-col overflow-hidden">
-        {panel === 'clipboard' && <ClipboardManager />}
-        {panel === 'cart' && <UnifiedCartPanel onClose={() => window.close()} onScan={handleCartScan} />}
-        {(panel === 'search' || panel === 'apps') && <SpotlightSearchOverlay show={true} onClose={() => window.close()} />}
-        {panel === 'context-menu' && (
-          <div className="w-full h-full bg-[#0a0a0f]/95 backdrop-blur-2xl border border-white/10 rounded-xl shadow-2xl overflow-hidden py-1.5 flex flex-col">
+      <>
+        {panel === 'clipboard' && renderPopupShell(<ClipboardManager />, 'w-full h-full max-w-[470px]')}
+        {panel === 'cart' && renderPopupShell(<UnifiedCartPanel onClose={closePopupWindow} onScan={handleCartScan} popupMode={true} />, 'w-full h-full max-w-[560px]')}
+        {panel === 'downloads' && renderPopupShell(<DownloadsPanel downloads={downloads} onClose={closePopupWindow} />, 'w-full max-w-[400px] self-start')}
+        {(panel === 'search' || panel === 'apps') && renderPopupShell(<SpotlightSearchOverlay show={true} onClose={closePopupWindow} mode="window" />, 'w-full h-full max-w-[900px]')}
+        {panel === 'extensions' && (
+          renderPopupShell(
+            <div className="h-full w-full p-6 bg-[#070812]/95 relative border border-white/10 rounded-[28px] shadow-2xl overflow-hidden">
+              <div className="absolute inset-x-0 top-0 h-14 drag-region" />
+              <button onClick={closePopupWindow} className="absolute top-4 right-4 z-10 p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all no-drag-region">
+                <X size={16} />
+              </button>
+              <ExtensionManager />
+            </div>,
+            'w-full h-full max-w-[1120px]'
+          )
+        )}
+        {panel === 'context-menu' && renderPopupShell(
+          <div className="w-full h-full bg-transparent py-1.5 flex flex-col">
             <button onClick={() => { window.electronAPI?.reload(); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
               <RotateCw size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Reload</span>
@@ -1441,10 +1731,12 @@ export default function Home() {
               <Code2 size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Inspect</span>
             </button>
-          </div>
+          </div>,
+          'w-full h-full max-w-[280px]'
         )}
         {panel === 'translate' && (
-          <div className="flex-1 p-6 flex flex-col items-center justify-center relative drag-region">
+          renderPopupShell(
+          <div className="h-full w-full p-6 flex flex-col items-center justify-center relative drag-region bg-transparent">
             <button onClick={() => window.close()} className="absolute top-4 right-4 p-2 text-white/40 hover:text-white hover:bg-white/10 rounded-full transition-all no-drag-region">
               <X size={16} />
             </button>
@@ -1465,12 +1757,39 @@ export default function Home() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>,
+          'w-full h-full max-w-[520px]'
+          )
         )}
-        {(panel === 'settings' || panel === 'profile' || panel === 'extensions' || panel === 'downloads') && (
-          <SettingsPanel onClose={() => window.close()} defaultSection={settingsSection} />
+        {panel === 'ai-overview' && aiOverview && (
+          renderPopupShell(
+          <AIAssistOverlay
+            query={aiOverview.query}
+            result={aiOverview.result}
+            sources={aiOverview.sources}
+            isLoading={aiOverview.isLoading}
+            provider={aiOverview.provider}
+            model={aiOverview.model}
+            statusMessage={aiOverview.statusMessage}
+            durationMs={aiOverview.durationMs}
+            onRefresh={() => runAiOverview(aiOverview.query)}
+            availableOllamaModels={store.ollamaModelsList}
+            selectedOllamaModel={store.ollamaModel}
+            onOllamaModelSelect={(modelName) => store.setOllamaModel(modelName)}
+            onOllamaModelsUpdate={(models) => store.setOllamaModelsList(models)}
+            onClose={() => window.electronAPI?.closeAiOverview()}
+            mode="window"
+          />,
+          'w-full h-full max-w-[560px]'
+          )
         )}
-      </div>
+        {(panel === 'settings' || panel === 'profile') && (
+          renderPopupShell(
+            <SettingsPanel onClose={() => window.close()} defaultSection={settingsSection} popupMode={true} />,
+            'w-full h-full max-w-[1240px]'
+          )
+        )}
+      </>
     );
   }
 
@@ -1715,23 +2034,32 @@ export default function Home() {
                   </div>
                   {isTyping && suggestions.length > 0 && (
                     <div
-                      className="absolute left-0 right-0 top-full mt-1 bg-primary-bg/95 backdrop-blur-md border border-border-color rounded-xl shadow-lg z-50 overflow-hidden"
+                      className="absolute left-0 right-0 top-full mt-2 z-50 overflow-hidden rounded-[22px] border border-sky-400/15 bg-[linear-gradient(180deg,rgba(18,32,48,0.72),rgba(9,14,24,0.58))] shadow-[0_22px_60px_rgba(0,0,0,0.22)] backdrop-blur-3xl max-h-[276px] overflow-y-auto custom-scrollbar"
                       style={{ width: inputRef.current ? inputRef.current.offsetWidth : 'auto' }}
                     >
                       {suggestions.map((s, index) => (
                         <div
                           key={index}
-                          className="flex items-center gap-3 px-4 py-2 hover:bg-accent/10 cursor-pointer text-sm"
+                          className={`group flex items-center gap-3 px-4 py-3 cursor-pointer transition-all ${index !== suggestions.length - 1 ? 'border-b border-white/6' : ''} hover:bg-sky-400/[0.08]`}
                           onClick={() => {
                             handleSuggestionClick(s);
                           }}
                         >
-                          {s.type === 'search' && <Search size={14} className="text-secondary-text" />}
-                          {s.type === 'history' && <RefreshCcw size={14} className="text-secondary-text" />}
-                          {s.type === 'bookmark' && <Bookmark size={14} className="text-secondary-text" />}
-                          {s.type === 'app' && s.icon} {/* Render app icon */}
-                          <span className="flex-1 text-primary-text truncate">{s.text}</span>
-                          <span className="text-secondary-text text-xs">{s.url}</span>
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/8 bg-white/[0.03] text-white/55 group-hover:text-sky-300 group-hover:border-sky-400/20">
+                            {s.type === 'search' && <Search size={14} />}
+                            {s.type === 'history' && <RefreshCcw size={14} />}
+                            {s.type === 'bookmark' && <Bookmark size={14} />}
+                            {s.type === 'app' && s.icon}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-white truncate">{getSuggestionTitle(s)}</span>
+                              <span className="shrink-0 rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+                                {getSuggestionLabel(s.type)}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-white/35 truncate">{getSuggestionDescription(s)}</p>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1793,7 +2121,7 @@ export default function Home() {
               {store.activeView === 'browser' && (
                 <motion.div key="browser" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0">
                   <div className={`h-full flex ${store.studentMode ? 'p-4 gap-4' : 'p-2'}`}>
-                    <div className={`flex-[3] relative bg-[#020205] shadow-[0_0_100px_rgba(0,0,0,0.5)] ${store.studentMode ? 'rounded-3xl' : 'rounded-2xl'} overflow-hidden border border-white/5`}>
+                    <div className={`flex-[3] relative bg-[radial-gradient(circle_at_top,rgba(34,92,138,0.22),rgba(2,2,5,0.96)_34%)] shadow-[0_0_100px_rgba(0,0,0,0.5)] ${store.studentMode ? 'rounded-3xl' : 'rounded-2xl'} overflow-hidden border border-white/5`}>
                       {!store.isOnline && (
                         <div className="absolute inset-0 z-[100] bg-[#0a0a0f]">
                           <NoNetworkGame />
@@ -1953,7 +2281,7 @@ export default function Home() {
 
             {/* Neural Context Overlay */}
             <AnimatePresence>
-              {aiOverview && (
+              {aiOverview && !(typeof window !== 'undefined' && window.electronAPI && store.activeView === 'browser') && (
                 <AIAssistOverlay
                   query={aiOverview.query}
                   result={aiOverview.result}
@@ -2127,58 +2455,17 @@ export default function Home() {
             </div>
           </div>
         )}
-        {showDownloads && (
+        {showDownloads && !(typeof window !== 'undefined' && window.electronAPI && store.activeView === 'browser') && (
           <div className="fixed inset-0 z-[9998]" onPointerDown={() => setShowDownloads(false)}>
             <div
-              className="fixed top-24 right-10 z-[9999] w-[400px] h-[600px] glass-dark rounded-3xl border border-white/10 shadow-2xl p-6 overflow-hidden flex flex-col"
+              className="fixed top-24 right-10 z-[9999] w-[400px] h-[600px]"
               onPointerDown={(event) => event.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-sm font-black uppercase tracking-widest text-sky-400">Downloads</h3>
-                <button onClick={() => setShowDownloads(false)} className="p-2 hover:bg-white/10 rounded-full transition-all text-white/40">
-                  <X size={16} />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4">
-                {downloads.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center opacity-30 gap-4">
-                    <DownloadCloud size={40} />
-                    <p className="text-xs font-bold uppercase tracking-widest">No Active Downloads</p>
-                  </div>
-                ) : (
-                  downloads.map((d, i) => (
-                    <div
-                      key={i}
-                      className="p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between group hover:border-sky-400/30 transition-all cursor-pointer"
-                      onClick={async () => {
-                        if (d.status === 'completed' && window.electronAPI?.openFile) {
-                          // Use path if available, otherwise fall back to name
-                          const fileToOpen = d.path || d.name;
-                          await window.electronAPI.openFile(fileToOpen);
-                        }
-                      }}
-                    >
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs font-bold text-white truncate max-w-[200px]">{d.name}</span>
-                        <span className="text-[10px] uppercase font-black tracking-tighter text-sky-400/60">
-                          {d.status === 'completed' ? '✓ Click to Open' : d.status}
-                        </span>
-                      </div>
-                      <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: d.status === 'completed' ? '100%' : `${d.progress || 0}%` }}
-                          className="h-full bg-sky-400"
-                        />
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+              <DownloadsPanel downloads={downloads} onClose={() => setShowDownloads(false)} />
             </div>
           </div>
         )}
-        {showClipboard && (
+        {showClipboard && !(typeof window !== 'undefined' && window.electronAPI && store.activeView === 'browser') && (
           <div className="fixed inset-0 z-[9998]" onPointerDown={() => setShowClipboard(false)}>
             <div
               className="fixed top-24 right-10 z-[9999] w-[450px] h-[650px] overflow-hidden"
@@ -2188,14 +2475,14 @@ export default function Home() {
             </div>
           </div>
         )}
-        {showCart && (
+        {showCart && !(typeof window !== 'undefined' && window.electronAPI && store.activeView === 'browser') && (
           <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-md" onPointerDown={() => setShowCart(false)}>
             <div className="w-full max-w-[900px]" onPointerDown={(event) => event.stopPropagation()}>
               <UnifiedCartPanel onClose={() => setShowCart(false)} onScan={handleCartScan} />
             </div>
           </div>
         )}
-        {showExtensionsPopup && (
+        {showExtensionsPopup && !(typeof window !== 'undefined' && window.electronAPI && store.activeView === 'browser') && (
           <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/60 backdrop-blur-md p-10" onPointerDown={() => setShowExtensionsPopup(false)}>
             <div
               className="w-full max-w-4xl h-full max-h-[800px] glass-dark rounded-[40px] border border-white/10 shadow-2xl p-8 overflow-hidden flex flex-col"
@@ -2253,7 +2540,9 @@ export default function Home() {
           </div>
         )}
       </AnimatePresence>
-      <SpotlightSearchOverlay show={showSpotlightSearch} onClose={() => setShowSpotlightSearch(false)} />
+      {!(typeof window !== 'undefined' && window.electronAPI && store.activeView === 'browser') && (
+        <SpotlightSearchOverlay show={showSpotlightSearch} onClose={() => setShowSpotlightSearch(false)} />
+      )}
       {showSchedulingModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           <SchedulingModal 

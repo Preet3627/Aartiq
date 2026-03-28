@@ -10,16 +10,21 @@ import { useAppStore } from '@/store/useAppStore'; // Import useAppStore
 interface SpotlightSearchOverlayProps {
     show: boolean;
     onClose: () => void;
+    mode?: 'overlay' | 'window';
 }
 
-const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, onClose }) => {
+const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({
+    show,
+    onClose,
+    mode = 'overlay',
+}) => {
     const store = useAppStore(); // Get store at top level
     const [searchTerm, setSearchTerm] = useState('');
     const [calculationResult, setCalculationResult] = useState<string | null>(null); // New state for calculation result
     const [appSearchResults, setAppSearchResults] = useState<any[]>([]); // New state for app search results
     const [alarmMessage, setAlarmMessage] = useState<string | null>(null); // New state for alarm messages
     const [urlPrediction, setUrlPrediction] = useState<string | null>(null); // New state for URL prediction
-    const [urlPredictions, setUrlPredictions] = useState<string[]>([]); // Store multiple predictions
+    const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -31,6 +36,11 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
             return () => clearTimeout(timer);
         } else {
             setSearchTerm(''); // Clear search term when closed
+            setCalculationResult(null);
+            setAppSearchResults([]);
+            setAlarmMessage(null);
+            setUrlPrediction(null);
+            setSelectedIndex(0);
         }
     }, [show]);
 
@@ -45,35 +55,90 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onClose]);
 
-    // Debounced Predictor for URL
+    const isAlarmCommand = (value: string) => value.toLowerCase().startsWith('set alarm for') || value.toLowerCase().startsWith('alarm at');
+    const isMathExpression = (value: string) => /^[\d\s+\-*/().]+$/.test(value);
+
+    // Debounced app + URL prediction
     useEffect(() => {
         const timer = setTimeout(async () => {
             const trimmedSearchTerm = searchTerm.trim();
-            if (trimmedSearchTerm.length > 2 && !calculationResult && appSearchResults.length === 0 && !alarmMessage) {
-                const preds = await BrowserAI.predictUrl(trimmedSearchTerm, store.history.map(h => h.url));
-                setUrlPrediction(preds[0] || null);
-            } else {
+            if (!trimmedSearchTerm) {
+                setAppSearchResults([]);
                 setUrlPrediction(null);
+                return;
+            }
+
+            if (isMathExpression(trimmedSearchTerm) || isAlarmCommand(trimmedSearchTerm)) {
+                setAppSearchResults([]);
+                setUrlPrediction(null);
+                return;
+            }
+
+            const preds = await BrowserAI.predictUrl(trimmedSearchTerm, store.history.map(h => h.url));
+            setUrlPrediction(preds[0] || null);
+
+            if (window.electronAPI) {
+                const appSearchRes = await window.electronAPI.searchApplications(trimmedSearchTerm);
+                if (appSearchRes.success) {
+                    setAppSearchResults(appSearchRes.results || []);
+                } else {
+                    setAppSearchResults([]);
+                }
             }
         }, 150); // Debounce time
         return () => clearTimeout(timer);
-    }, [searchTerm, calculationResult, appSearchResults, alarmMessage, store.history]);
+    }, [searchTerm, store.history]);
+
+    const selectableItems = [
+        ...(urlPrediction ? [{ type: 'prediction' as const, value: urlPrediction }] : []),
+        ...appSearchResults.map((app) => ({ type: 'app' as const, value: app })),
+        ...(searchTerm.trim() && !calculationResult && !alarmMessage ? [{ type: 'web' as const, value: searchTerm.trim() }] : []),
+    ];
+
+    useEffect(() => {
+        if (selectedIndex >= selectableItems.length) {
+            setSelectedIndex(Math.max(0, selectableItems.length - 1));
+        }
+    }, [selectedIndex, selectableItems.length]);
+
+    const activateSelection = async (item = selectableItems[selectedIndex]) => {
+        if (!item || !window.electronAPI) return;
+
+        if (item.type === 'prediction') {
+            window.electronAPI.addNewTab(item.value);
+            onClose();
+            return;
+        }
+
+        if (item.type === 'app') {
+            if (item.value.path) {
+                await window.electronAPI.openExternalApp(item.value.path);
+                onClose();
+            }
+            return;
+        }
+
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(item.value)}`;
+        window.electronAPI.addNewTab(searchUrl);
+        onClose();
+    };
 
     const handleSearch = async () => {
         setCalculationResult(null); // Clear previous calculation
+        setAlarmMessage(null);
         const trimmedSearchTerm = searchTerm.trim();
 
         // Basic calculation logic
-        if (/^[\d\s+\-*/().]+$/.test(trimmedSearchTerm)) {
+        if (isMathExpression(trimmedSearchTerm)) {
             try {
                 // Using eval is generally unsafe, but for a local calculator with trusted input, it's acceptable.
                 // In a production environment with untrusted input, a safer math expression parser would be used.
                 const result = eval(trimmedSearchTerm);
                 setCalculationResult(`${trimmedSearchTerm} = ${result}`);
-            } catch (e) {
+            } catch {
                 setCalculationResult('Invalid expression');
             }
-        } else if (trimmedSearchTerm.toLowerCase().startsWith('set alarm for') || trimmedSearchTerm.toLowerCase().startsWith('alarm at')) {
+        } else if (isAlarmCommand(trimmedSearchTerm)) {
             setAppSearchResults([]); // Clear app search results
             setAlarmMessage(null); // Clear previous alarm message
             if (window.electronAPI) {
@@ -131,26 +196,24 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
             } else {
                 setAlarmMessage('⚠️ Alarm setting not available in this environment.');
             }
-        } else {
-            setAppSearchResults([]); // Clear previous app search results
-            if (window.electronAPI) {
-                // First, try app search
-                const appSearchRes = await window.electronAPI.searchApplications(trimmedSearchTerm);
-                if (appSearchRes.success && appSearchRes.results.length > 0) {
-                    setAppSearchResults(appSearchRes.results);
-                } else {
-                    // If no app results, perform web search
-                    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(trimmedSearchTerm)}`;
-                    window.electronAPI.addNewTab(searchUrl); // Use existing IPC to open new tab
-                    onClose(); // Close the spotlight search overlay after initiating search
-                }
-            } else {
-                console.warn('Search functionality not available: Not in Electron environment.');
-            }
+        } else if (selectableItems.length > 0) {
+            await activateSelection();
+        } else if (window.electronAPI) {
+            const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(trimmedSearchTerm)}`;
+            window.electronAPI.addNewTab(searchUrl);
+            onClose();
         }
     };
 
     if (!show) return null;
+
+    const isWindowMode = mode === 'window';
+    const containerClasses = isWindowMode
+        ? 'h-full w-full bg-transparent flex items-start justify-center p-4'
+        : 'fixed inset-0 bg-black/80 backdrop-blur-lg z-[9999] flex items-start justify-center p-4 md:p-8';
+    const panelClasses = isWindowMode
+        ? 'relative w-full h-full bg-[#0a0a0f]/95 border border-white/10 rounded-2xl shadow-3xl overflow-hidden'
+        : 'relative w-full max-w-2xl bg-[#0a0a0f] border border-white/10 rounded-2xl shadow-3xl overflow-hidden';
 
     return (
         <AnimatePresence>
@@ -159,7 +222,7 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 bg-black/80 backdrop-blur-lg z-[9999] flex items-start justify-center p-4 md:p-8"
+                    className={containerClasses}
                     onClick={onClose} // Close when clicking outside the modal content
                 >
                     <motion.div
@@ -167,32 +230,37 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: -50, opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="w-full max-w-2xl bg-[#0a0a0f] border border-white/10 rounded-2xl shadow-3xl overflow-hidden"
+                        className={panelClasses}
                         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside the modal content
                     >
-                        <div className="flex items-center p-4 border-b border-white/10">
+                        <div className={`flex items-center p-4 border-b border-white/10 ${isWindowMode ? 'drag-region' : ''}`}>
                             <Search size={18} className="text-secondary-text mr-3" />
                             <input
                                 ref={inputRef}
                                 type="text"
                                 value={searchTerm}
-                                onChange={(e) => { setSearchTerm(e.target.value); setCalculationResult(null); }} // Clear result on new input
+                                onChange={(e) => {
+                                    setSearchTerm(e.target.value);
+                                    setCalculationResult(null);
+                                    setAlarmMessage(null);
+                                    setSelectedIndex(0);
+                                }}
                                 onKeyDown={async (e) => {
-                                    if (e.key === 'Enter') {
-                                        if (urlPrediction) { // If there's a prediction, use it for navigation
-                                            if (window.electronAPI) {
-                                                window.electronAPI.addNewTab(urlPrediction);
-                                                onClose();
-                                            }
-                                        } else { // Otherwise, perform the regular search
-                                            handleSearch();
-                                        }
+                                    if (e.key === 'ArrowDown' && selectableItems.length > 0) {
+                                        e.preventDefault();
+                                        setSelectedIndex((prev) => (prev + 1) % selectableItems.length);
+                                    } else if (e.key === 'ArrowUp' && selectableItems.length > 0) {
+                                        e.preventDefault();
+                                        setSelectedIndex((prev) => (prev - 1 + selectableItems.length) % selectableItems.length);
+                                    } else if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleSearch();
                                     }
                                 }}
                                 placeholder="Search apps, web, alarms, calculations..."
-                                className="flex-1 bg-transparent text-primary-text placeholder:text-secondary-text focus:outline-none text-base"
+                                className={`flex-1 bg-transparent text-primary-text placeholder:text-secondary-text focus:outline-none text-base ${isWindowMode ? 'no-drag-region' : ''}`}
                             />
-                            <button onClick={onClose} className="ml-3 p-1 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+                            <button onClick={onClose} className={`ml-3 p-1 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors ${isWindowMode ? 'no-drag-region' : ''}`}>
                                 <X size={16} />
                             </button>
                         </div>
@@ -210,24 +278,33 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
                                 </div>
                             )}
 
+                            {urlPrediction && searchTerm.length > 0 && (
+                                <div className="mb-3">
+                                    <h3 className="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Prediction</h3>
+                                    <button
+                                        className={`w-full text-left p-3 rounded-xl border transition-all ${selectedIndex === 0 ? 'bg-sky-500/10 border-sky-400/30 text-white' : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10'}`}
+                                        onClick={() => activateSelection(selectableItems.find((item) => item.type === 'prediction'))}
+                                    >
+                                        Open {urlPrediction}
+                                    </button>
+                                </div>
+                            )}
+
                             {appSearchResults.length > 0 && (
                                 <div className="mb-2">
                                     <h3 className="text-xs font-bold uppercase tracking-widest text-white/60 mb-2">Applications</h3>
                                     {appSearchResults.map((app, index) => (
-                                        <div
+                                        <button
                                             key={index}
-                                            className="cursor-pointer p-2 rounded-lg hover:bg-white/5 flex items-center gap-2"
+                                            className={`w-full text-left cursor-pointer p-2 rounded-lg flex items-center gap-2 transition-all ${selectedIndex === (urlPrediction ? index + 1 : index) ? 'bg-sky-500/10 text-white' : 'hover:bg-white/5'}`}
                                             onClick={async () => {
-                                                if (window.electronAPI && app.path) {
-                                                    await window.electronAPI.openExternalApp(app.path);
-                                                    onClose();
-                                                }
+                                                await activateSelection({ type: 'app', value: app });
                                             }}
                                         >
                                             <Search size={14} className="text-secondary-text" />
                                             <span className="text-primary-text">{app.name}</span>
                                             <span className="text-secondary-text text-xs ml-auto">{app.path ? path.basename(app.path) : ''}</span>
-                                        </div>
+                                        </button>
                                     ))}
                                 </div>
                             )}
@@ -239,6 +316,14 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
                             )}
                             {searchTerm.length === 0 && !calculationResult && appSearchResults.length === 0 && !alarmMessage && (
                                 <div>Type to search...</div>
+                            )}
+                            {searchTerm.length > 0 && !calculationResult && !alarmMessage && (
+                                <button
+                                    className={`mt-3 w-full text-left p-3 rounded-xl border transition-all ${selectedIndex === selectableItems.length - 1 ? 'bg-sky-500/10 border-sky-400/30 text-white' : 'bg-white/5 border-white/5 text-white/70 hover:bg-white/10'}`}
+                                    onClick={() => activateSelection(selectableItems.find((item) => item.type === 'web'))}
+                                >
+                                    Search the web for &quot;{searchTerm.trim()}&quot;
+                                </button>
                             )}
                         </div>
                     </motion.div>
