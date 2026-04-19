@@ -141,9 +141,9 @@
     ],
     "files": [
       "out/**/*",
-      "main.js",
-      "preload.js",
-      "view_preload.js",
+      "main.cjs",
+      "preload.cjs",
+      "view_preload.cjs",
       "src/lib/**/*",
       "src/service/**/*",
       "src/automation/**/*",

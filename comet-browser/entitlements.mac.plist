@@ -31,5 +31,9 @@
     <true/>
     <key>com.apple.security.inherit</key>
     <true/>
+    <key>keychain-access-groups</key>
+    <array>
+      <string>$(AppIdentifierPrefix)in.ponsri.shared.auth</string>
+    </array>
   </dict>
 </plist>

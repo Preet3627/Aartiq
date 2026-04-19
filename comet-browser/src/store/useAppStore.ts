@@ -506,8 +506,8 @@ export const useAppStore = create<BrowserState>()(
 
             // Settings
             shortcuts: defaultShortcuts,
-            hasSeenWelcomePage: false,
-            hasCompletedStartupSetup: false,
+            hasSeenWelcomePage: true,
+            hasCompletedStartupSetup: true,
             appName: 'Comet',
             backendStrategy: 'firebase',
             customFirebaseConfig: null,

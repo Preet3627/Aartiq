@@ -1565,7 +1565,12 @@ export default function Home() {
           });
           window.electronAPI.saveAuthSession({
             token: tokens.id_token || tokens.access_token || null,
+            accessToken: tokens.access_token || null,
+            idToken: tokens.id_token || null,
             refreshToken: tokens.refresh_token || null,
+            scope: tokens.scope || '',
+            scopes: tokens.scope ? tokens.scope.split(/\s+/).filter(Boolean) : [],
+            expiresIn: tokens.expires_in || null,
             provider: 'google-id-token',
             user: {
               uid: profile.sub,
@@ -1586,6 +1591,11 @@ export default function Home() {
 
         const status = parsed.searchParams.get("auth_status");
         const token = parsed.searchParams.get("id_token") || parsed.searchParams.get("token");
+        const accessToken = parsed.searchParams.get("access_token") || parsed.searchParams.get("token");
+        const idToken = parsed.searchParams.get("id_token");
+        const refreshToken = parsed.searchParams.get("refresh_token");
+        const scope = parsed.searchParams.get("scope") || "";
+        const expiresIn = parsed.searchParams.get("expires_in");
         const uid = parsed.searchParams.get("uid");
         const email = parsed.searchParams.get("email");
         const name = parsed.searchParams.get("name");
@@ -1629,6 +1639,12 @@ export default function Home() {
           });
           window.electronAPI.saveAuthSession({
             token: token || null,
+            accessToken: accessToken || null,
+            idToken: idToken || null,
+            refreshToken: refreshToken || null,
+            scope,
+            scopes: scope ? scope.split(/\s+/).filter(Boolean) : [],
+            expiresIn: expiresIn ? Number(expiresIn) : null,
             provider: token ? (isFirebaseIdToken(token) ? 'firebase-id-token' : 'google-id-token') : 'profile-only',
             user: {
               uid,

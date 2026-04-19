@@ -288,6 +288,27 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
     }));
   }, []);
 
+  const getAppleIntelligenceErrorMessage = (status: any): string => {
+    if (!status) return 'Apple Intelligence not detected on this Mac.';
+    if (!status.success) return status.error || 'Apple Intelligence helper failed to initialize.';
+    if (!status.available) {
+      if (status.summaryReason?.includes('not supported on this Mac')) {
+        return 'Apple Intelligence requires Apple Silicon Mac with 16GB+ memory.';
+      }
+      if (status.summaryReason?.includes('not enabled')) {
+        return 'Enable Apple Intelligence in System Settings > Apple Intelligence.';
+      }
+      if (status.summaryReason?.includes('still preparing')) {
+        return 'Apple Intelligence models are downloading. Please wait.';
+      }
+      if (status.summaryReason?.includes('macOS 26')) {
+        return 'Summaries require macOS 26.0+ with Foundation Models.';
+      }
+      return status.summaryReason || 'Apple Intelligence is unavailable.';
+    }
+    return 'Apple Intelligence ready.';
+  };
+
   const canUseAppleSummary = !!appleStatus?.supportsSummaries && !!appleStatus?.summaryAvailable;
   const canUseAppleImage = !!appleStatus?.supportsImageGeneration && !!appleStatus?.imageAvailable;
   const appleSummaryStatusText = appleStatus?.summaryReason || (canUseAppleSummary ? 'Ready' : 'Not supported');
@@ -901,8 +922,12 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                               ⚠️ Native Apple Intelligence Unavailable
                             </p>
                             <p className="text-[9px] text-white/40 mt-1 leading-relaxed">
-                              {appleStatus?.error || 'Requires macOS 15.1+ and Apple Silicon (M1+).'}
+                              {getAppleIntelligenceErrorMessage(appleStatus)}
                             </p>
+                            <div className="mt-2 space-y-1 text-[8px] text-white/30">
+                              <p>• {appleStatus?.summaryReason || 'Summaries: macOS 26.0+ required'}</p>
+                              <p>• {appleStatus?.imageReason || 'Images: macOS 15.4+ required'}</p>
+                            </div>
                           </div>
                         ) : (
                           <div className="space-y-4">

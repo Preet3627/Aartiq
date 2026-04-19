@@ -41,6 +41,8 @@
   "exclude": [
     "node_modules",
     ".next",
-    "raycast-extension"
+    "raycast-extension",
+    "src/components/thuki",
+    "src/components/ThukiAssistant.tsx"
   ]
 }

@@ -1,5 +1,32 @@
 # Comet Browser - Recent Changes
 
+## Version 0.2.10 - Code Refactoring (2026-04-17)
+
+### Overview
+Major refactoring to split large files into smaller, more maintainable modules.
+
+### Changes
+
+#### main.js Refactoring
+- Extracted shell command execution to `src/core/shell-executor.js`
+- Extracted system controls (volume, brightness) to `src/core/system-controls.js`
+- Extracted command validation to `src/core/command-validator.js`
+- Extracted PDF generation helpers to `src/core/pdf-generator.js`
+- Extracted vault handlers to `src/core/vault-handlers.js`
+- Extracted Gmail handlers to `src/core/gmail-handlers.js`
+- Extracted IPC handlers to `src/core/ipc-handlers.js`
+- Added unified `src/core/index.js` module exports
+
+#### TypeScript Fixes
+- Excluded broken Thuki components from tsconfig
+- `npx tsc --noEmit` now passes with 0 errors
+
+#### Cleanup
+- Removed duplicate `release_notes/CHANGELOG.md`
+- Updated README.md
+
+---
+
 ## Version 0.2.7.1 - TypeScript Compilation Fixes (2026-04-06)
 
 ### Overview

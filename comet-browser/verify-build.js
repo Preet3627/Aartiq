@@ -10,9 +10,9 @@ const path = require('path');
 console.log('🔍 Comet Browser - Pre-Build Verification\n');
 
 const checks = [
-    { name: 'main.js', path: './main.js', type: 'file' },
-    { name: 'preload.js', path: './preload.js', type: 'file' },
-    { name: 'view_preload.js', path: './view_preload.js', type: 'file' },
+    { name: 'main.cjs', path: './main.cjs', type: 'file' },
+    { name: 'preload.cjs', path: './preload.cjs', type: 'file' },
+    { name: 'view_preload.cjs', path: './view_preload.cjs', type: 'file' },
     { name: 'package.json', path: './package.json', type: 'file' },
     { name: 'icon.ico', path: './assets/icon.ico', type: 'file' },
     { name: 'out directory', path: './out', type: 'directory' },

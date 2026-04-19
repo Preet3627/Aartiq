@@ -470,7 +470,39 @@ flutter run
 
 ---
 
-## 📝 v0.2.9.1 Highlights - Native Swift Sidebar V2
+## 📝 v0.2.9.1 Highlights - Massive main.js Refactor & Native Swift Sidebar V2
+
+### 🚀 Massive Main.js Refactor (11K → 3.9K Lines)
+
+In v0.2.9.1, we completed a **massive refactoring of main.js**, reducing it from **~11,000 lines to ~3,900 lines** (64% reduction):
+
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| main.js lines | ~11,000 | ~3,900 | -64% |
+| Handler code | Inline | Modular | Cleaner |
+| Maintainability | Complex | Simple | Better |
+
+**What changed:**
+- **Modular IPC Handlers** - Moved all IPC handlers to `src/main/handlers/` modules
+- **Handler modules created:** app, ai, auth, browser, automation, sync, file, permission, mcp, system, plugin, memory, rag, voice-workflow
+- **Lazy Service Loading** - Services now load on-demand for faster startup
+- **Code reuse** - Eliminated duplicate handlers across main.js
+
+**Architecture:**
+```
+main.js (~3.9k lines) - Entry point, window creation, app lifecycle
+src/main/handlers/
+├── index.js          - Register all handlers
+├── app-handlers.js   - App-related IPC
+├── ai-handlers.js    - AI-related IPC
+├── browser-handlers.js - Browser/Tab IPC
+├── automation-handlers.js - Automation IPC
+└── ... (10+ more modules)
+```
+
+This makes the codebase more maintainable, testable, and developer-friendly.
+
+### Thuki-Inspired Native AI Sidebar V2
 
 ### Thuki-Inspired Native AI Sidebar V2
 

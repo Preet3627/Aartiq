@@ -37,10 +37,17 @@ struct ResponsePayload: Codable {
     var availableStyles: [String]?
 }
 
-enum HelperError: Error {
+enum HelperError: Error, LocalizedError {
     case invalidRequest(String)
     case notSupported(String)
     case creationFailed(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .invalidRequest(let msg), .notSupported(let msg), .creationFailed(let msg):
+            return msg
+        }
+    }
 }
 
 func readPayload() throws -> RequestPayload {
@@ -48,98 +55,58 @@ func readPayload() throws -> RequestPayload {
     guard !data.isEmpty else {
         throw HelperError.invalidRequest("No request payload received.")
     }
-
     return try JSONDecoder().decode(RequestPayload.self, from: data)
 }
 
 func writeResponse(_ payload: ResponsePayload) {
     let encoder = JSONEncoder()
-    encoder.outputFormatting = [.withoutEscapingSlashes]
-
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     guard let data = try? encoder.encode(payload) else {
-        fputs("{\"success\":false,\"error\":\"Failed to encode helper response.\"}\n", stderr)
+        fputs("{\"success\":false,\"error\":\"Failed to encode response.\"}\n", stderr)
         return
     }
-
     FileHandle.standardOutput.write(data)
 }
 
 #if canImport(FoundationModels)
-@available(macOS 15.1, *)
-func summaryAvailabilityStatus() -> (Bool, String?) {
-    if #available(macOS 26.0, *) {
-        let availability = SystemLanguageModel.default.availability
-        switch availability {
-        case .available:
-            return (true, nil)
-        case .unavailable(let reason):
-            switch reason {
-            case .deviceNotEligible:
-                return (false, "Apple Intelligence is not supported on this Mac.")
-            case .appleIntelligenceNotEnabled:
-                return (false, "Apple Intelligence is supported on this Mac but is currently turned off.")
-            case .modelNotReady:
-                return (false, "Apple Intelligence is still preparing its local model on this Mac.")
-            @unknown default:
-                return (false, "Apple Intelligence summaries are unavailable on this Mac right now.")
-            }
+@available(macOS 26.0, *)
+func checkFoundationModelsAvailability() -> (available: Bool, reason: String?) {
+    let model = SystemLanguageModel.default
+    switch model.availability {
+    case .available:
+        return (true, nil)
+    case .unavailable(let reason):
+        switch reason {
+        case .deviceNotEligible:
+            return (false, "Apple Intelligence requires an Apple Silicon Mac with 16GB+ memory.")
+        case .appleIntelligenceNotEnabled:
+            return (false, "Apple Intelligence is not enabled. Please enable it in System Settings > Apple Intelligence.")
+        case .modelNotReady:
+            return (false, "Apple Intelligence is still downloading. Please wait and try again.")
         @unknown default:
-            return (false, "Apple Intelligence summaries are unavailable on this Mac right now.")
+            return (false, "Apple Intelligence is unavailable on this Mac.")
         }
-    } else {
-        return (true, nil)
+    @unknown default:
+        return (false, "Apple Intelligence is unavailable on this Mac.")
     }
 }
 
-@available(macOS 15.1, *)
-func summarizeWithAppleIntelligence(_ text: String) async throws -> String {
-    if #available(macOS 26.0, *) {
-        let model = SystemLanguageModel.default
-        let instructions = """
-        You summarize browser content for a productivity assistant.
-        Return concise markdown with:
-        - a one-line overview
-        - 3 to 5 bullets
-        - a final short next-step line only when useful
-        """
-
-        let session = LanguageModelSession(model: model, instructions: instructions)
-        let prompt = """
-        Summarize the following content for the user:
-
-        \(text)
-        """
-
-        let response = try await session.respond(to: prompt)
-        return response.content
-    } else {
-        throw HelperError.notSupported("Summary requires macOS 26.0 or newer")
-    }
-}
-
-@available(macOS 15.1, *)
-func validateSummaryGeneration() async -> (Bool, String?) {
-    let (available, reason) = summaryAvailabilityStatus()
-    guard available else {
-        return (false, reason)
-    }
-
-    if #available(macOS 26.0, *) {
-        do {
-            let session = LanguageModelSession(model: .default, instructions: "Reply with exactly: OK")
-            let response = try await session.respond(to: "OK")
-            let normalized = response.content.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if normalized.contains("ok") {
-                return (true, nil)
-            }
-
-            return (false, "Apple Intelligence summary generation did not pass the live readiness check on this Mac.")
-        } catch {
-            return (false, "Apple Intelligence summary generation failed the live readiness check on this Mac: \(error.localizedDescription)")
-        }
-    } else {
-        return (true, nil)
-    }
+@available(macOS 26.0, *)
+func summarizeWithFoundationModels(_ text: String) async throws -> String {
+    let instructions = """
+    You are a helpful assistant that summarizes content concisely.
+    Return a brief summary in markdown format with:
+    - A one-line overview
+    - 3-5 key bullet points
+    - A short next-step suggestion only when helpful
+    
+    Keep summaries under 200 words.
+    """
+    
+    let session = LanguageModelSession(instructions: instructions)
+    let prompt = "Summarize the following content:\n\n\(text)"
+    let response = try await session.respond(to: prompt)
+    return response.content
 }
 #endif
 
@@ -164,21 +131,21 @@ func getAvailableImageStyles() async -> [String] {
     return ["illustration"]
 }
 
-@available(macOS 15.1, *)
-func imageGenerationStatus() async -> (Bool, String?) {
-    if #available(macOS 15.4, *) {
-        let isAvailable = await MainActor.run {
-            ImagePlaygroundViewController.isAvailable
-        }
-
-        if isAvailable {
-            return (true, nil)
-        }
-
-        return (false, "Apple image generation is not supported or not available right now on this Mac. Please ensure Image Playground models are downloaded.")
-    } else {
+@available(macOS 15.4, *)
+func checkImagePlaygroundAvailability() async -> (available: Bool, reason: String?) {
+    let isAvailable = await MainActor.run {
+        ImagePlaygroundViewController.isAvailable
+    }
+    
+    if isAvailable {
+        return (true, nil)
+    }
+    
+    let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+    if osVersion.majorVersion < 15 {
         return (false, "Image Playground requires macOS 15.1 or newer.")
     }
+    return (false, "Apple image generation is not available. Please ensure Image Playground models are downloaded in System Settings.")
 }
 
 @available(macOS 15.4, *)
@@ -195,23 +162,19 @@ func generateAppleImage(prompt: String, outputPath: String?, styleName: String) 
         style = .illustration
     }
     
-    let images = creator.images(
-        for: [.text(prompt)],
-        style: style,
-        limit: 1
-    )
-
+    let concepts: [ImagePlaygroundConcept] = [.text(prompt)]
+    
     var createdImage: ImageCreator.CreatedImage?
     
-    for try await image in images {
+    for try await image in creator.images(for: concepts, style: style, limit: 1) {
         createdImage = image
         break
     }
-
+    
     guard let finalImage = createdImage else {
-        throw HelperError.creationFailed("Image Playground did not return an image.")
+        throw HelperError.creationFailed("Image generation did not return an image.")
     }
-
+    
     let destinationURL: URL
     if let outputPath, !outputPath.isEmpty {
         destinationURL = URL(fileURLWithPath: outputPath)
@@ -225,18 +188,18 @@ func generateAppleImage(prompt: String, outputPath: String?, styleName: String) 
         let filename = "comet-ai\(styleSuffix)-\(timestamp).png"
         destinationURL = picturesDirectory.appendingPathComponent(filename)
     }
-
+    
     try? FileManager.default.removeItem(at: destinationURL)
     try FileManager.default.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
     
     #if canImport(AppKit)
     let bitmap = NSBitmapImageRep(cgImage: finalImage.cgImage)
     guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
-        throw HelperError.creationFailed("Failed to encode the generated Apple image as PNG.")
+        throw HelperError.creationFailed("Failed to encode image as PNG.")
     }
     try pngData.write(to: destinationURL)
     #else
-    throw HelperError.creationFailed("PNG encoding for Apple image generation is unavailable on this runtime.")
+    throw HelperError.creationFailed("PNG encoding is unavailable on this runtime.")
     #endif
     
     return destinationURL.path
@@ -245,49 +208,42 @@ func generateAppleImage(prompt: String, outputPath: String?, styleName: String) 
 @available(macOS 15.4, *)
 func generateGenmoji(_ prompt: String) async throws -> String {
     let creator = try await ImageCreator()
-    
     let genmojiPrompt = "emoji: \(prompt)"
     
-    let images = creator.images(
-        for: [.text(genmojiPrompt)],
-        style: .illustration,
-        limit: 1
-    )
-
     var createdImage: ImageCreator.CreatedImage?
     
-    for try await image in images {
+    for try await image in creator.images(for: [.text(genmojiPrompt)], style: .illustration, limit: 1) {
         createdImage = image
         break
     }
-
+    
     guard let finalImage = createdImage else {
         throw HelperError.creationFailed("Genmoji generation did not return an image.")
     }
-
-    let emojiDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+    
+    let genmojiDirectory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
         .appendingPathComponent("Comet-AI/Genmoji", isDirectory: true)
         ?? URL(fileURLWithPath: NSTemporaryDirectory())
     
-    try FileManager.default.createDirectory(at: emojiDirectory, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: genmojiDirectory, withIntermediateDirectories: true)
     
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
     let timestamp = formatter.string(from: Date())
-    let sanitizedPrompt = prompt.replacingOccurrences(of: "[^a-zA-Z0-9]", with: "_", options: .regularExpression).prefix(20)
+    let sanitizedPrompt = prompt.prefix(20).replacingOccurrences(of: "[^a-zA-Z0-9]", with: "_", options: .regularExpression)
     let filename = "genmoji_\(sanitizedPrompt)_\(timestamp).png"
-    let destinationURL = emojiDirectory.appendingPathComponent(filename)
-
+    let destinationURL = genmojiDirectory.appendingPathComponent(filename)
+    
     try? FileManager.default.removeItem(at: destinationURL)
     
     #if canImport(AppKit)
     let bitmap = NSBitmapImageRep(cgImage: finalImage.cgImage)
     guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
-        throw HelperError.creationFailed("Failed to encode the generated Genmoji as PNG.")
+        throw HelperError.creationFailed("Failed to encode Genmoji as PNG.")
     }
     try pngData.write(to: destinationURL)
     #else
-    throw HelperError.creationFailed("PNG encoding for Genmoji generation is unavailable on this runtime.")
+    throw HelperError.creationFailed("PNG encoding is unavailable on this runtime.")
     #endif
     
     return destinationURL.path
@@ -299,14 +255,15 @@ struct AppleIntelligenceHelper {
     static func main() async {
         do {
             let request = try readPayload()
+            let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
 
             switch request.command {
             case "status":
-                var response = ResponsePayload(success: true, osVersion: ProcessInfo.processInfo.operatingSystemVersionString)
+                var response = ResponsePayload(success: true, osVersion: osVersion)
                 
                 #if canImport(FoundationModels)
-                if #available(macOS 15.1, *) {
-                    let (summaryAvailable, summaryReason) = await validateSummaryGeneration()
+                if #available(macOS 26.0, *) {
+                    let (summaryAvailable, summaryReason) = checkFoundationModelsAvailability()
                     response.available = summaryAvailable
                     response.supportsSummaries = true
                     response.summaryAvailable = summaryAvailable
@@ -315,7 +272,7 @@ struct AppleIntelligenceHelper {
                     response.available = false
                     response.supportsSummaries = false
                     response.summaryAvailable = false
-                    response.summaryReason = "Foundation Models requires macOS 15.1 or newer."
+                    response.summaryReason = "Summaries require macOS 26 with Foundation Models."
                 }
                 #else
                 response.available = false
@@ -325,26 +282,23 @@ struct AppleIntelligenceHelper {
                 #endif
 
                 #if canImport(ImagePlayground)
-                if #available(macOS 15.1, *) {
-                    response.availableStyles = await getAvailableImageStyles()
+                if #available(macOS 15.4, *) {
+                    response.supportsGenmoji = true
+                    response.genmojiAvailable = true
+                    response.genmojiReason = nil
                     
-                    if #available(macOS 15.4, *) {
-                        response.supportsGenmoji = true
-                        response.genmojiAvailable = true
-                        response.genmojiReason = nil
-                        
-                        let (imageAvailable, imageReason) = await imageGenerationStatus()
-                        response.supportsImageGeneration = true
-                        response.imageAvailable = imageAvailable
-                        response.imageReason = imageReason
-                    } else {
-                        response.supportsImageGeneration = true
-                        response.imageAvailable = true
-                        response.imageReason = "Image generation is available via interactive sheet (macOS 15.1-15.3)."
-                        response.supportsGenmoji = false
-                        response.genmojiAvailable = false
-                        response.genmojiReason = "Genmoji requires macOS 15.4 or newer."
-                    }
+                    let (imageAvailable, imageReason) = await checkImagePlaygroundAvailability()
+                    response.supportsImageGeneration = true
+                    response.imageAvailable = imageAvailable
+                    response.imageReason = imageReason
+                    response.availableStyles = await getAvailableImageStyles()
+                } else if #available(macOS 15.1, *) {
+                    response.supportsImageGeneration = true
+                    response.imageAvailable = true
+                    response.imageReason = "Image Playground is available via interactive sheet."
+                    response.supportsGenmoji = false
+                    response.genmojiAvailable = false
+                    response.genmojiReason = "Genmoji requires macOS 15.4 or newer."
                 } else {
                     response.supportsImageGeneration = false
                     response.imageAvailable = false
@@ -360,177 +314,134 @@ struct AppleIntelligenceHelper {
 
             case "summary":
                 guard let text = request.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
-                    throw HelperError.invalidRequest("No text provided for Apple Intelligence summary.")
+                    writeResponse(ResponsePayload(
+                        success: false,
+                        available: false,
+                        error: "No text provided for summary."
+                    ))
+                    return
                 }
-
+                
                 #if canImport(FoundationModels)
-                if #available(macOS 15.1, *) {
-                    let (summaryAvailable, summaryReason) = summaryAvailabilityStatus()
-                    guard summaryAvailable else {
+                if #available(macOS 26.0, *) {
+                    let (available, reason) = checkFoundationModelsAvailability()
+                    guard available else {
                         writeResponse(ResponsePayload(
                             success: false,
                             available: false,
                             supportsSummaries: true,
-                            supportsImageGeneration: nil,
-                            supportsGenmoji: nil,
                             summaryAvailable: false,
-                            imageAvailable: nil,
-                            genmojiAvailable: nil,
-                            summaryReason: summaryReason,
-                            imageReason: nil,
-                            genmojiReason: nil,
-                            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                            summary: nil,
-                            imagePath: nil,
-                            genmojiPath: nil,
-                            error: summaryReason ?? "Apple Intelligence summaries are unavailable on this Mac right now."
+                            summaryReason: reason,
+                            error: reason ?? "Apple Intelligence is unavailable."
                         ))
                         return
                     }
-
-                    let summary = try await summarizeWithAppleIntelligence(text)
-                    writeResponse(ResponsePayload(
-                        success: true,
-                        available: true,
-                        supportsSummaries: true,
-                        supportsImageGeneration: nil,
-                        supportsGenmoji: nil,
-                        summaryAvailable: true,
-                        imageAvailable: nil,
-                        genmojiAvailable: nil,
-                        summaryReason: nil,
-                        imageReason: nil,
-                        genmojiReason: nil,
-                        osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                        summary: summary,
-                        imagePath: nil,
-                        genmojiPath: nil,
-                        error: nil
-                    ))
-                    return
-                }
-                #endif
-
-                writeResponse(ResponsePayload(
-                    success: false,
-                    available: false,
-                    supportsSummaries: false,
-                    supportsImageGeneration: nil,
-                    supportsGenmoji: nil,
-                    summaryAvailable: false,
-                    imageAvailable: nil,
-                    genmojiAvailable: nil,
-                    summaryReason: "Foundation Models is not available in this macOS SDK/runtime.",
-                    imageReason: nil,
-                    genmojiReason: nil,
-                    osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                    summary: nil,
-                    imagePath: nil,
-                    genmojiPath: nil,
-                    error: "Foundation Models is not available in this macOS SDK/runtime."
-                ))
-
-            case "image":
-                guard let prompt = request.prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty else {
-                    throw HelperError.invalidRequest("No prompt provided for Apple image generation.")
-                }
-
-                let style = request.style ?? "illustration"
-
-                #if canImport(ImagePlayground)
-                if #available(macOS 15.4, *) {
-                    let (imageAvailable, imageReason) = await imageGenerationStatus()
-                    guard imageAvailable else {
-                        writeResponse(ResponsePayload(
-                            success: false,
-                            available: false,
-                            supportsSummaries: nil,
-                            supportsImageGeneration: true,
-                            supportsGenmoji: true,
-                            summaryAvailable: nil,
-                            imageAvailable: false,
-                            genmojiAvailable: nil,
-                            summaryReason: nil,
-                            imageReason: imageReason,
-                            genmojiReason: nil,
-                            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                            summary: nil,
-                            imagePath: nil,
-                            genmojiPath: nil,
-                            error: imageReason ?? "Apple image generation is unavailable on this Mac right now."
-                        ))
-                        return
-                    }
-
+                    
                     do {
-                        let path = try await generateAppleImage(prompt: prompt, outputPath: request.outputPath, styleName: style)
+                        let summary = try await summarizeWithFoundationModels(text)
                         writeResponse(ResponsePayload(
                             success: true,
                             available: true,
-                            supportsSummaries: nil,
-                            supportsImageGeneration: true,
-                            supportsGenmoji: true,
-                            summaryAvailable: nil,
-                            imageAvailable: true,
-                            genmojiAvailable: nil,
-                            summaryReason: nil,
-                            imageReason: nil,
-                            genmojiReason: nil,
-                            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                            summary: nil,
-                            imagePath: path,
-                            genmojiPath: nil,
-                            error: nil
+                            supportsSummaries: true,
+                            summaryAvailable: true,
+                            osVersion: osVersion,
+                            summary: summary
                         ))
                         return
                     } catch {
                         writeResponse(ResponsePayload(
                             success: false,
                             available: false,
-                            supportsSummaries: nil,
+                            supportsSummaries: true,
+                            summaryAvailable: false,
+                            summaryReason: error.localizedDescription,
+                            error: "Summary generation failed: \(error.localizedDescription)"
+                        ))
+                        return
+                    }
+                }
+                #endif
+                
+                writeResponse(ResponsePayload(
+                    success: false,
+                    available: false,
+                    supportsSummaries: false,
+                    summaryAvailable: false,
+                    summaryReason: "Summaries require macOS 26 with Foundation Models.",
+                    error: "Foundation Models requires macOS 26. Current: \(osVersion)"
+                ))
+
+            case "image":
+                guard let prompt = request.prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty else {
+                    writeResponse(ResponsePayload(
+                        success: false,
+                        available: false,
+                        error: "No prompt provided for image generation."
+                    ))
+                    return
+                }
+                
+                let style = request.style ?? "illustration"
+                
+                #if canImport(ImagePlayground)
+                if #available(macOS 15.4, *) {
+                    let (available, reason) = await checkImagePlaygroundAvailability()
+                    guard available else {
+                        writeResponse(ResponsePayload(
+                            success: false,
+                            available: false,
                             supportsImageGeneration: true,
-                            supportsGenmoji: true,
-                            summaryAvailable: nil,
                             imageAvailable: false,
-                            genmojiAvailable: nil,
-                            summaryReason: nil,
+                            imageReason: reason,
+                            error: reason ?? "Image generation is unavailable."
+                        ))
+                        return
+                    }
+                    
+                    do {
+                        let path = try await generateAppleImage(prompt: prompt, outputPath: request.outputPath, styleName: style)
+                        writeResponse(ResponsePayload(
+                            success: true,
+                            available: true,
+                            supportsImageGeneration: true,
+                            imageAvailable: true,
+                            osVersion: osVersion,
+                            imagePath: path
+                        ))
+                        return
+                    } catch {
+                        writeResponse(ResponsePayload(
+                            success: false,
+                            available: false,
+                            supportsImageGeneration: true,
+                            imageAvailable: false,
                             imageReason: error.localizedDescription,
-                            genmojiReason: nil,
-                            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                            summary: nil,
-                            imagePath: nil,
-                            genmojiPath: nil,
                             error: "Image generation failed: \(error.localizedDescription)"
                         ))
                         return
                     }
                 }
                 #endif
-
+                
                 writeResponse(ResponsePayload(
                     success: false,
                     available: false,
-                    supportsSummaries: nil,
                     supportsImageGeneration: false,
-                    supportsGenmoji: nil,
-                    summaryAvailable: nil,
                     imageAvailable: false,
-                    genmojiAvailable: nil,
-                    summaryReason: nil,
-                    imageReason: "Image Playground is not available in this macOS SDK/runtime.",
-                    genmojiReason: nil,
-                    osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                    summary: nil,
-                    imagePath: nil,
-                    genmojiPath: nil,
-                    error: "Image Playground is not available in this macOS SDK/runtime."
+                    imageReason: "Image Playground requires macOS 15.4 or newer.",
+                    error: "Image Playground is not available. Current: \(osVersion)"
                 ))
                 
             case "genmoji":
                 guard let prompt = request.prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty else {
-                    throw HelperError.invalidRequest("No prompt provided for Genmoji generation.")
+                    writeResponse(ResponsePayload(
+                        success: false,
+                        available: false,
+                        error: "No prompt provided for Genmoji."
+                    ))
+                    return
                 }
-
+                
                 #if canImport(ImagePlayground)
                 if #available(macOS 15.4, *) {
                     do {
@@ -538,39 +449,19 @@ struct AppleIntelligenceHelper {
                         writeResponse(ResponsePayload(
                             success: true,
                             available: true,
-                            supportsSummaries: nil,
-                            supportsImageGeneration: true,
                             supportsGenmoji: true,
-                            summaryAvailable: nil,
-                            imageAvailable: nil,
                             genmojiAvailable: true,
-                            summaryReason: nil,
-                            imageReason: nil,
-                            genmojiReason: nil,
-                            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                            summary: nil,
-                            imagePath: nil,
-                            genmojiPath: path,
-                            error: nil
+                            osVersion: osVersion,
+                            genmojiPath: path
                         ))
                         return
                     } catch {
                         writeResponse(ResponsePayload(
                             success: false,
                             available: false,
-                            supportsSummaries: nil,
-                            supportsImageGeneration: true,
                             supportsGenmoji: true,
-                            summaryAvailable: nil,
-                            imageAvailable: nil,
                             genmojiAvailable: false,
-                            summaryReason: nil,
-                            imageReason: nil,
                             genmojiReason: error.localizedDescription,
-                            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                            summary: nil,
-                            imagePath: nil,
-                            genmojiPath: nil,
                             error: "Genmoji generation failed: \(error.localizedDescription)"
                         ))
                         return
@@ -581,42 +472,23 @@ struct AppleIntelligenceHelper {
                 writeResponse(ResponsePayload(
                     success: false,
                     available: false,
-                    supportsSummaries: nil,
-                    supportsImageGeneration: nil,
                     supportsGenmoji: false,
-                    summaryAvailable: nil,
-                    imageAvailable: nil,
                     genmojiAvailable: false,
-                    summaryReason: nil,
-                    imageReason: nil,
                     genmojiReason: "Genmoji requires macOS 15.4 or newer.",
-                    osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                    summary: nil,
-                    imagePath: nil,
-                    genmojiPath: nil,
-                    error: "Genmoji requires macOS 15.4 or newer."
+                    error: "Genmoji requires macOS 15.4. Current: \(osVersion)"
                 ))
 
             default:
-                throw HelperError.invalidRequest("Unsupported command: \(request.command)")
+                writeResponse(ResponsePayload(
+                    success: false,
+                    available: false,
+                    error: "Unknown command: \(request.command)"
+                ))
             }
         } catch {
             writeResponse(ResponsePayload(
                 success: false,
-                available: nil,
-                supportsSummaries: nil,
-                supportsImageGeneration: nil,
-                supportsGenmoji: nil,
-                summaryAvailable: nil,
-                imageAvailable: nil,
-                genmojiAvailable: nil,
-                summaryReason: nil,
-                imageReason: nil,
-                genmojiReason: nil,
-                osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                summary: nil,
-                imagePath: nil,
-                genmojiPath: nil,
+                available: false,
                 error: error.localizedDescription
             ))
         }

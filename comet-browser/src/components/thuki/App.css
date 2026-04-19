@@ -1,0 +1,241 @@
+@import 'tailwindcss';
+@source "../node_modules/streamdown/dist";
+@import 'streamdown/styles.css';
+
+@theme {
+  --font-sans:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+
+  /* Brand palette — single source of truth for all color decisions */
+  --color-primary: #ff8d5c;
+  --color-secondary: #bc5c0b;
+  --color-tertiary: #e69c05;
+  --color-neutral: #1a1a1c;
+
+  /* Surface tokens derived from the palette */
+  --color-surface-base: rgba(22, 18, 15, 0.98);
+  --color-surface-elevated: rgba(38, 30, 24, 0.6);
+  --color-surface-border: rgba(255, 141, 92, 0.12);
+
+  /* Text tokens */
+  --color-text-primary: #f0f0f2;
+  --color-text-secondary: #8a8a8e;
+
+  /* Streamdown theme tokens (shadcn/ui convention) */
+  --color-muted: rgba(42, 42, 46, 0.6);
+  --color-muted-foreground: #8a8a8e;
+  --color-border: rgba(255, 141, 92, 0.1);
+  --color-sidebar: rgba(28, 28, 32, 0.95);
+  --color-foreground: #f0f0f2;
+
+  /* Elevation — input bar mode (compact floating effect, Spotlight-inspired) */
+  --shadow-bar:
+    0 6px 20px -6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 141, 92, 0.12);
+
+  /* Elevation — chat window mode (layered depth without excessive spread) */
+  --shadow-chat:
+    0 4px 14px -3px rgba(0, 0, 0, 0.5), 0 1px 4px -1px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 141, 92, 0.12);
+}
+
+html,
+body {
+  background-color: transparent;
+  color: var(--color-text-primary);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ─── Morphing Container ─── */
+.morphing-container {
+  will-change: transform;
+  transition:
+    box-shadow 0.5s cubic-bezier(0.12, 0.8, 0.2, 1.18),
+    border-radius 0.5s cubic-bezier(0.12, 0.8, 0.2, 1.18);
+  background-image: radial-gradient(
+    ellipse 70% 40% at 50% 0%,
+    rgba(255, 141, 92, 0.08) 0%,
+    transparent 65%
+  );
+  border-top-color: rgba(255, 141, 92, 0.2);
+}
+
+/* Subtle glowing line at the very top edge — matches approved onboarding style */
+.morphing-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 141, 92, 0.35),
+    transparent
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ─── Chat Bubble Styles ─── */
+.chat-bubble {
+  word-break: break-word;
+  position: relative;
+}
+
+/**
+ * User bubble — warm gradient from primary brand color to a deeper amber.
+ * Subtle inner glow at the top for depth perception.
+ */
+.chat-bubble-user {
+  background: linear-gradient(135deg, #ff8d5c 0%, #e06b30 100%);
+  box-shadow:
+    0 2px 12px -2px rgba(255, 141, 92, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/**
+ * AI bubble — frosted glass surface with a subtle border for depth.
+ * Harmonizes with the warm ambient dark overlay backdrop.
+ */
+.chat-bubble-ai {
+  background: rgba(36, 30, 26, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-top-color: rgba(255, 141, 92, 0.1);
+  box-shadow:
+    0 2px 8px -2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* ─── Stop Button Border Trace ───
+ * SVG border-trace using pathLength="100" so all dash math is in clean
+ * percentages. Three layered strokes staggered via animation-delay (NOT
+ * initial dashoffset — that causes different travel distances and speed
+ * drift). All three share the same keyframe and duration so they move
+ * in lockstep, with the delay creating a fixed spatial offset.
+ */
+.stop-btn-ring {
+  position: relative;
+}
+.stop-btn-ring > .stop-ring-svg {
+  position: absolute;
+  inset: -2px;
+  width: calc(100% + 4px);
+  height: calc(100% + 4px);
+  pointer-events: none;
+  overflow: visible;
+}
+.stop-btn-ring > .stop-ring-svg rect {
+  fill: none;
+  stroke: #f87171;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+/* Head — bright leading segment, furthest along the path */
+.stop-trace-head {
+  stroke-dasharray: 15 85;
+  animation: trace-border 2s linear infinite;
+  animation-delay: -0.56s;
+}
+/* Mid — dimmer segment trailing the head */
+.stop-trace-mid {
+  stroke-dasharray: 12 88;
+  opacity: 0.4;
+  animation: trace-border 2s linear infinite;
+  animation-delay: -0.3s;
+}
+/* Tail — faintest segment, furthest behind */
+.stop-trace-tail {
+  stroke-dasharray: 10 90;
+  opacity: 0.12;
+  animation: trace-border 2s linear infinite;
+}
+@keyframes trace-border {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+/* ─── Chat Messages Scrollable Area ─── */
+.chat-messages-scroll {
+  scrollbar-gutter: stable;
+}
+
+/* ─── Code Block — Premium Brand Style ───
+ * Streamdown's utility classes (border-border, bg-background, bg-sidebar) don't
+ * resolve against our custom theme. Override every layer explicitly.
+ *
+ * Layout note: Streamdown positions the copy button via a sticky div with
+ * `-mt-10` to overlap it with the header row. This trick doesn't work reliably
+ * in Tauri's WebKit webview. We fix it by making `code-block` a positioning
+ * context (position: relative) and targeting the sticky wrapper with `:has()`
+ * to make it absolutely-positioned flush with the header row instead.
+ *
+ * Plain CSS outside @layer overrides Tailwind utility classes in @layer utilities.
+ */
+[data-streamdown='code-block'] {
+  position: relative; /* anchors the absolutely-repositioned actions wrapper */
+  background: rgba(18, 18, 22, 0.95);
+  border-color: rgba(255, 141, 92, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(255, 141, 92, 0.06),
+    0 4px 16px -4px rgba(0, 0, 0, 0.5);
+}
+
+/* Sticky wrapper Streamdown injects around code-block-actions.
+ * Override sticky → absolute so it sits at the top-right of the header row. */
+[data-streamdown='code-block']
+  > div:has([data-streamdown='code-block-actions']) {
+  position: absolute;
+  top: 8px; /* matches the outer p-2 padding so it aligns with the header */
+  right: 8px;
+  height: 32px; /* matches h-8 on the header */
+  margin: 0;
+  padding: 0;
+  pointer-events: auto;
+}
+
+[data-streamdown='code-block-header'] {
+  color: rgba(255, 141, 92, 0.55);
+  padding-left: 8px;
+}
+
+[data-streamdown='code-block-body'] {
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgba(255, 141, 92, 0.08);
+}
+
+/* ─── Code Block Copy Button ───
+ * Strip Streamdown's floating pill chrome — transparent ghost icon only.
+ * Plain CSS outside @layer overrides Tailwind utility classes in @layer utilities.
+ */
+[data-streamdown='code-block-actions'] {
+  background: transparent;
+  border: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0;
+  gap: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+[data-streamdown='code-block-actions'] button {
+  color: rgba(240, 240, 242, 0.3);
+  background: transparent;
+  transition: color 150ms ease;
+}
+[data-streamdown='code-block-actions'] button:hover {
+  color: rgba(240, 240, 242, 0.65);
+  background: transparent;
+}

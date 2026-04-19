@@ -3874,6 +3874,13 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
   });
   newView.webContents.setUserAgent(chromeUserAgent);
   applyProxyConfigToSession(newView.webContents.session);
+  
+  // Add BrowserView to mainWindow immediately
+  if (mainWindow) {
+    mainWindow.addBrowserView(newView);
+    console.log(`[BrowserView] Added view for tab ${tabId} to mainWindow`);
+  }
+  
   newView.webContents.loadURL(url);
 
   // Intercept new window requests and open them as new tabs
