@@ -376,6 +376,70 @@ ipcMain.handle('windows:register-protocol', async () => {
   return await registerWindowsProtocol();
 });
 
+// ============================================================================
+// LINUX INTEGRATION
+// ============================================================================
+const { setupLinuxIPCHandlers, registerLinuxProtocol: registerLinuxProto, handleLinuxShortcutAction, handleLinuxURLScheme, generateShortcutURL: generateLinuxURL, createLinuxShortcut, installGNOMEShortcut, createDesktopLauncher, speakText: linuxSpeak, getLinuxVoices, startVoiceRecognition: linuxVoiceListen, showDesktopNotification, detectDesktop, getLinuxIntegration } = require('./src/lib/linux-integration.js');
+
+if (process.platform === 'linux') {
+  setupLinuxIPCHandlers();
+  registerLinuxProto();
+  console.log('[Main] Registered Linux integration');
+}
+
+ipcMain.handle('linux:execute-action', async (event, action, params) => {
+  if (process.platform !== 'linux') return { error: 'Not Linux' };
+  return await handleLinuxShortcutAction(action, params);
+});
+
+ipcMain.handle('linux:voice:listen', async (event, params) => {
+  if (process.platform !== 'linux') return { error: 'Not Linux' };
+  return await linuxVoiceListen(params);
+});
+
+ipcMain.handle('linux:voice:speak', async (event, text, params) => {
+  if (process.platform !== 'linux') return { error: 'Not Linux' };
+  return await linuxSpeak(text, params);
+});
+
+ipcMain.handle('linux:voice:get-voices', async () => {
+  if (process.platform !== 'linux') return [];
+  return await getLinuxVoices();
+});
+
+ipcMain.handle('linux:desktop:get', async () => {
+  return await detectDesktop();
+});
+
+ipcMain.handle('linux:notify', async (event, title, body, options) => {
+  if (process.platform !== 'linux') return { error: 'Not Linux' };
+  return await showDesktopNotification(title, body, options);
+});
+
+ipcMain.handle('linux:create-shortcut', async (event, name, action, params) => {
+  if (process.platform !== 'linux') return { error: 'Not Linux' };
+  return await createLinuxShortcut(name, action, params);
+});
+
+ipcMain.handle('linux:install-gnome-shortcut', async (event, name, action, params) => {
+  if (process.platform !== 'linux') return { error: 'Not Linux' };
+  return await installGNOMEShortcut(name, action, params);
+});
+
+ipcMain.handle('linux:create-launcher', async () => {
+  if (process.platform !== 'linux') return { error: 'Not Linux' };
+  return await createDesktopLauncher();
+});
+
+ipcMain.handle('linux:generate-url', async (event, action, params) => {
+  return generateLinuxURL(action, params);
+});
+
+ipcMain.handle('linux:register-protocol', async () => {
+  if (process.platform !== 'linux') return { error: 'Not Linux' };
+  return await registerLinuxProto();
+});
+
 ipcMain.handle('get-app-icon', async (event, appPath) => {
   try {
     const icon = await app.getFileIcon(appPath, { size: 'normal' });

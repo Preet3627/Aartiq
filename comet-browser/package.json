@@ -27,7 +27,7 @@
     "electron:build:mac": "npm run build-macos-helper && npm run build-macos-apple-intelligence-helper && npm run build-macos-native-panels && npm run build && electron-builder --mac",
     "electron:build:linux": "npm run build && electron-builder --linux",
     "dist:win": "npm run build && electron-builder --win --x64",
-    "dist:mac": "npm run build-macos-helper && npm run build-macos-apple-intelligence-helper && npm run build-macos-native-panels && npm run build && electron-builder --mac --publish never --x64 --c mac=null",
+    "dist:mac": "npm run build-macos-helper && npm run build-macos-apple-intelligence-helper && npm run build-macos-native-panels && npm run build && electron-builder --mac --publish never --x64",
     "dist:linux": "npm run build && electron-builder --linux",
     "rebuild": "electron-rebuild",
     "rebuild:native": "electron-rebuild -f -w robotjs && electron-rebuild -f -w sharp",

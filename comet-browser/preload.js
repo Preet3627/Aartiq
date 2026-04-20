@@ -662,4 +662,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getShortcutsList: () => ipcRenderer.invoke('windows:get-shortcuts-list'),
     registerProtocol: () => ipcRenderer.invoke('windows:register-protocol'),
   },
+
+  // Linux Integration
+  linux: {
+    executeAction: (action, params) => ipcRenderer.invoke('linux:execute-action', action, params),
+    getDesktop: () => ipcRenderer.invoke('linux:desktop:get'),
+    notify: (title, body, options) => ipcRenderer.invoke('linux:notify', title, body, options),
+    voice: {
+      listen: (params) => ipcRenderer.invoke('linux:voice:listen', params),
+      speak: (text, params) => ipcRenderer.invoke('linux:voice:speak', text, params),
+      getVoices: () => ipcRenderer.invoke('linux:voice:get-voices'),
+    },
+    generateUrl: (action, params) => ipcRenderer.invoke('linux:generate-url', action, params),
+    createShortcut: (name, action, params) => ipcRenderer.invoke('linux:create-shortcut', name, action, params),
+    installGnomeShortcut: (name, action, params) => ipcRenderer.invoke('linux:install-gnome-shortcut', name, action, params),
+    createLauncher: () => ipcRenderer.invoke('linux:create-launcher'),
+    registerProtocol: () => ipcRenderer.invoke('linux:register-protocol'),
+  },
 });

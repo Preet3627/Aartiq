@@ -303,7 +303,7 @@ jobs:
             artifact_name: comet-ai-windows
           - target: macos
             os: macos-latest
-            build_cmd: "npm run build && npx electron-builder --mac --x64 --publish never --c mac.signingIdentity='-'"
+            build_cmd: "npm run build && npx electron-builder --mac --x64 --publish never"
             artifact_glob: "comet-browser/release/*.dmg"
             artifact_name: comet-ai-macos
           - target: linux
@@ -350,6 +350,7 @@ jobs:
           key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
 
       - name: Build App
+        if: matrix.target != 'macos'
         working-directory: comet-browser
         env:
           NEXT_PUBLIC_APP_NAME: Comet
@@ -362,6 +363,15 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD || '' }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK || '' }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
+        run: ${{ matrix.build_cmd }}
+
+      - name: Build App (macOS)
+        if: matrix.target == 'macos'
+        working-directory: comet-browser
+        env:
+          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
+          APPLE_SIGNING_IDENTITY: "-"
         run: ${{ matrix.build_cmd }}
 
       - name: Upload Artifact
