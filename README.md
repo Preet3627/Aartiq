@@ -34,6 +34,7 @@ Most browsers are built for monetization. Comet is built for **control**.
 - ⏰ **Background Scheduling** — Schedule tasks like "generate PDF at 8am daily"
 - 🔄 **Automatic latest-model fetching** — Official live model catalogs for Gemini, OpenAI, Claude, Groq, and xAI
 - 🍎 **Apple Intelligence support on macOS** — Native Swift bridge with readiness checks, local summaries, and image generation
+- 🪟 **Windows Integration** — Shortcuts, Voice Control, PowerShell TTS, and Microsoft Copilot companion
 
 ---
 
@@ -290,6 +291,50 @@ After adding shortcuts, use:
 Comet supports Raycast extensions via the same URL scheme:
 - Open Raycast → type "Comet" → use commands
 - Custom extension development supported
+
+### 🪟 Windows Integration
+
+Comet AI provides full Windows integration with Shortcuts, Voice Control, and Copilot:
+
+#### Windows URL Scheme (`comet-ai://`)
+| URL | Action |
+|-----|--------|
+| `comet-ai://chat?message=...` | Send message to AI |
+| `comet-ai://search?query=...` | Smart web search |
+| `comet-ai://create-pdf?content=...` | Generate PDF |
+| `comet-ai://navigate?url=...` | Open website |
+| `comet-ai://run-command?command=...` | Execute terminal |
+| `comet-ai://volume?level=0-100` | Set volume |
+| `comet-ai://open-app?appName=...` | Launch app |
+| `comet-ai://screenshot` | Capture screen |
+| `comet-ai://schedule?task=...` | Schedule task |
+| `comet-ai://copilot` | Open Microsoft Copilot |
+| `comet-ai://voice?command=listen` | Voice recognition |
+| `comet-ai://voice?command=speak&text=...` | Text-to-speech |
+
+#### Windows Voice Control
+```javascript
+// Text-to-Speech
+await window.electronAPI.windows.voice.speak('Hello from Comet!');
+
+// Speech Recognition
+const text = await window.electronAPI.windows.voice.listen({ timeout: 10000 });
+
+// Get available voices
+const voices = await window.electronAPI.windows.voice.getVoices();
+```
+
+#### Microsoft Copilot Integration
+```javascript
+// Open Copilot app or web
+await window.electronAPI.windows.openCopilot();
+```
+
+#### Power Automate
+Create Windows Shortcuts for Comet:
+```javascript
+await window.electronAPI.windows.createShortcut('Chat AI', 'chat', { message: 'Hello' });
+```
 
 ### 🪟 Microsoft Copilot on Windows
 
