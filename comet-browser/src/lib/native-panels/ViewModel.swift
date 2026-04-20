@@ -397,32 +397,7 @@ final class NativePanelViewModel: ObservableObject {
         compactSidebar.toggle()
     }
 
-    func saveConversation(_ messages: [ChatMessage]) {
-        recordInteraction()
-        Task {
-            do {
-                let messagesPayload: [[String: Any]] = messages.map { msg in
-                    var dict: [String: Any] = [
-                        "id": msg.id,
-                        "role": msg.role == .user ? "user" : "assistant",
-                        "content": msg.content,
-                        "timestamp": msg.timestamp.timeIntervalSince1970 * 1000
-                    ]
-                    if let quoted = msg.quotedText {
-                        dict["quotedText"] = quoted
-                    }
-                    if !msg.imagePaths.isEmpty {
-                        dict["mediaItems"] = msg.imagePaths
-                    }
-                    return dict
-                }
-                _ = try await sendJSONRequest(path: "/native-mac-ui/conversations/save", body: ["messages": messagesPayload])
-                statusText = "Conversation saved"
-            } catch {
-                statusText = "Save failed"
-            }
-        }
-    }
+
 
     var themeColorScheme: ColorScheme {
         state.themeAppearance == "light" ? .light : .dark

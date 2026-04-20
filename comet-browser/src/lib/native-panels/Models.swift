@@ -52,32 +52,6 @@ enum PanelMode: String, CaseIterable {
     }
 }
 
-enum SidebarVersion: String, CaseIterable {
-    case v1 = "electron"
-    case v2 = "thuki"
-
-    var title: String {
-        switch self {
-        case .v1: return "Sidebar V1"
-        case .v2: return "Sidebar V2 (Thuki-Inspired)"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .v1: return "Full-featured sidebar with all capabilities"
-        case .v2: return "Minimal, spotlight-style floating interface inspired by Thuki"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .v1: return "rectangle.stack"
-        case .v2: return "bubble.left.and.bubble.right"
-        }
-    }
-}
-
 struct LaunchConfiguration {
     let mode: PanelMode
     let bridgeURL: URL
@@ -191,7 +165,6 @@ struct NativePanelState: Codable {
         let sidebarShowCommandCenterButton: Bool?
         let sidebarShowActionChainButton: Bool?
         let sidebarActionChainAutoAppear: Bool?
-        let sidebarVersion: String?
 
         static let defaults = Preferences(
             sidebarMode: "electron",
@@ -205,8 +178,7 @@ struct NativePanelState: Codable {
             sidebarShowSearchTags: true,
             sidebarShowCommandCenterButton: true,
             sidebarShowActionChainButton: true,
-            sidebarActionChainAutoAppear: false,
-            sidebarVersion: "electron"
+            sidebarActionChainAutoAppear: false
         )
     }
 

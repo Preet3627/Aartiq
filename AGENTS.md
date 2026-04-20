@@ -875,5 +875,92 @@ Thuki is a floating AI secretary for macOS that inspired several features in Com
 
 ---
 
-*Last Updated: 2026-04-14*
-*Status: v0.2.10 Ready - COMPLETED*
+## ✅ COMPLETED THIS SESSION (2026-04-20)
+
+### Siri & Apple Shortcuts Integration (macOS)
+
+**Status:** ✅ COMPLETE
+
+**Files Created:**
+- `comet-browser/src/lib/SiriShortcutsIntegration.js` - Core URL scheme handler and IPC handlers
+- `comet-browser/src/lib/SiriShortcutsProvider.swift` - Native App Intents for Siri (12 intents)
+- `comet-browser/src/lib/apple-script-bridge.js` - AppleScript voice command bridge
+- `comet-browser/src/lib/voice-input-handler.js` - macOS speech recognition handler
+- `comet-browser/src/lib/shortcuts-templates.js` - Shortcuts templates generator
+
+**Files Modified:**
+- `comet-browser/main.js` - Added Siri/Shortcuts IPC handlers and URL scheme registration
+- `comet-browser/preload.js` - Exposed `siri` and `applescript` APIs to renderer
+
+**Features Implemented:**
+
+#### 1. URL Scheme Handler (`comet-ai://`)
+Allows Shortcuts app to trigger Comet AI actions via URLs:
+- `comet-ai://chat?message=...` - Send message to AI
+- `comet-ai://search?query=...` - Smart web search
+- `comet-ai://create-pdf?content=...&title=...` - Generate PDF
+- `comet-ai://navigate?url=...` - Open website
+- `comet-ai://run-command?command=...` - Execute terminal command
+- `comet-ai://volume?level=0-100` - Set system volume
+- `comet-ai://open-app?appName=...` - Launch applications
+- `comet-ai://screenshot` - Capture screen
+- `comet-ai://schedule?task=...&cron=...` - Schedule tasks
+- `comet-ai://ask-ai?prompt=...&speak=true` - Ask AI with voice response
+
+#### 2. Native App Intents (Siri Integration)
+Full Swift App Intents implementation with 12 pre-configured shortcuts:
+- Ask AI (natural language queries)
+- Smart Search
+- Create PDF
+- Navigate
+- Run Terminal Command
+- Schedule Task
+- Set Volume
+- Open Application
+- Take Screenshot
+- Voice Chat
+- Ask + Speak
+
+**Siri Phrases:**
+- "Ask Comet AI a question"
+- "Search [query] with Comet AI"
+- "Create PDF in Comet AI"
+- "Run [command] in Comet AI"
+- "Schedule [task] in Comet AI"
+- And more...
+
+#### 3. Voice Control
+- macOS Dictation integration via AppleScript
+- Text-to-Speech with voice selection
+- Voice command parsing
+- Clipboard-based dictation workflow
+
+#### 4. AppleScript Bridge
+Pre-built AppleScript commands for:
+- `ask AI` - Chat with AI
+- `navigate` - Open URLs
+- `create pdf` - Generate documents
+- `run shell command` - Execute terminal
+- `set volume` - Control audio
+- `take screenshot` - Screen capture
+- `open app` - Launch applications
+- `schedule task` - Schedule AI tasks
+- `voice chat` - Voice conversation
+
+**Preload APIs:**
+```javascript
+window.electronAPI.siri.executeAction(action, params)
+window.electronAPI.siri.speak(text)
+window.electronAPI.siri.listen(timeout)
+window.electronAPI.siri.getVoices()
+window.electronAPI.siri.getShortcutsList()
+window.electronAPI.applescript.run(command, params)
+window.electronAPI.applescript.speak(text, rate, voice)
+window.electronAPI.applescript.listen(timeout)
+window.electronAPI.applescript.getVoices()
+```
+
+---
+
+*Last Updated: 2026-04-20*
+*Status: v0.2.11 Ready - Siri & Shortcuts Integration COMPLETE*

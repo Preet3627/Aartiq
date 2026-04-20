@@ -246,6 +246,79 @@ ipcMain.handle('apple-intelligence-genmoji', async (event, { prompt } = {}) => {
   return generateGenmoji(prompt);
 });
 
+// ============================================================================
+// SIRI & SHORTCUTS INTEGRATION
+// ============================================================================
+const { setupSiriShortcutsHandlers, registerURLScheme, handleURLSchemeEvent, executeShortcutAction, speakWithSiri } = require('./src/lib/SiriShortcutsIntegration.js');
+const { setupVoiceInputHandler, speakText: voiceSpeak, listenForVoiceInput: voiceListen, getVoiceList: voiceGetVoices, parseVoiceCommand: voiceParseCommand } = require('./src/lib/voice-input-handler.js');
+const { executeAppleScriptCommand: runAppleScript, speakText: scriptSpeak, listenForSpeech: scriptListen, getAvailableVoices: scriptGetVoices } = require('./src/lib/apple-script-bridge.js');
+
+const COMET_URL_SCHEME = 'comet-ai';
+
+setupSiriShortcutsHandlers();
+setupVoiceInputHandler();
+
+registerURLScheme();
+console.log('[Main] Registered comet-ai:// URL scheme for Shortcuts');
+
+ipcMain.handle('siri:execute-action', async (event, action, params) => {
+  return await executeShortcutAction(action, params);
+});
+
+ipcMain.handle('siri:speak', async (event, text) => {
+  return await speakWithSiri(text);
+});
+
+ipcMain.handle('siri:listen', async (event, timeout = 10000) => {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  await execAsync('osascript -e \'tell application "System Events" to keystroke "d" using {command down}\'');
+  return new Promise((resolve) => {
+    let clipboard = '';
+    const check = setInterval(async () => {
+      try {
+        clipboard = (await execAsync('pbpaste')).trim();
+        if (clipboard.length > 0) {
+          clearInterval(check);
+          resolve(clipboard);
+        }
+      } catch {}
+    }, 500);
+    setTimeout(() => { clearInterval(check); resolve(clipboard); }, timeout);
+  });
+});
+
+ipcMain.handle('siri:get-voices', async () => {
+  return await scriptGetVoices();
+});
+
+ipcMain.handle('applescript:run', async (event, command, params) => {
+  return await runAppleScript(command, params);
+});
+
+ipcMain.handle('voice:parse-command', async (event, transcript) => {
+  return voiceParseCommand(transcript);
+});
+
+ipcMain.handle('siri:get-url-scheme', () => COMET_URL_SCHEME);
+
+ipcMain.handle('siri:get-shortcuts-list', async () => {
+  return [
+    { id: 'chat', name: 'Chat with AI', description: 'Send message to Comet AI' },
+    { id: 'smart-search', name: 'Smart Search', description: 'Search web with AI' },
+    { id: 'create-pdf', name: 'Create PDF', description: 'Generate PDF document' },
+    { id: 'voice-chat', name: 'Voice Chat', description: 'Dictate and send to AI' },
+    { id: 'ask-and-speak', name: 'Ask + Speak', description: 'Ask AI and hear response' },
+    { id: 'run-command', name: 'Run Command', description: 'Execute terminal command' },
+    { id: 'schedule', name: 'Schedule Task', description: 'Schedule AI tasks' },
+    { id: 'open-app', name: 'Open App', description: 'Launch applications' },
+    { id: 'set-volume', name: 'Set Volume', description: 'Control system volume' },
+    { id: 'screenshot', name: 'Take Screenshot', description: 'Capture screen' },
+    { id: 'navigate', name: 'Navigate', description: 'Open websites' },
+  ];
+});
+
 ipcMain.handle('get-app-icon', async (event, appPath) => {
   try {
     const icon = await app.getFileIcon(appPath, { size: 'normal' });
@@ -1865,19 +1938,39 @@ app.on('open-url', async (event, url) => {
   // Raycast commands via comet-ai:// scheme (registered separately)
   else if (url.startsWith('comet-ai://') || url.startsWith('comet://')) {
     const command = pathname || params.command || 'index';
-    console.log('[Main] Raycast command:', command, params);
+    console.log('[Main] URL scheme command:', command, params);
 
     // Map commands to IPC events
     const commandMap = {
       'chat': 'open-ai-chat',
+      'search': 'ai:search',
+      'navigate': 'navigate-to-url',
+      'create-pdf': 'ai:create-pdf',
+      'run-command': 'shell:execute',
+      'open-app': 'system:open-app',
+      'screenshot': 'system:screenshot',
+      'volume': 'system:set-volume',
+      'schedule': 'ai:schedule',
+      'ask-ai': 'ai:ask-speaking',
+      'voice-chat': 'ai:voice-chat',
       'browse': 'open-quick-browse',
       'ocr': 'trigger-screen-ocr',
       'pdf': 'open-pdf-creator',
       'automation': 'open-automation-panel',
       'settings': 'open-settings',
       'index': 'open-main',
-      'navigate': 'navigate-to-url',
     };
+
+    // Handle Siri/Shortcuts actions with dedicated handlers
+    const siriActions = ['chat', 'search', 'navigate', 'create-pdf', 'run-command', 'open-app', 'screenshot', 'volume', 'schedule', 'ask-ai', 'voice-chat'];
+    if (siriActions.includes(command)) {
+      executeShortcutAction(command, params).catch(err => console.error('[Main] Siri action error:', err));
+      if (params.speak === 'true') {
+        target.webContents.once('did-finish-load', () => {
+          target.webContents.send('ai:request-speak-response', params);
+        });
+      }
+    }
 
     const ipcCommand = commandMap[command] || command;
     target.webContents.send(ipcCommand, params);
@@ -6406,16 +6499,7 @@ app.whenReady().then(async () => {
       notifyAI('📄 Finalizing Branded neural document...');
       const pdfBuffer = await workerWindow.webContents.printToPDF({
         printBackground: true,
-        displayHeaderFooter: true,
-        headerTemplate: `<div style="font-size: 7px; font-family: 'Inter', sans-serif; width: 100%; text-align: right; padding: 0 40px; color: #94a3b8; opacity: 0.6;">${title.replace(/<[^>]*>?/gm, '')} — Comet AI Research Document</div>`,
-        footerTemplate: `
-          <div style="font-size: 7px; font-family: 'Inter', sans-serif; width: 100%; display: flex; justify-content: space-between; padding: 0 40px; color: #94a3b8;">
-            <div style="display: flex; align-items: center; gap: 4px;">
-              <span style="color: #0ea5e9; font-weight: 700;">🌠 Comet</span> 
-              <span>| Protected Ecosystem</span>
-            </div>
-            <div>Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>
-          </div>`,
+        displayHeaderFooter: false,
         margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 },
         pageSize: 'A4'
       });

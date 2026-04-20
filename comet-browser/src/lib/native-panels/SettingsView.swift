@@ -235,19 +235,6 @@ struct NativeSettingsPanelView: View {
                         
                         VStack(spacing: 10) {
                             SelectionPreferenceCard(
-                                title: "Sidebar Version",
-                                subtitle: "V1: Full-featured. V2: Thuki-inspired minimal spotlight style.",
-                                current: prefs.sidebarVersion ?? "electron",
-                                options: [
-                                    ("electron", "Sidebar V1 (Full)"),
-                                    ("thuki", "Sidebar V2 (Thuki-Style)")
-                                ],
-                                appearance: viewModel.state.themeAppearance
-                            ) { value in
-                                viewModel.setPreference(key: "sidebarVersion", value: value)
-                            }
-                            
-                            SelectionPreferenceCard(
                                 title: "Gradient Theme",
                                 subtitle: "Tune the native sidebar chrome with a premium gradient preset.",
                                 current: prefs.sidebarGradientPreset ?? "graphite",

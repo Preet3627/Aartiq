@@ -8,7 +8,7 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blue)]()
-[![Version](https://img.shields.io/badge/Version-0.2.9.1-blue)]()
+[![Version](https://img.shields.io/badge/Version-0.2.9.3-blue)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)]()
 [![Built by 16yo](https://img.shields.io/badge/Developer-16_Year_Old_Student-FF69B4?style=for-the-badge&logo=github)](https://github.com/Preet3627)
 [![Low Spec](https://img.shields.io/badge/Tested_On-i5--U_|_8GB_RAM-orange)]()
@@ -52,7 +52,7 @@ Full documentation is available at [browser.ponsrischool.in](https://browser.pon
 
 ---
 
-## ✨ Features (v0.2.9.1)
+## ✨ Features (v0.2.9.3)
 
 ### 🍎 Native AI Sidebar V2 (Thuki-Inspired)
 
@@ -253,6 +253,43 @@ native-modules/comet-ai-sidebar/
 - [Apple Intelligence](https://developer.apple.com/apple-intelligence/)
 - [Foundation Models](https://developer.apple.com/documentation/FoundationModels)
 - [Image Playground](https://developer.apple.com/documentation/ImagePlayground)
+
+### 🎤 Siri & Apple Shortcuts Integration
+
+Comet AI integrates deeply with macOS Siri and Shortcuts for hands-free control:
+
+#### URL Scheme (`comet-ai://`)
+All actions accessible via Shortcuts app:
+| URL | Action |
+|-----|--------|
+| `comet-ai://chat?message=...` | Send message to AI |
+| `comet-ai://search?query=...` | Smart web search |
+| `comet-ai://create-pdf?content=...&title=...` | Generate PDF |
+| `comet-ai://navigate?url=...` | Open website |
+| `comet-ai://run-command?command=...` | Execute terminal |
+| `comet-ai://volume?level=0-100` | Set volume |
+| `comet-ai://open-app?appName=...` | Launch app |
+| `comet-ai://screenshot` | Capture screen |
+| `comet-ai://schedule?task=...&cron=...` | Schedule task |
+| `comet-ai://ask-ai?prompt=...&speak=true` | Ask AI + speak response |
+
+#### Siri Phrases
+After adding shortcuts, use:
+- "Ask Comet AI [question]"
+- "Search [query] with Comet AI"
+- "Create PDF in Comet AI"
+- "Run [command] in Comet AI"
+- "Schedule [task] in Comet AI"
+
+#### Voice Control
+- **macOS Dictation**: Press ⌘⇧D to dictate, text sent to AI
+- **Text-to-Speech**: AI responses can be spoken aloud
+- **AppleScript Bridge**: Pre-built scripts for automation
+
+#### Raycast Integration
+Comet supports Raycast extensions via the same URL scheme:
+- Open Raycast → type "Comet" → use commands
+- Custom extension development supported
 
 ### 🪟 Microsoft Copilot on Windows
 

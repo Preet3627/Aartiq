@@ -52,23 +52,6 @@ struct CometNativePanelsApp: App {
 
                 Divider()
 
-                if configuration.mode == .sidebar {
-                    Menu("Sidebar Version") {
-                        ForEach(SidebarVersion.allCases, id: \.self) { version in
-                            let isSelected = (viewModel.state.preferences?.sidebarVersion ?? "electron") == version.rawValue
-                            Button {
-                                viewModel.setPreference(key: "sidebarVersion", value: version.rawValue)
-                            } label: {
-                                Label(version.title, systemImage: version.icon)
-                                if isSelected {
-                                    Text("✓")
-                                }
-                            }
-                        }
-                    }
-                    Divider()
-                }
-
                 Button("Settings") {
                     viewModel.openPanel(.settings)
                 }
@@ -86,34 +69,41 @@ struct CometNativePanelsApp: App {
 struct RootPanelView: View {
     @ObservedObject var viewModel: NativePanelViewModel
 
-    private var currentSidebarVersion: SidebarVersion {
-        let version = viewModel.state.preferences?.sidebarVersion ?? "electron"
-        return SidebarVersion(rawValue: version) ?? .v1
-    }
-
     var body: some View {
         Group {
             switch viewModel.configuration.mode {
             case .sidebar:
-                if currentSidebarVersion == .v2 {
-                    ThukiV2Panel(viewModel: viewModel)
-                } else {
-                    SidebarPanelView(viewModel: viewModel)
-                }
+#if COMPILE_SIDEBAR || COMPILE_ALL
+                SidebarPanelView(viewModel: viewModel)
+#endif
             case .actionChain:
+#if COMPILE_ACTION_CHAIN || COMPILE_ALL
                 ActionChainPanelView(viewModel: viewModel)
+#endif
             case .menu:
+#if COMPILE_MENU || COMPILE_ALL
                 CommandCenterPanelView(viewModel: viewModel)
+#endif
             case .settings:
+#if COMPILE_SETTINGS || COMPILE_ALL
                 NativeSettingsPanelView(viewModel: viewModel)
+#endif
             case .downloads:
+#if COMPILE_DOWNLOADS || COMPILE_UTILITIES || COMPILE_ALL
                 DownloadsPanelView(viewModel: viewModel)
+#endif
             case .clipboard:
+#if COMPILE_CLIPBOARD || COMPILE_UTILITIES || COMPILE_ALL
                 ClipboardPanelView(viewModel: viewModel)
+#endif
             case .permissions:
+#if COMPILE_PERMISSIONS || COMPILE_UTILITIES || COMPILE_ALL
                 PermissionsPanelView(viewModel: viewModel)
+#endif
             case .appleAI:
+#if COMPILE_APPLE_AI || COMPILE_ALL
                 AppleIntelligencePanelView(viewModel: viewModel)
+#endif
             }
         }
         .frame(minWidth: 100, minHeight: 100)

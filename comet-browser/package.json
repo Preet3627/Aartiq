@@ -1,6 +1,6 @@
 {
   "name": "Comet-AI",
-  "version": "0.2.9",
+  "version": "0.2.9.3",
   "private": true,
   "description": "Comet-AI Browser - A high-performance, intelligence-driven browsing workspace with local LLM support and advanced productivity features.",
   "author": "Latestinssan",
@@ -141,13 +141,14 @@
     ],
     "files": [
       "out/**/*",
-      "main.cjs",
-      "preload.cjs",
-      "view_preload.cjs",
+      "main.js",
+      "preload.js",
+      "auth-preload.js",
       "src/lib/**/*",
       "src/service/**/*",
       "src/automation/**/*",
       "src/core/**/*",
+      "src/main/**/*",
       "assets/**/*",
       "bin/**/*",
       "package.json"

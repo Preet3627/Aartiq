@@ -592,4 +592,59 @@ contextBridge.exposeInMainWorld('electronAPI', {
     writeFile: (filePath, content) => ipcRenderer.invoke('plugin-api:write-file', filePath, content),
     log: (message, level) => ipcRenderer.invoke('plugin-api:log', message, level),
   },
+
+  // Siri & Shortcuts Integration
+  siri: {
+    executeAction: (action, params) => ipcRenderer.invoke('siri:execute-action', action, params),
+    speak: (text) => ipcRenderer.invoke('siri:speak', text),
+    listen: (timeout) => ipcRenderer.invoke('siri:listen', timeout),
+    getVoices: () => ipcRenderer.invoke('siri:get-voices'),
+    getUrlScheme: () => ipcRenderer.invoke('siri:get-url-scheme'),
+    getShortcutsList: () => ipcRenderer.invoke('siri:get-shortcuts-list'),
+    parseCommand: (transcript) => ipcRenderer.invoke('voice:parse-command', transcript),
+    onChatInput: (callback) => {
+      const subscription = (event, message) => callback(message);
+      ipcRenderer.on('siri-chat-input', subscription);
+      return () => ipcRenderer.removeListener('siri-chat-input', subscription);
+    },
+    onNavigate: (callback) => {
+      const subscription = (event, url) => callback(url);
+      ipcRenderer.on('siri-navigate', subscription);
+      return () => ipcRenderer.removeListener('siri-navigate', subscription);
+    },
+    onSearch: (callback) => {
+      const subscription = (event, query) => callback(query);
+      ipcRenderer.on('siri-search', subscription);
+      return () => ipcRenderer.removeListener('siri-search', subscription);
+    },
+    onCreatePDF: (callback) => {
+      const subscription = (event, data) => callback(data);
+      ipcRenderer.on('siri-create-pdf', subscription);
+      return () => ipcRenderer.removeListener('siri-create-pdf', subscription);
+    },
+    onShellCommand: (callback) => {
+      const subscription = (event, command) => callback(command);
+      ipcRenderer.on('siri-shell-command', subscription);
+      return () => ipcRenderer.removeListener('siri-shell-command', subscription);
+    },
+    onSchedule: (callback) => {
+      const subscription = (event, data) => callback(data);
+      ipcRenderer.on('siri-schedule', subscription);
+      return () => ipcRenderer.removeListener('siri-schedule', subscription);
+    },
+    onAskAI: (callback) => {
+      const subscription = (event, data) => callback(data);
+      ipcRenderer.on('siri-ask-ai', subscription);
+      return () => ipcRenderer.removeListener('siri-ask-ai', subscription);
+    },
+  },
+
+  // AppleScript Bridge
+  applescript: {
+    run: (command, params) => ipcRenderer.invoke('applescript:run', command, params),
+    speak: (text, rate, voice) => ipcRenderer.invoke('applescript:speak', text, rate, voice),
+    listen: (timeout) => ipcRenderer.invoke('applescript:listen', timeout),
+    getVoices: () => ipcRenderer.invoke('applescript:get-voices'),
+    createShortcut: (name, params) => ipcRenderer.invoke('applescript:create-shortcut', name, params),
+  },
 });

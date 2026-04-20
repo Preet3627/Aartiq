@@ -6,18 +6,19 @@ const util = require('util');
 const execFileAsync = util.promisify(execFile);
 const PANEL_BINARY_NAME = 'Comet-AI-NativePanels';
 
-function getMacNativePanelPaths() {
+function getMacNativePanelPaths(mode = 'all') {
   const sourceDir = path.join(__dirname, 'native-panels');
   const sourceFile = path.join(__dirname, 'macos-native-panels.swift');
   
+  const binaryName = mode === 'all' ? PANEL_BINARY_NAME : `${PANEL_BINARY_NAME}-${mode}`;
   return {
-    bundledBinary: path.join(process.resourcesPath || '', 'bin', PANEL_BINARY_NAME),
-    localBinary: path.join(__dirname, '..', '..', 'bin', PANEL_BINARY_NAME),
+    bundledBinary: path.join(process.resourcesPath || '', 'bin', binaryName),
+    localBinary: path.join(__dirname, '..', '..', 'bin', binaryName),
     swiftSource: fs.existsSync(sourceDir) ? sourceDir : sourceFile,
   };
 }
 
-async function ensureLocalMacNativePanelBinary(swiftSource, localBinary) {
+async function ensureLocalMacNativePanelBinary(swiftSource, localBinary, mode) {
   if (!fs.existsSync(swiftSource)) {
     return false;
   }
@@ -25,6 +26,7 @@ async function ensureLocalMacNativePanelBinary(swiftSource, localBinary) {
   const isDirectory = fs.statSync(swiftSource).isDirectory();
   let scriptStat;
   let swiftFiles = [];
+  let compilerFlags = [];
 
   if (isDirectory) {
     // Collect all .swift files in the directory
@@ -43,6 +45,32 @@ async function ensureLocalMacNativePanelBinary(swiftSource, localBinary) {
       return results;
     };
     swiftFiles = getAllSwiftFiles(swiftSource);
+    
+    if (mode && mode !== 'all') {
+      const modeFiles = {
+        'sidebar': ['SidebarView.swift', 'MessageViews.swift', 'SpecializedViews.swift'],
+        'settings': ['SettingsView.swift'],
+        'action-chain': ['ActionChainView.swift'],
+        'menu': ['CommandCenterView.swift'],
+        'downloads': ['UtilityViews.swift'],
+        'clipboard': ['UtilityViews.swift'],
+        'permissions': ['UtilityViews.swift'],
+        'apple-ai': ['AppleIntelligencePanelView.swift']
+      };
+      const requiredForMode = modeFiles[mode] || [];
+      const coreFiles = ['Main.swift', 'Models.swift', 'ViewModel.swift', 'Components.swift', 'NativeContextMenu.swift', 'AICommandParser.swift'];
+      
+      swiftFiles = swiftFiles.filter(f => {
+        const name = path.basename(f);
+        return coreFiles.includes(name) || requiredForMode.includes(name);
+      });
+      
+      const macroName = mode.replace(/-/g, '_').toUpperCase();
+      compilerFlags.push('-D', `COMPILE_${macroName}`);
+    } else {
+      compilerFlags.push('-D', 'COMPILE_ALL');
+    }
+    
     // Use the latest mtime of all files
     scriptStat = { mtimeMs: Math.max(...swiftFiles.map(f => fs.statSync(f).mtimeMs)) };
   } else {
@@ -60,9 +88,9 @@ async function ensureLocalMacNativePanelBinary(swiftSource, localBinary) {
   fs.mkdirSync(path.dirname(localBinary), { recursive: true });
   
   // Prepare compiler arguments
-  const args = ['-parse-as-library', ...swiftFiles, '-o', localBinary];
+  const args = ['-parse-as-library', ...compilerFlags, ...swiftFiles, '-o', localBinary];
   
-  console.log('[MacNativePanels] Compiling native binary from:', isDirectory ? `${swiftFiles.length} files` : swiftSource);
+  console.log(`[MacNativePanels] Compiling native binary for ${mode || 'all'} from:`, isDirectory ? `${swiftFiles.length} files` : swiftSource);
   
   await execFileAsync('swiftc', args, {
     timeout: 120000,
@@ -72,17 +100,17 @@ async function ensureLocalMacNativePanelBinary(swiftSource, localBinary) {
   return true;
 }
 
-async function resolveNativePanelLaunchTarget() {
-  const { bundledBinary, localBinary, swiftSource } = getMacNativePanelPaths();
+async function resolveNativePanelLaunchTarget(mode) {
+  const { bundledBinary, localBinary, swiftSource } = getMacNativePanelPaths(mode);
 
   if (fs.existsSync(bundledBinary)) {
     return { command: bundledBinary, argsPrefix: [] };
   }
 
   try {
-    await ensureLocalMacNativePanelBinary(swiftSource, localBinary);
+    await ensureLocalMacNativePanelBinary(swiftSource, localBinary, mode);
   } catch (error) {
-    console.warn('[MacNativePanels] Failed to compile local SwiftUI panel binary:', error.message);
+    console.warn(`[MacNativePanels] Failed to compile local SwiftUI panel binary for ${mode}:`, error.message);
   }
 
   if (fs.existsSync(localBinary)) {
@@ -125,7 +153,7 @@ class MacNativePanelManager {
       }
     }
 
-    const target = await resolveNativePanelLaunchTarget();
+    const target = await resolveNativePanelLaunchTarget(mode);
     const args = [
       ...target.argsPrefix,
       '--mode',
