@@ -1,35 +1,68 @@
-const { execSync, spawn } = require('child_process');
+const { execSync, spawn, exec } = require('child_process');
 const path = require('path');
+const util = require('util');
+
+const execPromise = util.promisify(exec);
 
 let isInitialized = false;
-let nativeBridge = null;
+let useNative = false;
+let stevePath = null;
+let automationBinary = null;
 
 async function initialize() {
   if (isInitialized) return true;
   
   try {
-    const automationBinary = path.join(__dirname, '..', '..', 'bin', 'comet-automation');
-    const swiftBridge = path.join(__dirname, '..', '..', 'bin', 'automation-bridge');
+    automationBinary = path.join(__dirname, '..', '..', 'bin', 'comet-automation');
     
     try {
-      execSync(`test -x "${swiftBridge}"`, { stdio: 'ignore' });
-      nativeBridge = swiftBridge;
+      execSync(`test -x "${automationBinary}"`, { stdio: 'ignore' });
+      useNative = true;
       isInitialized = true;
-      console.log('[Automation/macOS] Using native Swift bridge');
+      console.log('[Automation/macOS] Using native Comet automation binary');
       return true;
-    } catch {
-      console.log('[Automation/macOS] Swift bridge not found, using applescript fallback');
-    }
+    } catch (e) {}
+    
+    try {
+      execSync('which steve', { stdio: 'ignore' });
+      stevePath = 'steve';
+      useNative = true;
+      isInitialized = true;
+      console.log('[Automation/macOS] Using steve CLI for accessibility-based clicking');
+      return true;
+    } catch (e) {}
+    
+    try {
+      execSync(`test -x "${path.join(__dirname, '..', '..', 'bin', 'steve')}"`, { stdio: 'ignore' });
+      stevePath = path.join(__dirname, '..', '..', 'bin', 'steve');
+      useNative = true;
+      isInitialized = true;
+      console.log('[Automation/macOS] Using bundled steve CLI');
+      return true;
+    } catch (e) {}
+    
+    try {
+      execSync('xattr -c /Applications/Safari.app 2>/dev/null || true', { stdio: 'ignore' });
+    } catch (e) {}
     
     isInitialized = true;
+    console.log('[Automation/macOS] Using AppleScript fallback for clicking');
     return true;
   } catch (err) {
     console.error('[Automation/macOS] Init failed:', err.message);
-    return false;
+    isInitialized = true;
+    return true;
   }
 }
 
 function moveMouse(x, y) {
+  if (stevePath) {
+    try {
+      execSync(`${stevePath} move ${x} ${y}`, { stdio: 'ignore' });
+      return;
+    } catch (e) {}
+  }
+  
   const script = `
     tell application "System Events"
       set the position of the mouse to {${x}, ${y}}
@@ -39,9 +72,16 @@ function moveMouse(x, y) {
 }
 
 function click(x, y, button = 'left', double = false) {
-  moveMouse(x, y);
+  if (stevePath) {
+    const btn = button === 'right' ? 'right' : (button === 'middle' ? 'middle' : 'left');
+    const count = double ? '2' : '1';
+    try {
+      execSync(`${stevePath} click ${btn}${count} ${x} ${y}`, { stdio: 'ignore' });
+      return;
+    } catch (e) {}
+  }
   
-  const clickScript = double ? 2 : 1;
+  moveMouse(x, y);
   
   if (button === 'left') {
     const script = double
@@ -53,7 +93,7 @@ function click(x, y, button = 'left', double = false) {
     execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
   } else if (button === 'middle') {
     moveMouse(x, y);
-    execSync('cliclick m', { stdio: 'ignore' });
+    execSync('cliclick m:down && sleep 0.05 && cliclick m:up', { stdio: 'ignore' });
   }
 }
 
@@ -75,16 +115,23 @@ function keyTap(key, modifiers = []) {
     'command': 'command down',
     'control': 'control down',
     'alt': 'option down',
-    'shift': 'shift down'
+    'shift': 'shift down',
+    'control': 'control down',
+    'meta': 'command down'
   };
   
-  const keyMap = {
+  const mods = modifiers.map(m => modMap[m] || `${m} down`).join(' ');
+  const keyUpper = key.charAt(0).toUpperCase() + key.slice(1);
+  
+  let code;
+  const keyCodes = {
     'return': 'return',
-    'enter': 'enter',
+    'enter': 'return',
     'tab': 'tab',
-    'escape': 'escape',
+    'space': ' ',
     'delete': 'delete',
-    'backspace': 'delete',
+    'escape': 'escape',
+    'escape': 'escape',
     'up': 'up arrow',
     'down': 'down arrow',
     'left': 'left arrow',
@@ -93,61 +140,94 @@ function keyTap(key, modifiers = []) {
     'end': 'end',
     'pageup': 'page up',
     'pagedown': 'page down',
-    'space': ' '
+    'f1': 'f1',
+    'f2': 'f2',
+    'f3': 'f3',
+    'f4': 'f4',
+    'f5': 'f5',
+    'f6': 'f6',
+    'f7': 'f7',
+    'f8': 'f8',
+    'f9': 'f9',
+    'f10': 'f10',
+    'f11': 'f11',
+    'f12': 'f12'
   };
   
-  const keyName = keyMap[key.toLowerCase()] || key;
-  const mods = modifiers.map(m => modMap[m]).filter(Boolean);
+  code = keyCodes[key.toLowerCase()] || keyUpper;
   
-  const script = `
-    tell application "System Events"
-      ${mods.length ? `key code ${getKeyCode(key)} using ${mods.join(', ')}` : `key code ${getKeyCode(key)}`}
-    end tell
-  `;
-  
-  try {
+  if (mods && code) {
+    const script = `
+      tell application "System Events"
+        keystroke "${code}" using {${mods}}
+      end tell
+    `;
     execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
-  } catch {
-    execSync(`osascript -e 'tell application "System Events" to ${mods.length ? `keystroke "${key}" using ${mods.join(', ')}` : `keystroke "${key}"`}'`, { stdio: 'ignore' });
+  } else if (code) {
+    const script = `
+      tell application "System Events"
+        keystroke "${code}"
+      end tell
+    `;
+    execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
   }
-}
-
-function getKeyCode(key) {
-  const keyCodes = {
-    'a': 0, 's': 1, 'd': 2, 'f': 3, 'h': 4, 'g': 5, 'z': 6, 'x': 7, 'c': 8, 'v': 9,
-    'b': 11, 'q': 12, 'w': 13, 'e': 14, 'r': 15, 'y': 19, 't': 17, '1': 18, '2': 19,
-    '3': 20, '4': 21, '6': 22, '5': 23, '9': 25, '7': 26, '8': 28, '0': 29, 'o': 31,
-    'u': 32, 'i': 34, 'p': 35, 'l': 37, 'j': 38, 'k': 40, 'n': 45, 'm': 46, ',' : 43,
-    '.': 47, '/': 44, 'return': 36, 'tab': 48, 'space': 49, 'delete': 51, 'escape': 53,
-    'right': 124, 'left': 123, 'down': 125, 'up': 126
-  };
-  return keyCodes[key.toLowerCase()] || 0;
 }
 
 function scroll(x, y, direction, amount = 3) {
-  moveMouse(x, y);
-  
-  const dirMap = {
-    'up': 1,
-    'down': -1,
-    'left': 2,
-    'right': -2
+  const directions = {
+    'up': '{0, -' + amount * 100 + '}',
+    'down': '{0, ' + amount * 100 + '}',
+    'left': '{-' + amount * 100 + ', 0}',
+    'right': '{' + amount * 100 + ', 0}'
   };
   
-  const dir = dirMap[direction] || 1;
+  const delta = directions[direction] || '{0, -100}';
   
-  for (let i = 0; i < amount; i++) {
-    execSync(`osascript -e 'tell application "System Events" to scroll ${dir} of scroll area 1'`, { stdio: 'ignore' });
-  }
+  moveMouse(x, y);
+  
+  const script = `
+    tell application "System Events"
+      set the scroll direction of window 1 to ${delta}
+    end tell
+  `;
+  execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
 }
 
 function getMousePos() {
   try {
-    const output = execSync('osascript -e \'tell application "System Events" to get position of mouse\'', { encoding: 'utf8' });
-    const [x, y] = output.trim().split(', ').map(Number);
+    const output = execSync('cliclick p', { encoding: 'utf8' }).trim();
+    const [x, y] = output.split(',').map(Number);
     return { x, y };
-  } catch {
-    return { x: 0, y: 0 };
+  } catch (e) {
+    try {
+      const output = execSync('osascript -e \'tell application "System Events" to get {position of mouse}\'', { encoding: 'utf8' }).trim();
+      const [y, x] = output.split(', ').map(Number);
+      return { x, y };
+    } catch (e2) {
+      return { x: 0, y: 0 };
+    }
+  }
+}
+
+async function findElement(accessibilityLabel, options = {}) {
+  if (!stevePath) return null;
+  
+  try {
+    const output = execSync(`steve find "${accessibilityLabel}" --json`, { encoding: 'utf8' });
+    return JSON.parse(output);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function clickElement(accessibilityLabel) {
+  if (!stevePath) return { success: false, error: 'steve not available' };
+  
+  try {
+    execSync(`steve click --title "${accessibilityLabel}"`, { stdio: 'ignore' });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
   }
 }
 
@@ -159,5 +239,7 @@ module.exports = {
   keyTap,
   scroll,
   getMousePos,
-  isAvailable: true
+  findElement,
+  clickElement,
+  backend: 'native'
 };

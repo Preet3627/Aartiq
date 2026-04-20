@@ -26,6 +26,29 @@ try {
   nativeMacOcr = null;
 }
 
+let uniOcr = null;
+let uniOcrProvider = null;
+try {
+  if (process.platform === 'darwin' || process.platform === 'win32') {
+    uniOcr = require('uniocr');
+    console.log('[TesseractService] uniOCR loaded successfully');
+  }
+} catch (e) {
+  console.warn('[TesseractService] uniOCR not available:', e.message);
+  uniOcr = null;
+}
+
+let rustOcr = null;
+try {
+  if (process.platform !== 'win32') {
+    rustOcr = require('rusto');
+    console.log('[TesseractService] RustO! OCR loaded successfully');
+  }
+} catch (e) {
+  console.warn('[TesseractService] RustO! not available:', e.message);
+  rustOcr = null;
+}
+
 let robotjs = null;
 try {
   robotjs = require('robotjs');
@@ -775,7 +798,127 @@ print(json.dumps({"results": results}))
     }
   }
 
+  async captureAndRecognizeWithUniOCR(displayId) {
+    if (!uniOcr) {
+      return null;
+    }
+
+    try {
+      const capture = await this.captureScreen(displayId);
+      const imagePath = path.join(os.tmpdir(), `comet-uniocr-${Date.now()}.png`);
+      fs.writeFileSync(imagePath, capture.png);
+
+      const provider = process.platform === 'darwin' ? 'macos' : (process.platform === 'win32' ? 'windows' : 'tesseract');
+      const engine = uniOcr.OcrEngine.new(uniOcr.OcrProvider[provider]);
+      
+      const result = await engine.recognize(imagePath);
+      
+      const lines = this.filterEntriesToDisplay(
+        result.results.map((item) => createEntry(
+          item.text,
+          { x0: item.left, y0: item.top, x1: item.left + item.width, y1: item.top + item.height },
+          item.confidence ?? 0.95,
+          { source: 'uniocr-line', provider: `uniocr-${provider}` }
+        )).filter(Boolean),
+        displayId
+      );
+
+      fs.unlinkSync(imagePath);
+      
+      return {
+        provider: `uniocr-${provider}`,
+        strategy: 'native-ocr',
+        words: lines.flatMap((line) => {
+          const tokens = tokenize(line.text);
+          if (tokens.length <= 1) return [line];
+          const width = Math.max(1, line.bbox.x1 - line.bbox.x0);
+          const segmentWidth = Math.max(1, Math.round(width / tokens.length));
+          return tokens.map((token, index) => createEntry(
+            token,
+            {
+              x0: line.bbox.x0 + (segmentWidth * index),
+              y0: line.bbox.y0,
+              x1: index === tokens.length - 1 ? line.bbox.x1 : line.bbox.x0 + (segmentWidth * (index + 1)),
+              y1: line.bbox.y1,
+            },
+            line.confidence,
+            { source: 'uniocr-word', provider: `uniocr-${provider}` }
+          )).filter(Boolean);
+        }),
+        lines,
+      };
+    } catch (e) {
+      console.warn('[TesseractService] uniOCR failed:', e.message);
+      return null;
+    }
+  }
+
+  async captureAndRecognizeWithRustO(displayId) {
+    if (!rustOcr) {
+      return null;
+    }
+
+    try {
+      const capture = await this.captureScreen(displayId);
+      const imagePath = path.join(os.tmpdir(), `comet-rusto-${Date.now()}.png`);
+      fs.writeFileSync(imagePath, capture.png);
+
+      const engine = rustOcr.RustOcr.new(rustOcr.OcrModel.PPOCRv5);
+      const result = await engine.recognize(imagePath);
+      
+      const lines = this.filterEntriesToDisplay(
+        result.boxes.map((item) => createEntry(
+          item.text,
+          { x0: item.x, y0: item.y, x1: item.x + item.width, y1: item.y + item.height },
+          item.confidence ?? 0.95,
+          { source: 'rusto-line', provider: 'rusto-paddleocr' }
+        )).filter(Boolean),
+        displayId
+      );
+
+      fs.unlinkSync(imagePath);
+      
+      return {
+        provider: 'rusto-paddleocr',
+        strategy: 'native-ocr',
+        words: lines.flatMap((line) => {
+          const tokens = tokenize(line.text);
+          if (tokens.length <= 1) return [line];
+          const width = Math.max(1, line.bbox.x1 - line.bbox.x0);
+          const segmentWidth = Math.max(1, Math.round(width / tokens.length));
+          return tokens.map((token, index) => createEntry(
+            token,
+            {
+              x0: line.bbox.x0 + (segmentWidth * index),
+              y0: line.bbox.y0,
+              x1: index === tokens.length - 1 ? line.bbox.x1 : line.bbox.x0 + (segmentWidth * (index + 1)),
+              y1: line.bbox.y1,
+            },
+            line.confidence,
+            { source: 'rusto-word', provider: 'rusto-paddleocr' }
+          )).filter(Boolean);
+        }),
+        lines,
+      };
+    } catch (e) {
+      console.warn('[TesseractService] RustO! OCR failed:', e.message);
+      return null;
+    }
+  }
+
   async captureAndRecognizeNative(displayId) {
+    const uniResult = await this.captureAndRecognizeWithUniOCR(displayId);
+    if (uniResult?.words?.length || uniResult?.lines?.length) {
+      console.log('[TesseractService] Using uniOCR for native OCR');
+      return uniResult;
+    }
+
+    const rustoResult = await this.captureAndRecognizeWithRustO(displayId);
+    if (rustoResult?.words?.length || rustoResult?.lines?.length) {
+      console.log('[TesseractService] Using RustO! for native OCR');
+      return rustoResult;
+    }
+
     if (process.platform === 'darwin') {
       return this.captureAndRecognizeWithMacNative(displayId);
     }

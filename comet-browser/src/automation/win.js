@@ -1,26 +1,51 @@
 const { execSync, spawn } = require('child_process');
 const path = require('path');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 let isInitialized = false;
+let nutJsPath = null;
+let useNative = false;
+let automationBinary = null;
 
 async function initialize() {
   if (isInitialized) return true;
   
   try {
-    const automationBinary = path.join(__dirname, '..', '..', 'bin', 'comet-automation.exe');
+    automationBinary = path.join(__dirname, '..', '..', 'bin', 'comet-automation.exe');
     
     try {
       execSync(`where "${automationBinary}"`, { stdio: 'ignore' });
-      console.log('[Automation/Win] Found native Windows automation binary');
-    } catch {
-      console.log('[Automation/Win] Using PowerShell automation fallback');
-    }
+      useNative = true;
+      isInitialized = true;
+      console.log('[Automation/Win] Using native Windows automation binary');
+      return true;
+    } catch (e) {}
+    
+    try {
+      execSync('npm list @nut-tree/nut-js', { stdio: 'ignore' });
+      nutJsPath = '@nut-tree/nut-js';
+      useNative = true;
+      isInitialized = true;
+      console.log('[Automation/Win] Using nut.js for automation');
+      return true;
+    } catch (e) {}
+    
+    try {
+      execSync('npm list xa11y', { stdio: 'ignore' });
+      useNative = true;
+      isInitialized = true;
+      console.log('[Automation/Win] Using xa11y for accessibility-based automation');
+      return true;
+    } catch (e) {}
     
     isInitialized = true;
+    console.log('[Automation/Win] Using PowerShell fallback');
     return true;
   } catch (err) {
     console.error('[Automation/Win] Init failed:', err.message);
-    return false;
+    isInitialized = true;
+    return true;
   }
 }
 
@@ -122,8 +147,9 @@ function keyTap(key, modifiers = []) {
     'tab': '{TAB}',
     'escape': '{ESC}',
     'esc': '{ESC}',
-    'delete': '{DELETE}',
     'backspace': '{BACKSPACE}',
+    'delete': '{DELETE}',
+    'del': '{DELETE}',
     'up': '{UP}',
     'down': '{DOWN}',
     'left': '{LEFT}',
@@ -132,27 +158,37 @@ function keyTap(key, modifiers = []) {
     'end': '{END}',
     'pageup': '{PGUP}',
     'pagedown': '{PGDN}',
+    'f1': '{F1}',
+    'f2': '{F2}',
+    'f3': '{F3}',
+    'f4': '{F4}',
+    'f5': '{F5}',
+    'f6': '{F6}',
+    'f7': '{F7}',
+    'f8': '{F8}',
+    'f9': '{F9}',
+    'f10': '{F10}',
+    'f11': '{F11}',
+    'f12': '{F12}',
     'space': ' ',
-    'add': '+',
-    'subtract': '-'
+    ' ': ' '
   };
   
-  let keyStr = keyMap[key.toLowerCase()] || key.toUpperCase();
-  
-  const modPrefix = {
-    'command': '^',
+  const modMap = {
     'control': '^',
     'ctrl': '^',
     'alt': '%',
-    'shift': '+'
+    'shift': '+',
+    'command': '^'
   };
   
-  let prefix = modifiers.map(m => modPrefix[m.toLowerCase()]).filter(Boolean).join('');
+  let keyCode = keyMap[key.toLowerCase()] || key.toUpperCase();
+  let modifierStr = modifiers.map(m => modMap[m.toLowerCase()] || '').join('');
   
   const script = `
     Add-Type -AssemblyName System.Windows.Forms
-    Start-Sleep -Milliseconds 50
-    [System.Windows.Forms.SendKeys]::SendWait("${prefix}${keyStr}")
+    Start-Sleep -Milliseconds 10
+    [System.Windows.Forms.SendKeys]::SendWait("${modifierStr}${keyCode}")
   `;
   
   try {
@@ -166,23 +202,19 @@ function keyTap(key, modifiers = []) {
 }
 
 function scroll(x, y, direction, amount = 3) {
-  moveMouse(x, y);
-  
-  const dirMap = {
-    'up': -120,
-    'down': 120,
-    'left': -120,
-    'right': 120
-  };
-  
-  const delta = (dirMap[direction] || -120) * amount;
+  const scrollAmount = direction === 'up' ? -120 * amount : (direction === 'down' ? 120 * amount : 0);
+  const hScrollAmount = direction === 'left' ? -120 * amount : (direction === 'right' ? 120 * amount : 0);
   
   const script = `
+    Add-Type -AssemblyName System.Windows.Forms
     Add-Type -MemberDefinition @"
 [DllImport("user32.dll")]
-public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
+public static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, uint dwExtraInfo);
+private const uint MOUSEEVENTF_WHEEL = 0x0800;
+private const uint MOUSEEVENTF_HWHEEL = 0x01000;
 "@ -Name "Mouse" -Namespace "Win32" -PassThru | Out-Null
-[Win32.Mouse]::mouse_event(0x0800, 0, 0, ${delta}, 0)
+Start-Sleep -Milliseconds 10
+[Win32.Mouse]::mouse_event(0x0800, 0, 0, ${scrollAmount}, 0)
   `;
   
   try {
@@ -190,11 +222,8 @@ public static extern void mouse_event(uint dwFlags, int dx, int dy, int dwData, 
       stdio: 'ignore',
       windowsHide: true
     });
-  } catch {
-    execSync(`powershell -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('{PGUP}')"`, {
-      stdio: 'ignore',
-      windowsHide: true
-    });
+  } catch (err) {
+    console.warn('[Automation/Win] Scroll failed:', err.message);
   }
 }
 
@@ -208,11 +237,52 @@ function getMousePos() {
     const output = execSync(`powershell -ExecutionPolicy Bypass -Command "${script.replace(/\n/g, ' ')}"`, {
       encoding: 'utf8',
       windowsHide: true
-    });
-    const [x, y] = output.trim().split(',').map(Number);
+    }).trim();
+    const [x, y] = output.split(',').map(Number);
     return { x, y };
-  } catch {
+  } catch (err) {
     return { x: 0, y: 0 };
+  }
+}
+
+async function findWindow(windowTitle) {
+  const script = `
+    Get-Process | Where-Object { $_.MainWindowTitle -like "*${windowTitle}*" } | Select-Object -First 1 -ExpandProperty Id
+  `;
+  
+  try {
+    const pid = execSync(`powershell -ExecutionPolicy Bypass -Command "${script}"`, {
+      encoding: 'utf8',
+      windowsHide: true
+    }).trim();
+    return pid ? parseInt(pid) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function clickElementByTitle(title) {
+  const script = `
+    Add-Type -AssemblyName UIAutomationClient
+    Add-Type -AssemblyName UIAutomationTypes
+    $root = [System.Windows.Automation.AutomationElement]::RootElement
+    $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, "${title}")
+    $element = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    if ($element) {
+      $invokePattern = $element.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)
+      $invokePattern.Invoke()
+      Write-Output "success"
+    }
+  `;
+  
+  try {
+    const result = execSync(`powershell -ExecutionPolicy Bypass -Command "${script.replace(/\n/g, ' ')}"`, {
+      encoding: 'utf8',
+      windowsHide: true
+    }).trim();
+    return { success: result === 'success' };
+  } catch (e) {
+    return { success: false, error: e.message };
   }
 }
 
@@ -224,5 +294,7 @@ module.exports = {
   keyTap,
   scroll,
   getMousePos,
-  isAvailable: true
+  findWindow,
+  clickElementByTitle,
+  backend: 'native'
 };
