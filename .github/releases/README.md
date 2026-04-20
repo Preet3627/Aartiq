@@ -1,80 +1,23 @@
-# Comet AI Release Notes
+# 🚀 Comet AI Release Notes
 
-Release notes for all Comet AI Browser versions.
+<div align="center">
 
----
+**Version** | **Date** | **Channel** | **Status**
+------------|----------|--------------|------------
+[v0.2.9.3](#v0923) | 2026-04-20 | Stable | Latest
+[v0.2.9.1](#v0921) | 2026-04-17 | Stable | Previous
+[v0.2.9](#v029) | 2026-04-13 | Stable | Old
+[v0.2.8.2](#v0282) | 2026-04-09 | Stable | Old
+[v0.2.8.1](#v0281) | 2026-04-06 | Stable | Old
+[v0.2.7.1](#v0271) | 2026-04-03 | Stable | Old
 
-## 📋 Version History
-
-| Version | Date | Channel | Highlights |
-|---------|------|---------|------------|
-| [v0.2.9.3](./v0.2.9.3.md) | 2026-04-20 | Stable | Siri/Shortcuts, Windows/Linux Integration, Native alternatives |
-| [v0.2.9.1](./v0.2.9.1.md) | 2026-04-17 | Stable | Native AI Sidebar V2, Thuki-inspired |
-| [v0.2.9](./v0.2.9.md) | 2026-04-13 | Stable | PDF orchestration, virtualized BrowserView |
-| [v0.2.8](./v0.2.8.md) | 2026-04-09 | Stable | Release workflow optimization |
-
----
-
-## 🚀 Latest Release: v0.2.9.3
-
-### Highlights
-
-This release introduces **comprehensive platform ecosystem integration** including Siri/Shortcuts on macOS, Windows Shortcuts/Voice/Copilot, Linux desktop integration, and native alternatives for clicking/OCR.
-
-### New Features
-
-#### 🍎 Apple Integration (macOS)
-- **Siri Shortcuts** - 12 pre-configured shortcuts via App Intents
-- **URL Scheme** - `comet-ai://` protocol
-- **Voice Control** - Dictation + Text-to-Speech
-- **Raycast Integration** - Extension support
-- **Apple Intelligence** - On-device AI
-
-#### 🪟 Windows Integration
-- **Windows Shortcuts** - Create shortcuts for Comet actions
-- **Voice Control** - PowerShell TTS/STT
-- **Microsoft Copilot** - `com.microsoft.copilot:` protocol
-
-#### 🐧 Linux Integration
-- **GNOME/KDE/XFCE/MATE** - Desktop detection
-- **espeak** - 80+ voices for TTS
-- **notify-send** - Desktop notifications
-- **.desktop files** - Desktop shortcut generation
-
-#### 🔄 Native Click Alternatives
-- **macOS**: steve CLI → AppleScript → robotjs
-- **Windows**: nut.js → xa11y → robotjs  
-- **Linux**: xdotool → xte/xinput → robotjs
-
-#### 📷 Native OCR Alternatives
-- **macOS**: uniOCR (Vision) → RustO! → Native Vision → Tesseract
-- **Windows**: uniOCR → RustO! → Windows OCR → Tesseract
-- **Linux**: uniOCR → RustO! → AT-SPI2 → Tesseract
-
-### Bug Fixes
-
-1. **PDF Generation** - Removed "Protected Ecosystem" watermark
-2. **macOS Build** - Fixed with ad-hoc signing
-3. **GitHub Actions** - Fixed code signing error
+</div>
 
 ---
 
-## 📂 Release File Structure
+## 📥 Download Latest
 
-```
-.github/releases/
-├── README.md              # This file
-├── v0.2.9.3.md           # Latest stable
-├── v0.2.9.1.md           # Previous stable
-├── v0.2.9.md             # Older stable
-└── v0.2.8.md             # Older stable
-```
-
----
-
-## 📥 Download
-
-**Latest:** [v0.2.9.3](https://github.com/Preet3627/Comet-AI/releases/latest)
+**[v0.2.9.3](https://github.com/Preet3627/Comet-AI/releases/latest)**
 
 | Platform | Download |
 |----------|----------|
@@ -82,6 +25,97 @@ This release introduces **comprehensive platform ecosystem integration** includi
 | macOS (Apple Silicon) | [Comet-AI-0.2.9.3-arm64.dmg](https://github.com/Preet3627/Comet-AI/releases/latest/download/Comet-AI-0.2.9.3-arm64.dmg) |
 | Windows | [Comet-AI-0.2.9.3.exe](https://github.com/Preet3627/Comet-AI/releases/latest/download/Comet-AI-0.2.9.3.exe) |
 | Linux | [Comet-AI-0.2.9.3.AppImage](https://github.com/Preet3627/Comet-AI/releases/latest/download/Comet-AI-0.2.9.3.AppImage) |
+
+---
+
+## 📋 Release Notes
+
+---
+
+### 🟢 v0.2.9.3
+
+**Release Date:** April 20, 2026  
+**Channel:** Stable  
+**Status:** Latest
+
+**Highlights:**
+- 🍎 **Siri & Apple Shortcuts** - 12 pre-configured shortcuts, URL scheme
+- 🪟 **Windows Integration** - Shortcuts, Voice Control, Copilot
+- 🐧 **Linux Integration** - GNOME/KDE, espeak (80+ voices), notifications
+- 🔄 **Native Click Alternatives** - steve, nut.js, xa11y
+- 📷 **Native OCR** - uniOCR, RustO! (PaddleOCR 99.3%)
+
+[Read Full Notes](./v0.2.9.3.md)
+
+---
+
+### 🟢 v0.2.9.1
+
+**Release Date:** April 17, 2026  
+**Channel:** Stable
+
+**Highlights:**
+- 🍎 **Native AI Sidebar V2** - Thuki-inspired SwiftUI
+- 🎯 **Morphing Container** - Spotlight-style input bar
+- ⌨️ **Command Suggestions** - `/screen`, `/think`, `/search`
+- 🤖 **Multi-Provider LLM** - Ollama, OpenAI, Anthropic, Gemini
+
+[Read Full Notes](./v0.2.9.1.md)
+
+---
+
+### 🟢 v0.2.9
+
+**Release Date:** April 13, 2026  
+**Channel:** Stable
+
+**Highlights:**
+- 📚 **Documentation Website** - Full docs browser.ponsrischool.in
+- 📡 **Live Model Catalogs** - Automatic latest-model fetching
+- 🍎 **Apple Intelligence Bridge** - Native Swift integration
+
+[Read Full Notes](./v0.2.9.md)
+
+---
+
+### 🟢 v0.2.8.2
+
+**Release Date:** April 9, 2026  
+**Channel:** Stable
+
+**Highlights:**
+- 🎨 **Swift UI Improvements** - THINK UI, hidden title bar
+- 📝 **OCR Fixes** - JSON parsing, robotJS integration
+
+[Read Full Notes](./v0.2.8.2.md)
+
+---
+
+### 🟢 v0.2.8.1
+
+**Release Date:** April 6, 2026  
+**Channel:** Stable
+
+**Highlights:**
+- 🔍 **Docs Search** - Fuzzy search
+- 🤖 **AI Crawlability** - llms.txt, sitemap
+- 🛠️ **TypeScript Fixes** - Compilation errors resolved
+
+[Read Full Notes](./v0.2.8.1.md)
+
+---
+
+### 🟢 v0.2.7.1
+
+**Release Date:** April 3, 2026  
+**Channel:** Stable
+
+**Highlights:**
+- 🔐 **Auth Hardening** - Firebase auth improvements
+- 🧹 **IPC Handler Cleanup** - Refactored handlers
+- 🔒 **Automation Service Locks** - Better concurrency
+
+[Read Full Notes](./v0.2.7.1.md)
 
 ---
 
@@ -96,24 +130,20 @@ This release introduces **comprehensive platform ecosystem integration** includi
 
 ---
 
-## 🔧 Build from Source
+## 📂 All Release Notes
 
-```bash
-# Clone
-git clone https://github.com/Preet3627/Comet-AI.git
-cd Comet-AI
-
-# Install dependencies
-cd comet-browser && npm install
-
-# Run in development
-npm run dev
-
-# Build for production
-npm run build
+```
+.github/releases/
+├── README.md              # This file
+├── v0.2.9.3.md         # Latest
+├── v0.2.9.1.md
+├── v0.2.9.md
+├── v0.2.8.2.md
+├── v0.2.8.1.md
+└── v0.2.7.1.md
 ```
 
 ---
 
-*Built by a 16-year-old developer*
+*Built by a 16-year-old developer*  
 *Comet AI - An open-source AI-native browser*
