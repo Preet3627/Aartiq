@@ -319,6 +319,63 @@ ipcMain.handle('siri:get-shortcuts-list', async () => {
   ];
 });
 
+// ============================================================================
+// WINDOWS INTEGRATION
+// ============================================================================
+const { setupWindowsIPCHandlers, registerWindowsProtocol, handleWindowsShortcutAction, handleURLSchemeEvent: handleWindowsURLScheme, startVoiceRecognition, speakText: winSpeak, getWindowsVoices, createWindowsShortcut, generateShortcutURL: generateWinURL } = require('./src/lib/windows-integration.js');
+
+if (process.platform === 'win32') {
+  setupWindowsIPCHandlers();
+  registerWindowsProtocol();
+  console.log('[Main] Registered Windows integration');
+}
+
+ipcMain.handle('windows:execute-action', async (event, action, params) => {
+  if (process.platform !== 'win32') return { error: 'Not Windows' };
+  return await handleWindowsShortcutAction(action, params);
+});
+
+ipcMain.handle('windows:voice:listen', async (event, params) => {
+  if (process.platform !== 'win32') return { error: 'Not Windows' };
+  return await startVoiceRecognition(params);
+});
+
+ipcMain.handle('windows:voice:speak', async (event, text, params) => {
+  if (process.platform !== 'win32') return { error: 'Not Windows' };
+  return await winSpeak(text, params);
+});
+
+ipcMain.handle('windows:voice:get-voices', async () => {
+  if (process.platform !== 'win32') return ['Microsoft David', 'Microsoft Zira'];
+  return await getWindowsVoices();
+});
+
+ipcMain.handle('windows:copilot:open', async () => {
+  if (process.platform !== 'win32') return { error: 'Not Windows' };
+  const { shell } = require('electron');
+  try {
+    await shell.openPath('com.microsoft.copilot:');
+    return { success: true };
+  } catch {
+    await shell.openExternal('https://copilot.microsoft.com');
+    return { success: true, message: 'Opened web Copilot' };
+  }
+});
+
+ipcMain.handle('windows:create-shortcut', async (event, name, action, params) => {
+  if (process.platform !== 'win32') return { error: 'Not Windows' };
+  return await createWindowsShortcut(name, action, params);
+});
+
+ipcMain.handle('windows:generate-url', async (event, action, params) => {
+  return generateWinURL(action, params);
+});
+
+ipcMain.handle('windows:register-protocol', async () => {
+  if (process.platform !== 'win32') return { error: 'Not Windows' };
+  return await registerWindowsProtocol();
+});
+
 ipcMain.handle('get-app-icon', async (event, appPath) => {
   try {
     const icon = await app.getFileIcon(appPath, { size: 'normal' });

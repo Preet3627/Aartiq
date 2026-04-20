@@ -647,4 +647,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getVoices: () => ipcRenderer.invoke('applescript:get-voices'),
     createShortcut: (name, params) => ipcRenderer.invoke('applescript:create-shortcut', name, params),
   },
+
+  // Windows Integration
+  windows: {
+    executeAction: (action, params) => ipcRenderer.invoke('windows:execute-action', action, params),
+    openCopilot: () => ipcRenderer.invoke('windows:copilot:open'),
+    voice: {
+      listen: (params) => ipcRenderer.invoke('windows:voice:listen', params),
+      speak: (text, params) => ipcRenderer.invoke('windows:voice:speak', text, params),
+      getVoices: () => ipcRenderer.invoke('windows:voice:get-voices'),
+    },
+    generateUrl: (action, params) => ipcRenderer.invoke('windows:generate-url', action, params),
+    createShortcut: (name, action, params) => ipcRenderer.invoke('windows:create-shortcut', name, action, params),
+    getShortcutsList: () => ipcRenderer.invoke('windows:get-shortcuts-list'),
+    registerProtocol: () => ipcRenderer.invoke('windows:register-protocol'),
+  },
 });
