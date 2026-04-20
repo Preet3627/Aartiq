@@ -303,12 +303,7 @@ jobs:
             artifact_name: comet-ai-windows
           - target: macos
             os: macos-latest
-            build_cmd: |
-              if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
-                npm run build && npx electron-builder --mac --x64
-              else
-                npm run dist:mac
-              fi
+            build_cmd: "npm run build && npx electron-builder --mac --x64 --publish never --c mac.signingIdentity='-'"
             artifact_glob: "comet-browser/release/*.dmg"
             artifact_name: comet-ai-macos
           - target: linux
