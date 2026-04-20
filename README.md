@@ -35,6 +35,9 @@ Most browsers are built for monetization. Comet is built for **control**.
 - 🔄 **Automatic latest-model fetching** — Official live model catalogs for Gemini, OpenAI, Claude, Groq, and xAI
 - 🍎 **Apple Intelligence support on macOS** — Native Swift bridge with readiness checks, local summaries, and image generation
 - 🪟 **Windows Integration** — Shortcuts, Voice Control, PowerShell TTS, and Microsoft Copilot companion
+- 🐧 **Linux Integration** — GNOME/KDE, espeak, notifications, desktop shortcuts
+- 🔄 **Native Click Alternatives** — Platform-specific automation (steve, nut.js, xa11y)
+- 📷 **Native OCR Alternatives** — Platform OCR chain (uniOCR, RustO!, PaddleOCR 99.3%)
 
 ---
 
@@ -335,6 +338,74 @@ Create Windows Shortcuts for Comet:
 ```javascript
 await window.electronAPI.windows.createShortcut('Chat AI', 'chat', { message: 'Hello' });
 ```
+
+### 🐧 Linux Integration (NEW!)
+
+Comet integrates with Linux desktop environments (GNOME, KDE, XFCE, MATE, Cinnamon):
+
+| Feature | Implementation |
+|---------|----------------|
+| URL Scheme | `comet-ai://` protocol handler |
+| Desktop Detection | Auto-detects GNOME/KDE/XFCE/MATE |
+| Voice (TTS) | espeak with 80+ voices |
+| Notifications | notify-send, kdialog |
+| Volume Control | pactl (PulseAudio), qdbus |
+| Desktop Shortcuts | .desktop file generation |
+
+```javascript
+// Get desktop environment
+const desktop = await window.electronAPI.linux.getDesktop();
+// 'gnome', 'kde', 'xfce', 'mate', 'cinnamon'
+
+// Text-to-Speech via espeak
+await window.electronAPI.linux.voice.speak('Hello from Comet!');
+
+// Get available voices
+const voices = await window.electronAPI.linux.voice.getVoices();
+// [{ name: 'english', language: 'en' }, { name: 'french', language: 'fr' }, ...]
+
+// Desktop notifications
+await window.electronAPI.linux.notify('Comet AI', 'Task completed!');
+
+// Create desktop shortcut
+await window.electronAPI.linux.createShortcut('Chat AI', 'chat', { message: 'Hello' });
+
+// Install to GNOME Activities
+await window.electronAPI.linux.installGnomeShortcut('Open AI', 'chat', { message: 'Hello' });
+```
+
+#### Linux URL Scheme Actions
+| URL | Action |
+|-----|--------|
+| `comet-ai://chat?message=...` | Send message to AI |
+| `comet-ai://search?query=...` | Web search |
+| `comet-ai://navigate?url=...` | Open URL |
+| `comet-ai://create-pdf?content=...` | Generate PDF |
+| `comet-ai::volume?level=50` | Set volume |
+| `comet-ai::notify?title=...&message=...` | Desktop notification |
+
+### 🔄 Native Click Alternatives
+
+Cross-platform automation priority chain for reliable clicking:
+
+| Priority | macOS | Windows | Linux |
+|----------|-------|---------|-------|
+| 1st | steve CLI (AXUIElement) | nut.js | xdotool |
+| 2nd | AppleScript | xa11y | xte/xinput |
+| 3rd | robotjs | robotjs | robotjs |
+
+### 📷 Native OCR Alternatives
+
+Cross-platform OCR for screen text recognition:
+
+| Priority | macOS | Windows | Linux |
+|----------|-------|---------|-------|
+| 1st | uniOCR (Vision) | uniOCR (Windows) | uniOCR (Tesseract) |
+| 2nd | RustO! (PaddleOCR) | RustO! | RustO! |
+| 3rd | Native Vision API | Windows OCR | AT-SPI2 |
+| 4th | Tesseract.js | Tesseract.js | Tesseract.js |
+
+---
 
 ### 🪟 Microsoft Copilot on Windows
 
