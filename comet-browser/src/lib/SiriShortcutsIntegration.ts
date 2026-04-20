@@ -189,7 +189,7 @@ export async function listenWithDictation(timeout: number = 10000): Promise<stri
       
       const checkInterval = setInterval(async () => {
         try {
-          const clip = (await execPromise('pbpaste')).trim();
+          const clip = (await execPromise('pbpaste')).stdout.trim();
           if (clip && clip !== lastClip) {
             lastClip = clip;
             clearInterval(checkInterval);
