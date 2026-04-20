@@ -240,8 +240,9 @@ export function setupSiriShortcutsHandlers(): void {
 }
 
 export function registerURLScheme(): boolean {
-  if (process.defaultAgent) {
-    return process.defaultAgent.setAsDefaultProtocolClient(COMET_URL_SCHEME);
+  const electronProcess = process as unknown as { defaultAgent?: { setAsDefaultProtocolClient: (scheme: string) => boolean } };
+  if (electronProcess.defaultAgent) {
+    return electronProcess.defaultAgent.setAsDefaultProtocolClient(COMET_URL_SCHEME);
   }
   return false;
 }
