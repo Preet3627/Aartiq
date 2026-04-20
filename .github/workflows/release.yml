@@ -303,7 +303,12 @@ jobs:
             artifact_name: comet-ai-windows
           - target: macos
             os: macos-latest
-            build_cmd: npm run dist:mac
+            build_cmd: |
+              if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+                npm run build && npx electron-builder --mac --x64
+              else
+                npm run dist:mac
+              fi
             artifact_glob: "comet-browser/release/*.dmg"
             artifact_name: comet-ai-macos
           - target: linux
@@ -354,14 +359,14 @@ jobs:
         env:
           NEXT_PUBLIC_APP_NAME: Comet
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '' }}
+          CSC_LINK: ${{ secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD || '' }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
         run: ${{ matrix.build_cmd }}
 
       - name: Upload Artifact
