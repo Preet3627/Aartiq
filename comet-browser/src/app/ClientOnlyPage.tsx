@@ -159,12 +159,25 @@ export default function Home() {
   const [onboardingLoaded, setOnboardingLoaded] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      new Promise<void>(resolve => setTimeout(resolve, 2500)),
-      window.electronAPI?.getOnboardingState?.().then(() => { setOnboardingLoaded(true); }).catch(() => { setOnboardingLoaded(true); }) || Promise.resolve()
-    ]).then(() => {
-      setIsInitializing(false);
-    });
+    let active = true;
+
+    const loadOnboardingState = async () => {
+      try {
+        await window.electronAPI?.getOnboardingState?.();
+      } catch {
+        // Boot should not stall on onboarding state lookup failures.
+      } finally {
+        if (!active) return;
+        setOnboardingLoaded(true);
+        setIsInitializing(false);
+      }
+    };
+
+    loadOnboardingState();
+
+    return () => {
+      active = false;
+    };
   }, []);
   const isMacOS = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
   const [showClipboard, setShowClipboard] = useState(false);

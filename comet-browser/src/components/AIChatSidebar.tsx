@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -23,7 +23,6 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import dracula from 'react-syntax-highlighter/dist/cjs/styles/prism/dracula';
-import { useTypingAnimation, TypingCursor, StreamingText } from '@/hooks/useTypingAnimation';
 
 // Imported modular components
 import ThinkingPanel, { type ThinkingStep } from './ai/ThinkingPanel';
@@ -153,242 +152,29 @@ const renderMarkdownContent = (content: string) => (
   </ReactMarkdown>
 );
 
-const StreamingMarkdownMessage: React.FC<{
+const StreamingMarkdownMessage = memo(function StreamingMarkdownMessage({
+  content,
+  animate,
+}: {
   content: string;
   animate: boolean;
-  theme?: string;
-}> = ({ content, animate, theme = 'graphite' }) => {
-  const shouldReduceMotion = useReducedMotion();
-  const gradientPreset = useUIStore((state) => state.gradientPreset);
-  const activeTheme = theme || gradientPreset;
-  
-  const themeColors: Record<string, string> = {
-    graphite: '#6366f1',
-    crystal: '#06b6d4',
-    obsidian: '#a855f7',
-    azure: '#3b82f6',
-    rose: '#ec4899',
-    aurora: '#10b981',
-    nebula: '#8b5cf6',
-    liquidGlass: '#818cf8',
-    translucent: '#94a3b8',
-  };
-  
-  const cursorColor = themeColors[activeTheme] || themeColors.graphite;
-
-  const [visibleLength, setVisibleLength] = useState(() => (
-    animate && !shouldReduceMotion ? 0 : content.length
-  ));
-
-  useEffect(() => {
-    if (!animate || shouldReduceMotion) {
-      setVisibleLength(content.length);
-      return;
-    }
-
-    setVisibleLength((current) => {
-      if (content.length < current) {
-        return content.length;
-      }
-      return current;
-    });
-
-    let cancelled = false;
-    let timerId: number | null = null;
-
-    const tick = () => {
-      if (cancelled) return;
-      setVisibleLength((current) => {
-        if (current >= content.length) {
-          return current;
-        }
-
-        const remaining = content.length - current;
-        const step = remaining > 320 ? 28
-          : remaining > 160 ? 14
-            : remaining > 60 ? 6
-              : 2;
-        const next = Math.min(content.length, current + step);
-
-        if (next < content.length) {
-          timerId = window.setTimeout(tick, 18);
-        }
-
-        return next;
-      });
-    };
-
-    timerId = window.setTimeout(tick, 18);
-
-    return () => {
-      cancelled = true;
-      if (timerId !== null) {
-        window.clearTimeout(timerId);
-      }
-    };
-  }, [animate, content, shouldReduceMotion]);
-
-  const displayedContent = animate && !shouldReduceMotion
-    ? content.slice(0, visibleLength)
-    : content;
-  const showCaret = animate && !shouldReduceMotion && visibleLength < content.length;
+}) {
+  const markdownContent = useMemo(() => (
+    content ? renderMarkdownContent(content) : null
+  ), [content]);
 
   return (
     <div className="space-y-2">
-      {displayedContent ? renderMarkdownContent(displayedContent) : null}
-      {showCaret ? (
-        <motion.span
+      {markdownContent}
+      {animate ? (
+        <span
           aria-hidden="true"
-          className="inline-flex h-4 w-2 rounded-full"
-          style={{ 
-            backgroundColor: cursorColor,
-            boxShadow: `0 0 14px ${cursorColor}73`
-          }}
-          animate={{ 
-            opacity: [1, 0.3, 1],
-            scaleY: [1, 1.2, 1]
-          }}
-          transition={{ duration: 1.2, repeat: Infinity, ease: 'easeInOut' }}
+          className="inline-flex h-4 w-1.5 rounded-full animate-pulse bg-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.35)]"
         />
       ) : null}
     </div>
   );
-};
-
-// Enhanced Streaming Message with Smooth Typing Animation
-const EnhancedStreamingMessage: React.FC<{
-  content: string;
-  isStreaming: boolean;
-  animate: boolean;
-}> = ({ content, isStreaming, animate }) => {
-  const shouldReduceMotion = useReducedMotion();
-  const { displayedContent, showCursor } = useTypingAnimation(content, isStreaming, {
-    enabled: animate && !shouldReduceMotion,
-    speed: 'normal',
-    showCursor: true,
-    cursorStyle: 'blink',
-    chunkSize: 4,
-    minDelay: 6,
-    maxDelay: 20,
-  });
-
-  return (
-    <div className="space-y-2">
-      {displayedContent ? renderMarkdownContent(displayedContent) : null}
-      {showCursor && isStreaming && (
-        <motion.span
-          aria-hidden="true"
-          className="inline-flex h-4 w-2 rounded-full"
-          style={{
-            backgroundColor: '#38bdf8',
-            boxShadow: '0 0 16px rgba(56, 189, 248, 0.5), 0 0 8px rgba(56, 189, 248, 0.3)',
-          }}
-          animate={{ 
-            opacity: [1, 0.4, 1],
-            scaleY: [1, 1.15, 1],
-            boxShadow: [
-              '0 0 16px rgba(56, 189, 248, 0.5), 0 0 8px rgba(56, 189, 248, 0.3)',
-              '0 0 20px rgba(56, 189, 248, 0.7), 0 0 12px rgba(56, 189, 248, 0.5)',
-              '0 0 16px rgba(56, 189, 248, 0.5), 0 0 8px rgba(56, 189, 248, 0.3)',
-            ],
-          }}
-          transition={{ 
-            duration: 1.4, 
-            repeat: Infinity, 
-            ease: 'easeInOut' 
-          }}
-        />
-      )}
-    </div>
-  );
-};
-
-// Progress-based Streaming Message (for smoother long text)
-const ProgressStreamingMessage: React.FC<{
-  content: string;
-  isStreaming: boolean;
-  animate: boolean;
-}> = ({ content, isStreaming, animate }) => {
-  const shouldReduceMotion = useReducedMotion();
-  const [visibleLength, setVisibleLength] = useState(0);
-  const animationRef = useRef<number | null>(null);
-  const lastUpdateRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (!animate || shouldReduceMotion) {
-      setVisibleLength(content.length);
-      return;
-    }
-
-    if (!isStreaming) {
-      setVisibleLength(content.length);
-      return;
-    }
-
-    const animateProgress = (timestamp: number) => {
-      if (!lastUpdateRef.current) lastUpdateRef.current = timestamp;
-      const delta = timestamp - lastUpdateRef.current;
-      
-      if (delta > 12) {
-        lastUpdateRef.current = timestamp;
-        
-        setVisibleLength(prev => {
-          if (prev >= content.length) {
-            animationRef.current = null;
-            return prev;
-          }
-          
-          const remaining = content.length - prev;
-          const step = remaining > 500 ? Math.max(8, Math.floor(remaining / 40))
-            : remaining > 200 ? Math.max(4, Math.floor(remaining / 30))
-            : remaining > 50 ? 3
-            : 1;
-          
-          return Math.min(prev + step, content.length);
-        });
-      }
-      
-      animationRef.current = requestAnimationFrame(animateProgress);
-    };
-
-    animationRef.current = requestAnimationFrame(animateProgress);
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [animate, shouldReduceMotion, isStreaming, content]);
-
-  useEffect(() => {
-    if (!isStreaming && content.length > 0) {
-      setVisibleLength(content.length);
-    }
-  }, [isStreaming, content]);
-
-  const displayedContent = animate && !shouldReduceMotion
-    ? content.slice(0, visibleLength)
-    : content;
-  const showCaret = animate && !shouldReduceMotion && visibleLength < content.length;
-
-  return (
-    <div className="space-y-2">
-      {displayedContent ? renderMarkdownContent(displayedContent) : null}
-      {showCaret && (
-        <motion.span
-          aria-hidden="true"
-          className="inline-flex h-4 w-2 rounded-full"
-          style={{
-            backgroundColor: '#38bdf8',
-            boxShadow: '0 0 14px rgba(56, 189, 248, 0.45)',
-          }}
-          animate={{ opacity: [1, 0.25, 1] }}
-          transition={{ duration: 1.0, repeat: Infinity, ease: 'easeInOut' }}
-        />
-      )}
-    </div>
-  );
-};
+});
 
 // ---------------------------------------------------------------------------
 // Main Component
@@ -4926,19 +4712,17 @@ I've successfully executed the following real tasks:
           })}
           {isLoading && messages.length === 0 && <ThinkingIndicator theme={gradientPreset as ThemePreset} variant="full" />}
           {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'model' && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }} 
-              animate={{ opacity: 1, y: 0 }}
+            <div
               className="flex items-center gap-3 px-4 py-3 rounded-2xl border"
               style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(6,182,212,0.1))', borderColor: 'rgba(99,102,241,0.3)' }}
             >
               <div className="flex gap-1">
-                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span className="w-2 h-2 rounded-full bg-indigo-400/80 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-indigo-400/60 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-indigo-400/40 animate-pulse" />
               </div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Comet is thinking</span>
-            </motion.div>
+            </div>
           )}
         </AnimatePresence>
         <div ref={messagesEndRef} />

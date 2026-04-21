@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useMemo } from 'react';
 
 export interface TypingAnimationOptions {
   enabled?: boolean;
@@ -30,97 +29,16 @@ const DEFAULT_OPTIONS: Required<TypingAnimationOptions> = {
   maxDelay: 25,
 };
 
-const SPEED_MULTIPLIERS = {
-  fast: 0.5,
-  normal: 1,
-  slow: 2,
-};
-
 export function useTypingAnimation(
   content: string,
   isStreaming: boolean,
   options: TypingAnimationOptions = {}
 ): UseTypingAnimationResult {
   const opts = { ...DEFAULT_OPTIONS, ...options };
-  const [displayedContent, setDisplayedContent] = useState('');
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [showCursor, setShowCursor] = useState(false);
-  
-  const lastContentRef = useRef('');
-  const animationFrameRef = useRef<number | null>(null);
-  const chunkQueueRef = useRef<string[]>([]);
-  const isProcessingRef = useRef(false);
-
-  useEffect(() => {
-    if (!opts.enabled) {
-      setDisplayedContent(content);
-      setProgress(100);
-      setShowCursor(false);
-      setIsAnimating(false);
-      return;
-    }
-
-    if (isStreaming) {
-      setIsAnimating(true);
-      setShowCursor(true);
-      
-      if (content !== lastContentRef.current) {
-        const newContent = content.slice(lastContentRef.current.length);
-        lastContentRef.current = content;
-        
-        const chunks: string[] = [];
-        for (let i = 0; i < newContent.length; i += opts.chunkSize) {
-          chunks.push(newContent.slice(i, i + opts.chunkSize));
-        }
-        chunkQueueRef.current.push(...chunks);
-        
-        if (!isProcessingRef.current) {
-          processChunks();
-        }
-      }
-    } else {
-      setIsAnimating(false);
-      setShowCursor(false);
-      lastContentRef.current = content;
-      setDisplayedContent(content);
-    }
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [content, isStreaming, opts.enabled, opts.chunkSize]);
-
-  const processChunks = useCallback(() => {
-    if (chunkQueueRef.current.length === 0) {
-      isProcessingRef.current = false;
-      return;
-    }
-
-    isProcessingRef.current = true;
-    const chunk = chunkQueueRef.current.shift();
-    
-    if (chunk) {
-      setDisplayedContent(prev => prev + chunk);
-      
-      const newProgress = Math.round(((displayedContent.length + chunk.length) / Math.max(content.length, 1)) * 100);
-      setProgress(Math.min(newProgress, 99));
-    }
-
-    const delay = opts.minDelay + Math.random() * (opts.maxDelay - opts.minDelay);
-    const adjustedDelay = delay * SPEED_MULTIPLIERS[opts.speed];
-
-    animationFrameRef.current = window.setTimeout(processChunks, adjustedDelay);
-  }, [content.length, opts.minDelay, opts.maxDelay, opts.speed, displayedContent.length]);
-
-  useEffect(() => {
-    if (!isStreaming && displayedContent !== content) {
-      setDisplayedContent(content);
-      setProgress(100);
-    }
-  }, [isStreaming, content, displayedContent]);
+  const displayedContent = opts.enabled ? content : content;
+  const isAnimating = opts.enabled && isStreaming;
+  const progress = content.length > 0 ? 100 : 0;
+  const showCursor = Boolean(opts.showCursor && isStreaming);
 
   return { displayedContent, isAnimating, progress, showCursor };
 }
@@ -136,43 +54,34 @@ export function TypingCursor({
 }) {
   if (style === 'block') {
     return (
-      <motion.span
+      <span
         aria-hidden="true"
-        className="inline-block w-2.5 h-5 rounded-sm"
+        className="inline-block w-2.5 h-5 rounded-sm animate-pulse"
         style={{ backgroundColor: color, boxShadow: `0 0 12px ${glowColor}` }}
-        animate={{ opacity: [1, 0.3, 1] }}
-        transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
       />
     );
   }
 
   if (style === 'line') {
     return (
-      <motion.span
+      <span
         aria-hidden="true"
-        className="inline-block w-0.5 h-5 rounded-full"
+        className="inline-block w-0.5 h-5 rounded-full animate-pulse"
         style={{ backgroundColor: color, boxShadow: `0 0 10px ${glowColor}` }}
-        animate={{ opacity: [1, 0.2, 1] }}
-        transition={{ duration: 0.9, repeat: Infinity, ease: 'easeInOut' }}
       />
     );
   }
 
   return (
-    <motion.span
+    <span
       aria-hidden="true"
-      className="inline-block w-2 h-5"
-      animate={{ 
-        opacity: [1, 0],
-        scaleY: [1, 0]
-      }}
-      transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 0.3 }}
+      className="inline-block w-2 h-5 animate-pulse"
     >
       <span
         className="inline-block w-0.5 h-full rounded-full"
         style={{ backgroundColor: color, boxShadow: `0 0 8px ${glowColor}` }}
       />
-    </motion.span>
+    </span>
   );
 }
 
@@ -198,22 +107,15 @@ export function StreamingText({
   return (
     <span className={className}>
       {displayedContent}
-      <AnimatePresence>
-        {showCursor && (
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="inline-block ml-0.5"
-          >
-            <TypingCursor 
-              style={options.cursorStyle || 'blink'}
-              color={cursorColor}
-              glowColor={cursorGlowColor}
-            />
-          </motion.span>
-        )}
-      </AnimatePresence>
+      {showCursor && (
+        <span className="inline-block ml-0.5">
+          <TypingCursor
+            style={options.cursorStyle || 'blink'}
+            color={cursorColor}
+            glowColor={cursorGlowColor}
+          />
+        </span>
+      )}
     </span>
   );
 }
@@ -228,42 +130,12 @@ export function useWordByWordAnimation(
   isStreaming: boolean,
   options: WordByWordAnimationOptions = {}
 ): { words: string[]; currentIndex: number; showCursor: boolean } {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [showCursor, setShowCursor] = useState(false);
-  const lastContentRef = useRef('');
-  
   const words = useMemo(() => {
     if (!content) return [];
     return content.split(/(\s+)/).filter(Boolean);
   }, [content]);
-
-  useEffect(() => {
-    if (isStreaming) {
-      setShowCursor(true);
-      
-      if (content !== lastContentRef.current) {
-        const newContent = content.slice(lastContentRef.current.length);
-        lastContentRef.current = content;
-        
-        const newWords = newContent.split(/(\s+)/).filter(Boolean);
-        let delay = 0;
-        
-        newWords.forEach((word, i) => {
-          setTimeout(() => {
-            setCurrentIndex(prev => {
-              const targetIndex = words.findIndex((w, idx) => idx > prev && words.slice(0, idx).join('') === content.slice(0, words.slice(0, idx).join('').length + word.length));
-              return Math.min(prev + 1, words.length);
-            });
-          }, delay);
-          delay += options.staggerDelay || 50;
-        });
-      }
-    } else {
-      setShowCursor(false);
-      setCurrentIndex(words.length);
-    }
-  }, [content, isStreaming, words, options.staggerDelay]);
-
+  const currentIndex = words.length;
+  const showCursor = Boolean(options.showCursor && isStreaming);
   return { words, currentIndex, showCursor };
 }
 
@@ -278,24 +150,14 @@ export function WordByWordText({
   return (
     <span className={className}>
       {words.slice(0, currentIndex).map((word, i) => (
-        <motion.span
-          key={`${i}-${word}`}
-          initial={{ opacity: 0, y: 4, filter: 'blur(4px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          transition={{ duration: 0.15, ease: 'easeOut' }}
-        >
+        <span key={`${i}-${word}`}>
           {word}
-        </motion.span>
+        </span>
       ))}
       {showCursor && (
-        <motion.span
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="inline-block ml-0.5"
-        >
+        <span className="inline-block ml-0.5">
           <TypingCursor style={options.cursorStyle || 'line'} />
-        </motion.span>
+        </span>
       )}
     </span>
   );

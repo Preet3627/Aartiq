@@ -1,4 +1,14 @@
-const { app, BrowserWindow, ipcMain, BrowserView, session, shell, clipboard, dialog, globalShortcut, Menu, protocol, desktopCapturer, screen, nativeImage, net, safeStorage, nativeTheme } = require('electron');
+// ULTRA EARLY: GPU flags must be before ANY electron import
+const electron = require('electron');
+const { app, BrowserWindow, ipcMain, BrowserView, session, shell, clipboard, dialog, globalShortcut, Menu, protocol, desktopCapturer, screen, nativeImage, net, safeStorage, nativeTheme } = electron;
+
+// Enable GPU immediately
+if (app.isPackaged) {
+  app.commandLine.appendSwitch('--enable-gpu');
+  app.commandLine.appendSwitch('--enable-accelerated-2d-canvas');
+  app.commandLine.appendSwitch('--use-gl', 'metal');
+  app.commandLine.appendSwitch('--ignore-gpu-blacklist');
+}
 const { mcpManager } = require('./src/lib/mcp-server-registry.js');
 const QRCode = require('qrcode');
 const contextMenuRaw = require('electron-context-menu');
@@ -2052,7 +2062,7 @@ app.on('open-url', async (event, url) => {
   }
   // Raycast commands via comet-ai:// scheme (registered separately)
   else if (url.startsWith('comet-ai://') || url.startsWith('comet://')) {
-    const command = pathname || params.command || 'index';
+    const command = parsed.hostname || pathname || params.command || 'index';
     console.log('[Main] URL scheme command:', command, params);
 
     // Map commands to IPC events
@@ -2664,17 +2674,6 @@ function showWebview() {
 }
 
 
-
-// ULTRA EARLY: These flags MUST be at the very top, before app.ready
-// Add safety flags for packaged app to ensure window shows + GPU acceleration
-if (app.isPackaged) {
-  app.commandLine.appendSwitch('--disable-gpu-sandbox');
-  app.commandLine.appendSwitch('--no-sandbox');
-  app.commandLine.appendSwitch('--disable-dev-shm-usage');
-  app.commandLine.appendSwitch('--enable-gpu');
-  app.commandLine.appendSwitch('--enable-accelerated-2d-canvas');
-  console.log('[Main] Early GPU safety flags added for packaged app');
-}
 
 async function createWindow() {
   // GPU compositing optimizations for transparent overlays
@@ -5931,6 +5930,8 @@ function handleDeepLink(url) {
         store.set('auth_token', token);
         console.log('[Main] Auth token saved to secure storage.');
       }
+    } else if (parsedUrl.protocol === `${RAYCAST_PROTOCOL}:` || parsedUrl.protocol === 'comet:') {
+      handleURLSchemeEvent(url);
     }
   } catch (e) {
     console.error('Failed to parse deep link:', e);
@@ -7510,9 +7511,8 @@ app.whenReady().then(async () => {
   // Ollama is LAZY — it only connects when the user selects it in Settings.
   // ──────────────────────────────────────────────────────────────────────────
   // Initialize Desktop Automation Services (LOCAL ONLY — no network calls)
-  // CRITICAL: Services are lazy-loaded to speed up app startup time
   
-  // Step 1: Only initialize essential services (permissions + command executor)
+  // Load immediately
   (async () => {
     try {
       await permissionStore.load();
@@ -7526,7 +7526,7 @@ app.whenReady().then(async () => {
         ANTHROPIC_API_KEY: store.get('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || '',
         OLLAMA_BASE_URL: store.get('ollama_base_url') || 'http://127.0.0.1:11434',
       });
-      console.log('[Main] CometAiEngine initialized (lazy - on demand).');
+      console.log('[Main] CometAiEngine initialized.');
 
       robotService = new RobotService(permissionStore);
       console.log(`[Main] RobotService initialized (available: ${robotService.isAvailable}).`);
@@ -7574,7 +7574,11 @@ app.whenReady().then(async () => {
   })();
 
   // Handle deep link if launched with one
-  const launchUrl = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
+  const launchUrl = process.argv.find(arg =>
+    arg.startsWith(`${PROTOCOL}://`) ||
+    arg.startsWith(`${RAYCAST_PROTOCOL}://`) ||
+    arg.startsWith('comet://')
+  );
   if (launchUrl && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.once('did-finish-load', () => {
       handleDeepLink(launchUrl);

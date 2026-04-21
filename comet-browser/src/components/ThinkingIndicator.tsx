@@ -1,8 +1,7 @@
 "use client";
 
 import React from 'react';
-import { motion } from 'framer-motion';
-import { AIThinkingAnimation, type AnimationType } from './ai/AIThinkingAnimation';
+import type { AnimationType } from './ai/AIThinkingAnimation';
 
 export type ThemePreset = 'graphite' | 'crystal' | 'obsidian' | 'azure' | 'rose' | 'aurora' | 'nebula' | 'liquidGlass' | 'translucent' | 'dark' | 'light';
 
@@ -118,16 +117,34 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
   const colors = themeGradients[theme];
   const textStylesVariant = textStyles[variant];
   const isMinimal = variant === 'minimal';
+  const dotSizeClass = size === 'lg' ? 'w-3 h-3' : size === 'sm' ? 'w-1.5 h-1.5' : 'w-2.5 h-2.5';
+  const sublabel = animationType === 'reasoning'
+    ? 'Processing reasoning chains...'
+    : animationType === 'streaming'
+      ? 'Streaming response...'
+      : 'Streaming thoughts through the live workspace';
+
+  const dots = (
+    <div className="flex items-center gap-1.5">
+      {[1, 0.7, 0.45].map((opacity, index) => (
+        <span
+          key={index}
+          className={`${dotSizeClass} rounded-full animate-pulse`}
+          style={{
+            backgroundColor: colors.primary,
+            opacity,
+            animationDelay: `${index * 120}ms`,
+            boxShadow: `0 0 10px ${colors.primary}55`,
+          }}
+        />
+      ))}
+    </div>
+  );
 
   if (isMinimal) {
     return (
       <div className="flex items-center gap-2">
-        <AIThinkingAnimation
-          type={animationType}
-          theme={theme}
-          size={size}
-          showText={false}
-        />
+        {dots}
       </div>
     );
   }
@@ -137,18 +154,8 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
       className={`relative flex items-center ${variantStyles[variant]} self-start group backdrop-blur-2xl overflow-hidden border ${colors.border} ${colors.shadow}`}
       style={{ background: colors.bg }}
     >
-      <motion.div
-        className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent"
-        animate={{ opacity: [0.3, 0.6, 0.35] }}
-        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-      />
-
-      <AIThinkingAnimation
-        type={animationType}
-        theme={theme}
-        size={size}
-        showText={false}
-      />
+      <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-40" />
+      {dots}
 
       {showText && (
         <div className="relative z-10 flex flex-col gap-1">
@@ -159,27 +166,13 @@ export const ThinkingIndicator: React.FC<ThinkingIndicatorProps> = ({
             >
               Neural Flow
             </span>
-            <div className="flex gap-1">
-              {[0, 0.18, 0.36].map((delay) => (
-                <motion.div
-                  key={delay}
-                  animate={{ y: [0, -3, 0], opacity: [0.25, 1, 0.25] }}
-                  transition={{ duration: 0.95, repeat: Infinity, delay }}
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{ backgroundColor: colors.primary }}
-                />
-              ))}
-            </div>
+            <div className="flex gap-1">{dots}</div>
           </div>
           <p 
             className={`${textStylesVariant.sublabel} font-bold uppercase tracking-[0.24em] opacity-45 whitespace-nowrap`}
             style={{ color: colors.secondary }}
           >
-            {animationType === 'reasoning' 
-              ? 'Processing reasoning chains...' 
-              : animationType === 'streaming'
-              ? 'Streaming response...'
-              : 'Streaming thoughts through the live workspace'}
+            {sublabel}
           </p>
         </div>
       )}

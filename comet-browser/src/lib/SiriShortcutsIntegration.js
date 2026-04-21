@@ -85,13 +85,38 @@ function generateShortcutURL(action, params = {}) {
   return `comet-ai://${action}${paramString ? '?' + paramString : ''}`;
 }
 
+function normalizeShortcutAction(action = '') {
+  return `${action || ''}`.trim().replace(/^\/+/, '') || 'index';
+}
+
+function normalizeNavigationTarget(raw = '') {
+  const value = `${raw || ''}`.trim();
+  if (!value) return '';
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value)) {
+    return value;
+  }
+  return `https://${value}`;
+}
+
+function getMainWindow() {
+  const windows = BrowserWindow.getAllWindows().filter(w => !w.isDestroyed());
+  return windows[0] || null;
+}
+
+function focusMainWindow(win) {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
 function parseCometURL(url) {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'comet-ai:') {
       return null;
     }
-    const action = parsed.hostname;
+    const action = normalizeShortcutAction(parsed.hostname || parsed.pathname);
     const params = {};
     parsed.searchParams.forEach((value, key) => {
       params[key] = value;
@@ -103,32 +128,78 @@ function parseCometURL(url) {
 }
 
 async function executeShortcutAction(action, params = {}) {
-  console.log(`[SiriShortcuts] Executing: ${action}`, params);
+  const normalizedAction = normalizeShortcutAction(action);
+  console.log(`[SiriShortcuts] Executing: ${normalizedAction}`, params);
 
-  const mainWindow = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
-
-  const actionMaps = {
-    'chat': 'ai:chat-message',
-    'navigate': 'browser:navigate',
-    'search': 'ai:search',
-    'create-pdf': 'ai:create-pdf',
-    'run-command': 'shell:execute',
-    'open-app': 'system:open-app',
-    'screenshot': 'system:screenshot',
-    'volume': 'system:set-volume',
-    'schedule': 'ai:schedule',
-    'ask-ai': 'ai:ask-speaking',
-    'voice-chat': 'ai:voice-chat',
-  };
-
-  const ipcChannel = actionMaps[action];
-  
-  if (mainWindow && ipcChannel) {
-    mainWindow.webContents.send(ipcChannel, params);
-    return { success: true };
+  const mainWindow = getMainWindow();
+  if (mainWindow) {
+    focusMainWindow(mainWindow);
   }
 
-  if (action === 'volume') {
+  if (normalizedAction === 'chat' || normalizedAction === 'ask-ai') {
+    const prompt = params.message || params.prompt || params.query || '';
+    if (mainWindow && prompt) {
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      mainWindow.webContents.send('ai-chat-input-text', prompt);
+      return { success: true, message: 'Prompt sent to Comet AI' };
+    }
+  }
+
+  if (normalizedAction === 'voice-chat') {
+    if (mainWindow) {
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      return { success: true, message: 'Opened Comet AI chat' };
+    }
+  }
+
+  if (normalizedAction === 'navigate') {
+    const target = normalizeNavigationTarget(params.url);
+    if (mainWindow && target) {
+      mainWindow.webContents.send('navigate-to-url', target);
+      return { success: true, message: `Opening ${target}` };
+    }
+  }
+
+  if (normalizedAction === 'search') {
+    const query = `${params.query || params.prompt || ''}`.trim();
+    if (mainWindow && query) {
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      mainWindow.webContents.send('add-new-tab', searchUrl);
+      return { success: true, message: `Searching for ${query}` };
+    }
+  }
+
+  if (normalizedAction === 'create-pdf') {
+    const title = `${params.title || 'Document'}`.trim();
+    const content = `${params.content || ''}`.trim();
+    if (mainWindow && content) {
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      mainWindow.webContents.send('ai-chat-input-text', `Create a PDF titled "${title}" with this content:\n\n${content}`);
+      return { success: true, message: `Prepared PDF request for ${title}` };
+    }
+  }
+
+  if (normalizedAction === 'run-command') {
+    const command = `${params.command || ''}`.trim();
+    if (mainWindow && command) {
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      mainWindow.webContents.send('ai-chat-input-text', `Run this shell command: ${command}`);
+      return { success: true, message: 'Prepared shell command request' };
+    }
+  }
+
+  if (normalizedAction === 'schedule') {
+    const task = `${params.task || ''}`.trim();
+    const schedule = `${params.cron || params.schedule || ''}`.trim();
+    if (mainWindow && task) {
+      const scheduleText = schedule ? ` Run it at: ${schedule}.` : '';
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      mainWindow.webContents.send('ai-chat-input-text', `Schedule this task: ${task}.${scheduleText}`);
+      return { success: true, message: 'Prepared scheduling request' };
+    }
+  }
+
+  if (normalizedAction === 'volume') {
     const level = Math.max(0, Math.min(100, parseInt(params.level) || 50));
     try {
       await execPromise(`osascript -e "set volume output volume ${level}"`);
@@ -138,7 +209,7 @@ async function executeShortcutAction(action, params = {}) {
     }
   }
 
-  if (action === 'open-app') {
+  if (normalizedAction === 'open-app') {
     const { appName } = params;
     try {
       if (appName) {
@@ -150,7 +221,7 @@ async function executeShortcutAction(action, params = {}) {
     }
   }
 
-  return { success: false, message: `Unknown action: ${action}` };
+  return { success: false, message: `Unknown or unsupported action: ${normalizedAction}` };
 }
 
 async function speakWithSiri(text) {
@@ -173,7 +244,7 @@ async function listenWithDictation(timeout = 10000) {
       
       const checkInterval = setInterval(async () => {
         try {
-          const clip = (await execPromise('pbpaste')).trim();
+          const clip = (await execPromise('pbpaste')).stdout.trim();
           if (clip && clip !== lastClip) {
             lastClip = clip;
             clearInterval(checkInterval);
@@ -224,10 +295,10 @@ function setupSiriShortcutsHandlers() {
 }
 
 function registerURLScheme() {
-  if (process.defaultAgent) {
-    return process.defaultAgent.setAsDefaultProtocolClient(exports.COMET_URL_SCHEME);
+  if (process.defaultApp && process.argv.length >= 2) {
+    return app.setAsDefaultProtocolClient(exports.COMET_URL_SCHEME, process.execPath, [path.resolve(process.argv[1])]);
   }
-  return false;
+  return app.setAsDefaultProtocolClient(exports.COMET_URL_SCHEME);
 }
 
 function handleURLSchemeEvent(url) {

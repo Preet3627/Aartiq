@@ -20,6 +20,12 @@
 ---
 🆕 **Agentic Power** | **Background Scheduling** | **Cross-Device Sync**
 
+## Recent Fixes
+
+- **Extreme macOS packaged-app stability/performance fix** — default mac builds now target native Apple Silicon (`arm64`) instead of forcing Intel/Rosetta on M-series Macs
+- **Launchable local mac test builds** — dedicated local packaging path for arm64 smoke testing without release-signing blockers
+- **Shortcuts deep-link repair** — packaged builds now advertise `comet-ai://`, and macOS URL routing correctly resolves shortcut actions again
+
 ## Why Comet?
 
 Most browsers are built for monetization. Comet is built for **control**.
@@ -34,6 +40,7 @@ Most browsers are built for monetization. Comet is built for **control**.
 - ⏰ **Background Scheduling** — Schedule tasks like "generate PDF at 8am daily"
 - 🔄 **Automatic latest-model fetching** — Official live model catalogs for Gemini, OpenAI, Claude, Groq, and xAI
 - 🍎 **Apple Intelligence support on macOS** — Native Swift bridge with readiness checks, local summaries, and image generation
+- 🚀 **Native Apple Silicon packaging** — packaged macOS builds now run as `arm64` by default for better responsiveness on M-series Macs
 - 🪟 **Windows Integration** — Shortcuts, Voice Control, PowerShell TTS, and Microsoft Copilot companion
 - 🐧 **Linux Integration** — GNOME/KDE, espeak, notifications, desktop shortcuts
 - 🔄 **Native Click Alternatives** — Platform-specific automation (steve, nut.js, xa11y)
@@ -208,6 +215,23 @@ Azure OpenAI setup note:
 - Enter your Azure API key and your model/deployment name in Comet settings
 
 ### 🍎 Native macOS Features
+
+#### Shortcuts & Siri Deep Links
+
+Comet supports macOS Shortcuts flows through the `comet-ai://` protocol.
+
+- **Fixed packaged protocol registration** — release builds now include `comet-ai://` in the app bundle metadata
+- **Fixed URL routing** — shortcut actions now resolve from the URL host correctly instead of falling through to the wrong command
+- **Working custom shortcut actions** — Chat, Search, Navigate, Open App, Set Volume, Schedule Task, and prompt-driven AI flows can be launched from the Shortcuts app
+
+Examples:
+
+```text
+comet-ai://chat?message=Summarize%20my%20notes
+comet-ai://search?query=latest%20Electron%20deep%20links
+comet-ai://navigate?url=https%3A%2F%2Felectronjs.org
+comet-ai://schedule?task=Generate%20daily%20brief&cron=0%208%20*%20*%20*
+```
 
 #### AI Sidebar V2 (Native SwiftUI)
 
@@ -916,4 +940,3 @@ Comet AI Browser is built by a **16-year-old student** from India, preparing for
 [Apache 2.0](LICENSE) © 2026 Comet-AI
 
 ---
-

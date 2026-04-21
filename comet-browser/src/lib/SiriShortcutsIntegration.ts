@@ -98,13 +98,37 @@ export function generateShortcutURL(action: string, params: Record<string, strin
   return `comet-ai://${action}${paramString ? '?' + paramString : ''}`;
 }
 
+function normalizeShortcutAction(action: string = ''): string {
+  return `${action || ''}`.trim().replace(/^\/+/, '') || 'index';
+}
+
+function normalizeNavigationTarget(raw: string = ''): string {
+  const value = `${raw || ''}`.trim();
+  if (!value) return '';
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(value)) {
+    return value;
+  }
+  return `https://${value}`;
+}
+
+function getMainWindow(): BrowserWindow | null {
+  return BrowserWindow.getAllWindows().find(w => !w.isDestroyed()) ?? null;
+}
+
+function focusMainWindow(win: BrowserWindow | null): void {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
 export function parseCometURL(url: string): ShortcutAction | null {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'comet-ai:') {
       return null;
     }
-    const action = parsed.hostname;
+    const action = normalizeShortcutAction(parsed.hostname || parsed.pathname);
     const params: Record<string, string> = {};
     parsed.searchParams.forEach((value, key) => {
       params[key] = value;
@@ -119,32 +143,78 @@ export async function executeShortcutAction(
   action: string,
   params: Record<string, string> = {}
 ): Promise<{ success: boolean; message?: string }> {
-  console.log(`[SiriShortcuts] Executing: ${action}`, params);
+  const normalizedAction = normalizeShortcutAction(action);
+  console.log(`[SiriShortcuts] Executing: ${normalizedAction}`, params);
 
-  const mainWindow = BrowserWindow.getAllWindows().find(w => !w.isDestroyed());
-
-  const actionMaps: Record<string, string> = {
-    'chat': 'ai:chat-message',
-    'navigate': 'browser:navigate',
-    'search': 'ai:search',
-    'create-pdf': 'ai:create-pdf',
-    'run-command': 'shell:execute',
-    'open-app': 'system:open-app',
-    'screenshot': 'system:screenshot',
-    'volume': 'system:set-volume',
-    'schedule': 'ai:schedule',
-    'ask-ai': 'ai:ask-speaking',
-    'voice-chat': 'ai:voice-chat',
-  };
-
-  const ipcChannel = actionMaps[action];
-  
-  if (mainWindow && ipcChannel) {
-    mainWindow.webContents.send(ipcChannel, params);
-    return { success: true };
+  const mainWindow = getMainWindow();
+  if (mainWindow) {
+    focusMainWindow(mainWindow);
   }
 
-  if (action === 'volume') {
+  if (normalizedAction === 'chat' || normalizedAction === 'ask-ai') {
+    const prompt = params.message || params.prompt || params.query || '';
+    if (mainWindow && prompt) {
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      mainWindow.webContents.send('ai-chat-input-text', prompt);
+      return { success: true, message: 'Prompt sent to Comet AI' };
+    }
+  }
+
+  if (normalizedAction === 'voice-chat') {
+    if (mainWindow) {
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      return { success: true, message: 'Opened Comet AI chat' };
+    }
+  }
+
+  if (normalizedAction === 'navigate') {
+    const target = normalizeNavigationTarget(params.url);
+    if (mainWindow && target) {
+      mainWindow.webContents.send('navigate-to-url', target);
+      return { success: true, message: `Opening ${target}` };
+    }
+  }
+
+  if (normalizedAction === 'search') {
+    const query = `${params.query || params.prompt || ''}`.trim();
+    if (mainWindow && query) {
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+      mainWindow.webContents.send('add-new-tab', searchUrl);
+      return { success: true, message: `Searching for ${query}` };
+    }
+  }
+
+  if (normalizedAction === 'create-pdf') {
+    const title = `${params.title || 'Document'}`.trim();
+    const content = `${params.content || ''}`.trim();
+    if (mainWindow && content) {
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      mainWindow.webContents.send('ai-chat-input-text', `Create a PDF titled "${title}" with this content:\n\n${content}`);
+      return { success: true, message: `Prepared PDF request for ${title}` };
+    }
+  }
+
+  if (normalizedAction === 'run-command') {
+    const command = `${params.command || ''}`.trim();
+    if (mainWindow && command) {
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      mainWindow.webContents.send('ai-chat-input-text', `Run this shell command: ${command}`);
+      return { success: true, message: 'Prepared shell command request' };
+    }
+  }
+
+  if (normalizedAction === 'schedule') {
+    const task = `${params.task || ''}`.trim();
+    const schedule = `${params.cron || params.schedule || ''}`.trim();
+    if (mainWindow && task) {
+      const scheduleText = schedule ? ` Run it at: ${schedule}.` : '';
+      mainWindow.webContents.send('execute-shortcut', 'open-ai-chat');
+      mainWindow.webContents.send('ai-chat-input-text', `Schedule this task: ${task}.${scheduleText}`);
+      return { success: true, message: 'Prepared scheduling request' };
+    }
+  }
+
+  if (normalizedAction === 'volume') {
     const level = Math.max(0, Math.min(100, parseInt(params.level) || 50));
     try {
       await execPromise(`osascript -e "set volume output volume ${level}"`);
@@ -154,7 +224,7 @@ export async function executeShortcutAction(
     }
   }
 
-  if (action === 'open-app') {
+  if (normalizedAction === 'open-app') {
     const { appName } = params;
     try {
       if (appName) {
@@ -166,13 +236,13 @@ export async function executeShortcutAction(
     }
   }
 
-  return { success: false, message: `Unknown action: ${action}` };
+  return { success: false, message: `Unknown or unsupported action: ${normalizedAction}` };
 }
 
 export async function speakWithSiri(text: string): Promise<boolean> {
   const safeText = text.replace(/"/g, '\\"').replace(/\n/g, ' ');
   try {
-    await execPromise(`osascript -e 'say "${safeText}"`);
+    await execPromise(`osascript -e 'say "${safeText}"'`);
     return true;
   } catch {
     return false;
@@ -240,11 +310,10 @@ export function setupSiriShortcutsHandlers(): void {
 }
 
 export function registerURLScheme(): boolean {
-  const electronProcess = process as unknown as { defaultAgent?: { setAsDefaultProtocolClient: (scheme: string) => boolean } };
-  if (electronProcess.defaultAgent) {
-    return electronProcess.defaultAgent.setAsDefaultProtocolClient(COMET_URL_SCHEME);
+  if (process.defaultApp && process.argv.length >= 2) {
+    return app.setAsDefaultProtocolClient(COMET_URL_SCHEME, process.execPath, [path.resolve(process.argv[1])]);
   }
-  return false;
+  return app.setAsDefaultProtocolClient(COMET_URL_SCHEME);
 }
 
 export function handleURLSchemeEvent(url: string): void {
