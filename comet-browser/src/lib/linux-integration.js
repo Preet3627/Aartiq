@@ -294,16 +294,6 @@ async function startVoiceRecognition(options = {}) {
     return { success: false, message: error.message };
   }
 }
-      
-      try {
-        const text = await executeCommand('speech recognition /tmp/comet_voice.wav');
-        resolve({ success: true, text: text.trim() });
-      } catch (e) {
-        resolve({ success: false, message: 'Could not recognize speech' });
-      }
-    });
-  });
-}
 
 function generateShortcutURL(action, params = {}) {
   const baseURL = `comet-ai://${action}`;

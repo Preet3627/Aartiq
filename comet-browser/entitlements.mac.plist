@@ -35,5 +35,11 @@
     <array>
       <string>$(AppIdentifierPrefix)in.ponsri.shared.auth</string>
     </array>
+    <key>com.apple.private.tcc.manager</key>
+    <true/>
+    <key>com.apple.private.tcc.manager.check-by-audit-token</key>
+    <true/>
+    <key>com.apple.security.tcc.attributions</key>
+    <true/>
   </dict>
 </plist>

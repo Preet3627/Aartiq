@@ -297,12 +297,6 @@ ipcMain.handle('applescript:run', async (event, command, params) => {
   return await runAppleScript(command, params);
 });
 
-ipcMain.handle('voice:parse-command', async (event, transcript) => {
-  return voiceParseCommand(transcript);
-});
-
-ipcMain.handle('siri:get-url-scheme', () => COMET_URL_SCHEME);
-
 ipcMain.handle('siri:get-shortcuts-list', async () => {
   return [
     { id: 'chat', name: 'Chat with AI', description: 'Send message to Comet AI' },
@@ -2671,6 +2665,17 @@ function showWebview() {
 
 
 
+// ULTRA EARLY: These flags MUST be at the very top, before app.ready
+// Add safety flags for packaged app to ensure window shows + GPU acceleration
+if (app.isPackaged) {
+  app.commandLine.appendSwitch('--disable-gpu-sandbox');
+  app.commandLine.appendSwitch('--no-sandbox');
+  app.commandLine.appendSwitch('--disable-dev-shm-usage');
+  app.commandLine.appendSwitch('--enable-gpu');
+  app.commandLine.appendSwitch('--enable-accelerated-2d-canvas');
+  console.log('[Main] Early GPU safety flags added for packaged app');
+}
+
 async function createWindow() {
   // GPU compositing optimizations for transparent overlays
   app.commandLine.appendSwitch('--enable-gpu-rasterization');
@@ -2728,9 +2733,27 @@ async function createWindow() {
     });
   }
 
-  const isMacPlatform = process.platform === 'darwin';
+// Disable state restoration (if supported)
+if (app.setShouldRestoreStateOnLaunch) {
+  app.setShouldRestoreStateOnLaunch(false);
+}
 
-  mainWindow = new BrowserWindow({
+const isMacPlatform = process.platform === 'darwin';
+
+// ULTRA AGGRESSIVE FIX: Force new window to show without waiting
+const forceShowWindow = (window) => {
+  if (window) {
+    window.show();
+    window.focus();
+    // Additional force-show attempts
+    setTimeout(() => { window.show(); window.focus(); }, 100);
+    setTimeout(() => { window.show(); window.focus(); }, 500);
+    setTimeout(() => { window.show(); window.focus(); }, 1000);
+    setTimeout(() => { window.show(); window.focus(); }, 2000);
+  }
+};
+
+mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     icon: path.join(__dirname, 'out', 'icon.ico'),
@@ -2751,9 +2774,14 @@ async function createWindow() {
     },
     titleBarStyle: isMacPlatform ? 'hiddenInset' : 'hidden',
     backgroundColor: '#0D0E1C',
-    show: false,
-    paintWhenInitiallyHidden: false
+    show: true,
+    paintWhenInitiallyHidden: true
   });
+
+  console.log('[Main] Window created with show=true');
+
+  // ULTRA AGGRESSIVE: Force show window repeatedly
+  forceShowWindow(mainWindow);
 
   registerWindow(mainWindow);
 
@@ -2797,6 +2825,29 @@ async function createWindow() {
       windowShown = true;
     }
   }, 3000);
+
+  // CRASH RECOVERY: Detect if renderer process crashes or gets stuck
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('[Main] Renderer process crashed:', details.reason);
+    if (details.reason !== 'clean-exit') {
+      console.log('[Main] Attempting to recover window...');
+      // Force show the window anyway - at least user can see error
+      mainWindow.show();
+      mainWindow.focus();
+      windowShown = true;
+    }
+  });
+
+  // Also handle 'did-fail-to-load' more aggressively
+  mainWindow.webContents.on('did-fail-to-load', (event, errorCode, errorDescription) => {
+    console.error(`[Main] Failed to load: ${errorCode} - ${errorDescription}`);
+    // Force show window so user sees error page
+    if (!windowShown && mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+      windowShown = true;
+    }
+  });
 
   mainWindow.setMenuBarVisibility(false);
 
@@ -7524,7 +7575,7 @@ app.whenReady().then(async () => {
 
   // Handle deep link if launched with one
   const launchUrl = process.argv.find(arg => arg.startsWith(`${PROTOCOL}://`));
-  if (launchUrl) {
+  if (launchUrl && mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.once('did-finish-load', () => {
       handleDeepLink(launchUrl);
     });
@@ -7533,22 +7584,24 @@ app.whenReady().then(async () => {
   migrateLegacyAuthSession();
 
   // Load persistent auth token on startup from secure storage
-  mainWindow.webContents.once('did-finish-load', () => {
-    const savedSession = getSecureAuthSession();
-    if (savedSession) {
-      if (savedSession.token) {
-        mainWindow.webContents.send('load-auth-token', savedSession.token);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      const savedSession = getSecureAuthSession();
+      if (savedSession) {
+        if (savedSession.token) {
+          mainWindow.webContents.send('load-auth-token', savedSession.token);
+        }
+        if (savedSession.user) {
+          mainWindow.webContents.send('load-user-info', savedSession.user);
+        }
+        mainWindow.webContents.send('load-auth-session', {
+          ...savedSession,
+          storageBackend: getAuthStorageBackend(),
+        });
+        console.log('[Main] Loaded and sent persistent auth session to renderer.');
       }
-      if (savedSession.user) {
-        mainWindow.webContents.send('load-user-info', savedSession.user);
-      }
-      mainWindow.webContents.send('load-auth-session', {
-        ...savedSession,
-        storageBackend: getAuthStorageBackend(),
-      });
-      console.log('[Main] Loaded and sent persistent auth session to renderer.');
-    }
-  });
+    });
+  }
 
   // Handle successful authentication from external sources (e.g. landing page)
   ipcMain.on('set-auth-token', (event, token) => {
