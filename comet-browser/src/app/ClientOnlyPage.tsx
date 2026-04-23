@@ -290,6 +290,12 @@ export default function Home() {
     setIsBrowserDisabled(false);
   }, []);
 
+  // Go back to browser view from any studio/panel
+  const goBackToBrowser = useCallback(() => {
+    store.setActiveView('browser');
+    window.electronAPI?.showAllViews();
+  }, []);
+
   // Synchronize inputValue with store.currentUrl
   useEffect(() => {
     setInputValue(store.currentUrl);
@@ -369,10 +375,16 @@ export default function Home() {
 
   const handleSidebarClick = (item: any) => {
     if (item.view) {
+      // Keep AI sidebar open when opening other panels (except settings-related)
+      // Only close sidebar for settings/profile popups
+      const shouldCloseSidebar = item.popup === 'settings';
+      
       store.setActiveView(item.view);
       setActiveManager(null);
-      setShowClipboard(false);
-      setShowSettings(false);
+      if (shouldCloseSidebar) {
+        setShowClipboard(false);
+        setShowSettings(false);
+      }
       if (item.view !== 'browser') {
         window.electronAPI?.hideAllViews();
       } else {
@@ -386,7 +398,7 @@ export default function Home() {
     } else if (item.popup) {
       switch (item.popup) {
         case 'plugins': setShowExtensionsPopup(true); setIsBrowserDisabled(true); break;
-        case 'settings': openSettingsPanel(); break;
+        case 'settings': openSettingsPanel(); setShowClipboard(false); break;
         case 'clipboard': openClipboardPanel(); break;
         case 'translate': openTranslateDialog(); break;
         case 'search': setShowSpotlightSearch(true); setIsBrowserDisabled(true); break;
@@ -686,14 +698,33 @@ export default function Home() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        // Close all panels when ESC is pressed
-        if (showSettings) setShowSettings(false);
-        if (showDownloads) setShowDownloads(false);
-        if (showCart) setShowCart(false);
-        if (showExtensionsPopup) setShowExtensionsPopup(false);
-        if (showClipboard) setShowClipboard(false);
-        if (showSpotlightSearch) setShowSpotlightSearch(false);
-        if (aiOverview) setAiOverview(null);
+        // Close all panels and return to browser view when ESC is pressed
+        let panelWasOpen = false;
+        
+        if (showSettings) { setShowSettings(false); panelWasOpen = true; }
+        if (showDownloads) { setShowDownloads(false); panelWasOpen = true; }
+        if (showCart) { setShowCart(false); panelWasOpen = true; }
+        if (showExtensionsPopup) { setShowExtensionsPopup(false); panelWasOpen = true; }
+        if (showClipboard) { setShowClipboard(false); panelWasOpen = true; }
+        if (showSpotlightSearch) { setShowSpotlightSearch(false); panelWasOpen = true; }
+        if (showTranslateDialog) { closeTranslateDialog(); panelWasOpen = true; }
+        if (showSchedulingModal) { setShowSchedulingModal(false); panelWasOpen = true; }
+        if (aiOverview) { setAiOverview(null); panelWasOpen = true; }
+        
+        // Close any active manager (Studio, PresentOn, etc.) and return to browser
+        if (activeManager) { 
+          setActiveManager(null); 
+          store.setActiveView('browser');
+          window.electronAPI?.showAllViews();
+          panelWasOpen = true; 
+        }
+        
+        // If no panel was open, check if we're in a non-browser view and return to browser
+        if (!panelWasOpen && store.activeView !== 'browser') {
+          store.setActiveView('browser');
+          window.electronAPI?.showAllViews();
+        }
+        
         return;
       }
 
@@ -725,7 +756,7 @@ export default function Home() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [showSettings, showDownloads, showCart, showExtensionsPopup, showClipboard, showSpotlightSearch, aiOverview]);
+  }, [showSettings, showDownloads, showCart, showExtensionsPopup, showClipboard, showSpotlightSearch, aiOverview, showTranslateDialog, showSchedulingModal, activeManager, store.activeView]);
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -1768,7 +1799,7 @@ export default function Home() {
   const useNativeSidebarShell = isMacOS && store.macNativeSidebarMode === 'swiftui';
   const useNativeActionChainShell = isMacOS && store.macNativeActionChainMode === 'swiftui';
   const keepNativeBridgeMounted = useNativeSidebarShell || useNativeActionChainShell;
-  const showEmbeddedSidebar = store.sidebarOpen && !useNativeSidebarShell && store.activeView === 'browser';
+  const showEmbeddedSidebar = store.sidebarOpen && !useNativeSidebarShell;
 
   useEffect(() => {
     if (!window.electronAPI?.updateNativeMacUIState) return;
@@ -1833,7 +1864,7 @@ export default function Home() {
         </AnimatePresence>
 
         <AnimatePresence>
-          {(showEmbeddedSidebar || keepNativeBridgeMounted) && store.activeView === 'browser' && (
+          {(showEmbeddedSidebar || keepNativeBridgeMounted) && store.sidebarOpen && (
             <motion.div
               drag="x"
               dragConstraints={{ left: 0, right: 0 }}
@@ -2194,46 +2225,73 @@ export default function Home() {
             )}
             {store.activeView === 'workspace' && (
               <div key="workspace" className="absolute inset-0 z-50 bg-[var(--primary-bg)] h-full w-full">
+                <button onClick={goBackToBrowser} className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-[var(--glass-bg)] border hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-all" title="Close (Esc)">
+                  <X size={20} />
+                </button>
                 <WorkspaceDashboard />
               </div>
             )}
             {store.activeView === 'pdf' && (
               <div key="pdf" className="absolute inset-0 z-50 bg-[var(--primary-bg)] h-full w-full">
+                <button onClick={goBackToBrowser} className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-[var(--glass-bg)] border hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-all" title="Close (Esc)">
+                  <X size={20} />
+                </button>
                 <PDFWorkspace />
               </div>
             )}
             {store.activeView === 'coding' && (
               <div key="coding" className="absolute inset-0 z-50 bg-[var(--primary-bg)] h-full w-full">
+                <button onClick={goBackToBrowser} className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-[var(--glass-bg)] border hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-all" title="Close (Esc)">
+                  <X size={20} />
+                </button>
                 <CodingDashboard />
               </div>
             )}
             {store.activeView === 'media' && (
               <div key="media" className="absolute inset-0 z-50 bg-[var(--primary-bg)] h-full w-full">
+                <button onClick={goBackToBrowser} className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-[var(--glass-bg)] border hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-all" title="Close (Esc)">
+                  <X size={20} />
+                </button>
                 <MediaStudio />
               </div>
             )}
             {store.activeView === 'documentation' && (
               <div key="documentation" className="absolute inset-0 z-50 bg-[var(--primary-bg)] overflow-auto custom-scrollbar">
+                <button onClick={goBackToBrowser} className="fixed top-4 right-4 z-50 p-2 rounded-xl bg-[var(--glass-bg)] border hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-all" title="Close (Esc)">
+                  <X size={20} />
+                </button>
                 <Documentation />
               </div>
             )}
             {store.activeView === 'presenton' && (
               <div key="presenton" className="absolute inset-0 z-50 bg-[var(--primary-bg)] h-full w-full">
+                <button onClick={goBackToBrowser} className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-[var(--glass-bg)] border hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-all" title="Close (Esc)">
+                  <X size={20} />
+                </button>
                 <PresentonStudio />
               </div>
             )}
             {store.activeView === 'passwords' && (
               <div key="passwords" className="absolute inset-0 z-50 bg-[var(--primary-bg)] h-full w-full overflow-auto custom-scrollbar pt-6">
+                <button onClick={goBackToBrowser} className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-[var(--glass-bg)] border hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-all" title="Close (Esc)">
+                  <X size={20} />
+                </button>
                 <PasswordManager />
               </div>
             )}
             {store.activeView === 'firewall' && (
               <div key="firewall" className="absolute inset-0 z-50 bg-[var(--primary-bg)] h-full w-full overflow-auto custom-scrollbar pt-6">
+                <button onClick={goBackToBrowser} className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-[var(--glass-bg)] border hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-all" title="Close (Esc)">
+                  <X size={20} />
+                </button>
                 <ProxyFirewallManager />
               </div>
             )}
             {store.activeView === 'p2psync' && (
               <div key="p2psync" className="absolute inset-0 z-50 bg-[var(--primary-bg)] h-full w-full overflow-auto custom-scrollbar pt-6">
+                <button onClick={goBackToBrowser} className="absolute top-4 right-4 z-50 p-2 rounded-xl bg-[var(--glass-bg)] border hover:bg-[var(--accent)] hover:text-white text-[var(--text-secondary)] transition-all" title="Close (Esc)">
+                  <X size={20} />
+                </button>
                 <P2PSyncManager />
               </div>
             )}

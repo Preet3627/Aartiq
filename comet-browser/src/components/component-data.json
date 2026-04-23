@@ -1,15 +1,15 @@
 {
-  "generated": "2026-04-09T14:10:21.498Z",
-  "version": "0.2.7",
+  "generated": "2026-04-23T15:45:25.422Z",
+  "version": "0.2.9",
   "desktop": {
-    "total": 132,
-    "totalLines": 36854,
+    "total": 137,
+    "totalLines": 40633,
     "byCategory": {
-      "components": 79,
+      "components": 81,
       "core": 0,
       "automation": 0,
       "service": 0,
-      "lib": 53
+      "lib": 56
     },
     "components": [
       {
@@ -38,19 +38,19 @@
       {
         "name": "types.ts",
         "path": "AIChatSidebar/types.ts",
-        "lines": 145,
+        "lines": 150,
         "description": "Types",
         "tags": [
           "AI",
           "PDF",
           "OCR"
         ],
-        "lastModified": "2026-04-08"
+        "lastModified": "2026-04-11"
       },
       {
         "name": "AIChatSidebar.tsx",
         "path": "AIChatSidebar.tsx",
-        "lines": 4567,
+        "lines": 4981,
         "description": "Chat Sidebar",
         "tags": [
           "React",
@@ -67,7 +67,7 @@
           "Windows",
           "Linux"
         ],
-        "lastModified": "2026-04-09"
+        "lastModified": "2026-04-23"
       },
       {
         "name": "AICommandQueue.tsx",
@@ -151,16 +151,17 @@
       {
         "name": "AutomationSettings.tsx",
         "path": "AutomationSettings.tsx",
-        "lines": 817,
+        "lines": 932,
         "description": "Automation Settings",
         "tags": [
           "React",
           "AI",
           "Automation",
           "PDF",
-          "macOS"
+          "macOS",
+          "Windows"
         ],
-        "lastModified": "2026-04-03"
+        "lastModified": "2026-04-23"
       },
       {
         "name": "BackendSettings.tsx",
@@ -235,7 +236,7 @@
       {
         "name": "CrossAppOCR.tsx",
         "path": "CrossAppOCR.tsx",
-        "lines": 371,
+        "lines": 374,
         "description": "Cross App",
         "tags": [
           "React",
@@ -243,7 +244,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-03-08"
+        "lastModified": "2026-04-09"
       },
       {
         "name": "DinoGame.tsx",
@@ -311,20 +312,31 @@
         "lastModified": "2026-04-01"
       },
       {
+        "name": "InitializingOverlay.tsx",
+        "path": "InitializingOverlay.tsx",
+        "lines": 66,
+        "description": "Initializing Overlay",
+        "tags": [
+          "React",
+          "macOS"
+        ],
+        "lastModified": "2026-04-13"
+      },
+      {
         "name": "KeyboardShortcutSettings.tsx",
         "path": "KeyboardShortcutSettings.tsx",
-        "lines": 65,
+        "lines": 103,
         "description": "Keyboard Shortcut Settings",
         "tags": [
           "React",
           "macOS"
         ],
-        "lastModified": "2026-04-06"
+        "lastModified": "2026-04-09"
       },
       {
         "name": "LLMProviderSettings.tsx",
         "path": "LLMProviderSettings.tsx",
-        "lines": 627,
+        "lines": 1061,
         "description": "Provider Settings",
         "tags": [
           "React",
@@ -333,22 +345,21 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-03-30"
+        "lastModified": "2026-04-15"
       },
       {
         "name": "LandingPage.tsx",
         "path": "LandingPage.tsx",
-        "lines": 384,
+        "lines": 216,
         "description": "Landing Page",
         "tags": [
           "React",
           "Security",
           "AI",
-          "Sync",
-          "PDF",
+          "Automation",
           "macOS"
         ],
-        "lastModified": "2026-03-30"
+        "lastModified": "2026-04-13"
       },
       {
         "name": "LoginPrompt.tsx",
@@ -364,7 +375,7 @@
       {
         "name": "McpSettings.tsx",
         "path": "McpSettings.tsx",
-        "lines": 487,
+        "lines": 525,
         "description": "Mcp Settings",
         "tags": [
           "React",
@@ -372,7 +383,7 @@
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-04-05"
+        "lastModified": "2026-04-12"
       },
       {
         "name": "MediaStudio.tsx",
@@ -588,7 +599,7 @@
       {
         "name": "SettingsPanel.tsx",
         "path": "SettingsPanel.tsx",
-        "lines": 1002,
+        "lines": 1023,
         "description": "Settings Panel",
         "tags": [
           "React",
@@ -601,7 +612,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-04-06"
+        "lastModified": "2026-04-12"
       },
       {
         "name": "SpotlightSearchOverlay.tsx",
@@ -618,21 +629,24 @@
       {
         "name": "StartupSetupUI.tsx",
         "path": "StartupSetupUI.tsx",
-        "lines": 320,
+        "lines": 636,
         "description": "Startup Setup",
         "tags": [
           "React",
+          "Node.js",
+          "Security",
           "AI",
           "Sync",
           "Automation",
-          "macOS"
+          "macOS",
+          "Windows"
         ],
-        "lastModified": "2026-03-30"
+        "lastModified": "2026-04-13"
       },
       {
         "name": "SyncSettings.tsx",
         "path": "SyncSettings.tsx",
-        "lines": 636,
+        "lines": 706,
         "description": "Sync Settings",
         "tags": [
           "React",
@@ -641,7 +655,7 @@
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-04-01"
+        "lastModified": "2026-04-23"
       },
       {
         "name": "TabManager.tsx",
@@ -680,13 +694,14 @@
       {
         "name": "ThinkingIndicator.tsx",
         "path": "ThinkingIndicator.tsx",
-        "lines": 79,
+        "lines": 184,
         "description": "Thinking Indicator",
         "tags": [
           "React",
+          "AI",
           "macOS"
         ],
-        "lastModified": "2026-04-04"
+        "lastModified": "2026-04-21"
       },
       {
         "name": "TitleBar.tsx",
@@ -782,7 +797,7 @@
       {
         "name": "WelcomeScreen.tsx",
         "path": "WelcomeScreen.tsx",
-        "lines": 775,
+        "lines": 345,
         "description": "Welcome Screen",
         "tags": [
           "React",
@@ -791,10 +806,9 @@
           "Sync",
           "Automation",
           "PDF",
-          "OCR",
           "macOS"
         ],
-        "lastModified": "2026-04-03"
+        "lastModified": "2026-04-13"
       },
       {
         "name": "WorkspaceDashboard.tsx",
@@ -812,10 +826,11 @@
       {
         "name": "AIConstants.ts",
         "path": "ai/AIConstants.ts",
-        "lines": 626,
+        "lines": 663,
         "description": "AIConstants",
         "tags": [
           "Node.js",
+          "SwiftUI",
           "Security",
           "AI",
           "Automation",
@@ -823,12 +838,12 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-04-08"
+        "lastModified": "2026-04-23"
       },
       {
         "name": "AISetupGuide.tsx",
         "path": "ai/AISetupGuide.tsx",
-        "lines": 475,
+        "lines": 827,
         "description": "Setup Guide",
         "tags": [
           "React",
@@ -839,12 +854,25 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-04-03"
+        "lastModified": "2026-04-13"
+      },
+      {
+        "name": "AIThinkingAnimation.tsx",
+        "path": "ai/AIThinkingAnimation.tsx",
+        "lines": 520,
+        "description": "Thinking Animation",
+        "tags": [
+          "React",
+          "AI",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-04-12"
       },
       {
         "name": "AIUtils.ts",
         "path": "ai/AIUtils.ts",
-        "lines": 1047,
+        "lines": 1090,
         "description": "AIUtils",
         "tags": [
           "Security",
@@ -854,7 +882,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-04-07"
+        "lastModified": "2026-04-13"
       },
       {
         "name": "ChartDiagram.tsx",
@@ -884,7 +912,7 @@
       {
         "name": "CollapsibleOCRMessage.tsx",
         "path": "ai/CollapsibleOCRMessage.tsx",
-        "lines": 217,
+        "lines": 225,
         "description": "CollapsibleOCRMessage",
         "tags": [
           "React",
@@ -892,7 +920,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-04-05"
+        "lastModified": "2026-04-23"
       },
       {
         "name": "ConversationHistoryPanel.tsx",
@@ -934,14 +962,15 @@
       {
         "name": "MermaidDiagram.tsx",
         "path": "ai/MermaidDiagram.tsx",
-        "lines": 109,
+        "lines": 129,
         "description": "Mermaid Diagram",
         "tags": [
           "React",
           "Security",
+          "PDF",
           "macOS"
         ],
-        "lastModified": "2026-04-05"
+        "lastModified": "2026-04-10"
       },
       {
         "name": "MessageActions.tsx",
@@ -983,7 +1012,7 @@
       {
         "name": "SchedulingModal.tsx",
         "path": "ai/SchedulingModal.tsx",
-        "lines": 495,
+        "lines": 496,
         "description": "Scheduling Modal",
         "tags": [
           "React",
@@ -993,7 +1022,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-04-03"
+        "lastModified": "2026-04-09"
       },
       {
         "name": "SecureDOMReader.ts",
@@ -1016,7 +1045,7 @@
           "React",
           "macOS"
         ],
-        "lastModified": "2026-03-30"
+        "lastModified": "2026-04-13"
       },
       {
         "name": "useAIActionSecurityManager.tsx",
@@ -1048,7 +1077,7 @@
       {
         "name": "AICommandParser.ts",
         "path": "AICommandParser.ts",
-        "lines": 608,
+        "lines": 657,
         "description": "Command Parser",
         "tags": [
           "Node.js",
@@ -1060,7 +1089,7 @@
           "Plugin",
           "macOS"
         ],
-        "lastModified": "2026-04-08"
+        "lastModified": "2026-04-23"
       },
       {
         "name": "ActionLogsStore.ts",
@@ -1091,6 +1120,18 @@
           "macOS"
         ],
         "lastModified": "2026-03-24"
+      },
+      {
+        "name": "AdvancedDocumentEngine.ts",
+        "path": "AdvancedDocumentEngine.ts",
+        "lines": 817,
+        "description": "Advanced Document Engine",
+        "tags": [
+          "Node.js",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-04-12"
       },
       {
         "name": "AdvancedTabManager.ts",
@@ -1237,6 +1278,19 @@
         "lastModified": "2026-03-08"
       },
       {
+        "name": "MermaidToPDFConverter.ts",
+        "path": "MermaidToPDFConverter.ts",
+        "lines": 389,
+        "description": "Mermaid To",
+        "tags": [
+          "Node.js",
+          "AI",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-04-12"
+      },
+      {
         "name": "OTPVerificationService.ts",
         "path": "OTPVerificationService.ts",
         "lines": 298,
@@ -1345,6 +1399,21 @@
         "lastModified": "2026-03-24"
       },
       {
+        "name": "SiriShortcutsIntegration.ts",
+        "path": "SiriShortcutsIntegration.ts",
+        "lines": 338,
+        "description": "Siri Shortcuts Integration",
+        "tags": [
+          "Node.js",
+          "Core",
+          "AI",
+          "Automation",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-04-21"
+      },
+      {
         "name": "SkillLoader.ts",
         "path": "SkillLoader.ts",
         "lines": 160,
@@ -1401,15 +1470,14 @@
       {
         "name": "WiFiSyncService.ts",
         "path": "WiFiSyncService.ts",
-        "lines": 326,
+        "lines": 496,
         "description": "Wi Fi Sync Service",
         "tags": [
           "AI",
           "Sync",
-          "macOS",
-          "Flutter"
+          "macOS"
         ],
-        "lastModified": "2026-04-01"
+        "lastModified": "2026-04-23"
       },
       {
         "name": "ai-action-security.ts",
@@ -1463,12 +1531,14 @@
       {
         "name": "constants.ts",
         "path": "constants.ts",
-        "lines": 39,
+        "lines": 47,
         "description": "Constants",
         "tags": [
+          "AI",
+          "PDF",
           "macOS"
         ],
-        "lastModified": "2026-04-03"
+        "lastModified": "2026-04-11"
       },
       {
         "name": "ExtensionManager.ts",
@@ -1597,7 +1667,7 @@
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-03-15"
+        "lastModified": "2026-04-09"
       },
       {
         "name": "LinuxIntegration.ts",
@@ -1680,7 +1750,7 @@
     "components": []
   },
   "summary": {
-    "total": 132,
-    "totalLines": 36854
+    "total": 137,
+    "totalLines": 40633
   }
 }
