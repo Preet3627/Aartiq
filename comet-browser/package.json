@@ -148,7 +148,8 @@
     "asar": true,
     "asarUnpack": [
       "**/node_modules/robotjs/**/*",
-      "**/node_modules/sharp/**/*"
+      "**/node_modules/sharp/**/*",
+      "scripts/**/*"
     ],
     "files": [
       "out/**/*",
@@ -162,6 +163,7 @@
       "src/main/**/*",
       "assets/**/*",
       "bin/**/*",
+      "scripts/**/*",
       "package.json"
     ],
     "npmRebuild": true,

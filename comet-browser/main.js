@@ -375,12 +375,20 @@ ipcMain.handle('automation:install-background-service', async (event, { userMode
   const { exec } = require('child_process');
   const { promisify } = require('util');
   const execAsync = promisify(exec);
+  const fs = require('fs');
+  const os = require('os');
   
   try {
     if (process.platform === 'darwin') {
       const scriptPath = path.join(__dirname, 'scripts', 'install-service.sh');
+      const tmpScript = path.join(os.tmpdir(), 'comet-ai-install-service.sh');
+      
+      // Copy script to temp since asar files can't be executed directly
+      fs.copyFileSync(scriptPath, tmpScript);
+      fs.chmodSync(tmpScript, 0o755);
+      
       const modeFlag = userMode ? '--user' : '--system';
-      const command = `bash "${scriptPath}" install ${modeFlag}`;
+      const command = `bash "${tmpScript}" install ${modeFlag}`;
       
       try {
         await execAsync(command);
@@ -388,7 +396,7 @@ ipcMain.handle('automation:install-background-service', async (event, { userMode
       } catch (e) {
         // Use osascript for sudo if system-wide
         if (!userMode) {
-          const sudoCommand = `osascript -e 'do shell script "bash \\"${scriptPath}\\" install --system" with administrator privileges'`;
+          const sudoCommand = `osascript -e 'do shell script "bash \\"${tmpScript}\\" install --system" with administrator privileges'`;
           await execAsync(sudoCommand);
           return { success: true, message: 'Background service installed with admin privileges' };
         }
@@ -411,19 +419,27 @@ ipcMain.handle('automation:uninstall-background-service', async (event, { userMo
   const { exec } = require('child_process');
   const { promisify } = require('util');
   const execAsync = promisify(exec);
+  const fs = require('fs');
+  const os = require('os');
   
   try {
     if (process.platform === 'darwin') {
       const scriptPath = path.join(__dirname, 'scripts', 'install-service.sh');
+      const tmpScript = path.join(os.tmpdir(), 'comet-ai-install-service.sh');
+      
+      // Copy script to temp since asar files can't be executed directly
+      fs.copyFileSync(scriptPath, tmpScript);
+      fs.chmodSync(tmpScript, 0o755);
+      
       const modeFlag = userMode ? '--user' : '--system';
-      const command = `bash "${scriptPath}" uninstall ${modeFlag}`;
+      const command = `bash "${tmpScript}" uninstall ${modeFlag}`;
       
       try {
         await execAsync(command);
         return { success: true, message: 'Background service uninstalled' };
       } catch (e) {
         if (!userMode) {
-          const sudoCommand = `osascript -e 'do shell script "bash \\"${scriptPath}\\" uninstall --system" with administrator privileges'`;
+          const sudoCommand = `osascript -e 'do shell script "bash \\"${tmpScript}\\" uninstall --system" with administrator privileges'`;
           await execAsync(sudoCommand);
           return { success: true, message: 'Background service uninstalled with admin privileges' };
         }
@@ -431,8 +447,7 @@ ipcMain.handle('automation:uninstall-background-service', async (event, { userMo
       }
     } else if (process.platform === 'win32') {
       const scriptPath = path.join(__dirname, 'scripts', 'install-service.js');
-      const modeFlag = userMode ? '--user' : '';
-      const command = `node "${scriptPath}" uninstall ${modeFlag}`;
+      const command = `node "${scriptPath}" uninstall`;
       await execAsync(command);
       return { success: true, message: 'Background service uninstalled for Windows' };
     }
