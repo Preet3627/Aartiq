@@ -166,7 +166,7 @@
       "scripts/**/*",
       "package.json"
     ],
-    "npmRebuild": true,
+    "npmRebuild": false,
     "nodeGypRebuild": false,
     "nsis": {
       "oneClick": false,
@@ -179,14 +179,19 @@
     "win": {
       "icon": "assets/icon.ico",
       "target": [
-        "nsis"
+        "nsis",
+        "appx"
       ]
     },
     "appx": {
       "identityName": "Latestinssan.Comet-AI",
       "publisher": "CN=CF2DF47B-A710-4E1D-8C29-FC648FFA1CAE",
       "publisherDisplayName": "Latestinssan",
-      "applicationId": "Comet-AI"
+      "applicationId": "CometAI",
+      "displayName": "Comet-AI",
+      "backgroundColor": "#1a1a2e",
+      "languages": ["en-US"],
+      "showNameOnTiles": true
     },
     "mac": {
       "icon": "assets/icon.png",
