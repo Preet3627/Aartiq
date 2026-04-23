@@ -517,6 +517,11 @@ declare global {
             toggleScheduledTask: (taskId: string) => Promise<{ success: boolean; error?: string }>;
             runScheduledTask: (taskId: string) => Promise<{ success: boolean; error?: string }>;
             deleteScheduledTask: (taskId: string) => Promise<{ success: boolean; error?: string }>;
+            getTaskLogs: (date?: string) => Promise<any[]>;
+            enableCLI: () => Promise<{ success: boolean; message?: string; error?: string }>;
+            getServiceStatus: () => Promise<{ running: boolean; health?: any; platform: string; error?: string }>;
+            installService: (options: { userMode?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
+            uninstallService: (options: { userMode?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
             onAutomationShellApproval: (callback: (payload: { requestId: string, command: string, risk: string, reason: string, highRiskQr?: string, requiresDeviceUnlock?: boolean }) => void) => () => void;
             submitShellApprovalResponse: (requestId: string, allowed: boolean, deviceUnlockValidated?: boolean) => void;
 

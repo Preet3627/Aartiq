@@ -546,6 +546,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   scheduleTask: (taskData) => ipcRenderer.invoke('automation:create-task', taskData),
   getScheduledTasks: () => ipcRenderer.invoke('automation:get-tasks'),
   getTaskLogs: (date) => ipcRenderer.invoke('automation:get-logs', date),
+  enableCLI: () => ipcRenderer.invoke('automation:enable-cli'),
+  getServiceStatus: () => ipcRenderer.invoke('automation:get-service-status'),
+  installService: (options) => ipcRenderer.invoke('automation:install-background-service', options),
+  uninstallService: (options) => ipcRenderer.invoke('automation:uninstall-background-service', options),
 
   // Unified App Icon API
   getAppIcon: (appPath) => {

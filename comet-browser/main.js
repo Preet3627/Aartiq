@@ -248,6 +248,15 @@ ipcMain.handle('apple-intelligence-summary', async (event, text) => {
   return summarizeWithAppleIntelligence(text);
 });
 
+// --- CLI TOKEN PERSISTENCE ---
+const nativeMacUiToken = 'comet-native-dev-token-2026';
+const tokenPath = path.join(os.homedir(), '.comet-ai-token');
+try {
+  fs.writeFileSync(tokenPath, nativeMacUiToken, { mode: 0o600 });
+} catch (e) {
+  console.error('[Main] Failed to write CLI token:', e.message);
+}
+
 ipcMain.handle('apple-intelligence-generate-image', async (event, { prompt, outputPath, style } = {}) => {
   return generateAppleIntelligenceImage(prompt, outputPath, style);
 });
@@ -277,6 +286,160 @@ ipcMain.handle('siri:execute-action', async (event, action, params) => {
 
 ipcMain.handle('siri:speak', async (event, text) => {
   return await speakWithSiri(text);
+});
+
+ipcMain.handle('automation:enable-cli', async () => {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  
+  const cliPath = path.join(__dirname, 'scripts', 'comet-cli.js');
+  const destPath = '/usr/local/bin/comet';
+  
+  try {
+    // Try to symlink. If it fails due to permissions, use osascript to ask for sudo
+    if (process.platform === 'darwin') {
+      const command = `ln -sf "${cliPath}" "${destPath}"`;
+      try {
+        await execAsync(command);
+        return { success: true, message: 'CLI enabled successfully at /usr/local/bin/comet' };
+      } catch (e) {
+        // Prompt for sudo using osascript
+        const sudoCommand = `osascript -e 'do shell script "ln -sf \\"${cliPath}\\" \\"${destPath}\\"" with administrator privileges'`;
+        await execAsync(sudoCommand);
+        return { success: true, message: 'CLI enabled with administrator privileges' };
+      }
+    } else if (process.platform === 'win32') {
+      // Windows implementation (mklink)
+      const winDest = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'comet.cmd');
+      const winCmd = `@node "${cliPath}" %*`;
+      fs.writeFileSync(winDest, winCmd); // Might still fail without admin
+      return { success: true, message: 'CLI enabled for Windows' };
+    }
+    return { success: false, error: 'Platform not supported for auto-CLI' };
+  } catch (error) {
+    console.error('[CLI] Activation failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// --- BACKGROUND SERVICE MANAGEMENT ---
+ipcMain.handle('automation:get-service-status', async () => {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  
+  try {
+    // 1. Check if process is running
+    let isRunning = false;
+    if (process.platform === 'darwin' || process.platform === 'linux') {
+      try {
+        const { stdout } = await execAsync('pgrep -f "comet-service"');
+        isRunning = stdout.trim().length > 0;
+      } catch (e) {
+        isRunning = false;
+      }
+    } else if (process.platform === 'win32') {
+      try {
+        const { stdout } = await execAsync('tasklist /fi "IMAGENAME eq Comet-AI.exe" /fo CSV /v');
+        isRunning = stdout.includes('Comet-AI-Service');
+      } catch (e) {
+        isRunning = false;
+      }
+    }
+    
+    // 2. Check health endpoint (if running)
+    let health = null;
+    if (isRunning) {
+      try {
+        const response = await fetch('http://localhost:3999/health', { timeout: 1000 });
+        if (response.ok) {
+          health = await response.json();
+        }
+      } catch (e) {
+        // Service might be starting or on different port
+      }
+    }
+    
+    return {
+      running: isRunning,
+      health: health,
+      platform: process.platform
+    };
+  } catch (error) {
+    return { running: false, error: error.message };
+  }
+});
+
+ipcMain.handle('automation:install-background-service', async (event, { userMode = false } = {}) => {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  
+  try {
+    if (process.platform === 'darwin') {
+      const scriptPath = path.join(__dirname, 'scripts', 'install-service.sh');
+      const modeFlag = userMode ? '--user' : '--system';
+      const command = `bash "${scriptPath}" install ${modeFlag}`;
+      
+      try {
+        await execAsync(command);
+        return { success: true, message: 'Background service installed successfully' };
+      } catch (e) {
+        // Use osascript for sudo if system-wide
+        if (!userMode) {
+          const sudoCommand = `osascript -e 'do shell script "bash \\"${scriptPath}\\" install --system" with administrator privileges'`;
+          await execAsync(sudoCommand);
+          return { success: true, message: 'Background service installed with admin privileges' };
+        }
+        throw e;
+      }
+    } else if (process.platform === 'win32') {
+      const scriptPath = path.join(__dirname, 'scripts', 'install-service.js');
+      const modeFlag = userMode ? '--user' : '';
+      const command = `node "${scriptPath}" install ${modeFlag}`;
+      await execAsync(command);
+      return { success: true, message: 'Background service installed for Windows' };
+    }
+    return { success: false, error: 'Platform not supported' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('automation:uninstall-background-service', async (event, { userMode = false } = {}) => {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  
+  try {
+    if (process.platform === 'darwin') {
+      const scriptPath = path.join(__dirname, 'scripts', 'install-service.sh');
+      const modeFlag = userMode ? '--user' : '--system';
+      const command = `bash "${scriptPath}" uninstall ${modeFlag}`;
+      
+      try {
+        await execAsync(command);
+        return { success: true, message: 'Background service uninstalled' };
+      } catch (e) {
+        if (!userMode) {
+          const sudoCommand = `osascript -e 'do shell script "bash \\"${scriptPath}\\" uninstall --system" with administrator privileges'`;
+          await execAsync(sudoCommand);
+          return { success: true, message: 'Background service uninstalled with admin privileges' };
+        }
+        throw e;
+      }
+    } else if (process.platform === 'win32') {
+      const scriptPath = path.join(__dirname, 'scripts', 'install-service.js');
+      const modeFlag = userMode ? '--user' : '';
+      const command = `node "${scriptPath}" uninstall ${modeFlag}`;
+      await execAsync(command);
+      return { success: true, message: 'Background service uninstalled for Windows' };
+    }
+    return { success: false, error: 'Platform not supported' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle('siri:listen', async (event, timeout = 10000) => {
@@ -2071,6 +2234,7 @@ app.on('open-url', async (event, url) => {
       'search': 'ai:search',
       'navigate': 'navigate-to-url',
       'create-pdf': 'ai:create-pdf',
+      'create-doc': 'ai:create-pdf',
       'run-command': 'shell:execute',
       'open-app': 'system:open-app',
       'screenshot': 'system:screenshot',
@@ -2078,6 +2242,7 @@ app.on('open-url', async (event, url) => {
       'schedule': 'ai:schedule',
       'ask-ai': 'ai:ask-speaking',
       'voice-chat': 'ai:voice-chat',
+      'set-model': 'ai:set-model',
       'browse': 'open-quick-browse',
       'ocr': 'trigger-screen-ocr',
       'pdf': 'open-pdf-creator',
@@ -2087,7 +2252,7 @@ app.on('open-url', async (event, url) => {
     };
 
     // Handle Siri/Shortcuts actions with dedicated handlers
-    const siriActions = ['chat', 'search', 'navigate', 'create-pdf', 'run-command', 'open-app', 'screenshot', 'volume', 'schedule', 'ask-ai', 'voice-chat'];
+    const siriActions = ['chat', 'search', 'navigate', 'create-pdf', 'create-doc', 'run-command', 'open-app', 'screenshot', 'volume', 'schedule', 'ask-ai', 'voice-chat', 'set-model'];
     if (siriActions.includes(command)) {
       executeShortcutAction(command, params).catch(err => console.error('[Main] Siri action error:', err));
       if (params.speak === 'true') {
@@ -2529,7 +2694,7 @@ const llmStreamHandler = async (event, messages, options = {}) => {
       if (providerId === 'ollama') engineKeys.OLLAMA_BASE_URL = options.baseUrl || store.get('ollama_base_url') || 'http://127.0.0.1:11434';
       if (Object.keys(engineKeys).length > 0) cometAiEngine.configure(engineKeys);
 
-      await cometAiEngine.chat({
+      const chatResult = await cometAiEngine.chat({
         message, model, systemPrompt, history, provider: providerId,
         onChunk: (chunk) => {
           if (!event.sender.isDestroyed()) {
@@ -2539,7 +2704,8 @@ const llmStreamHandler = async (event, messages, options = {}) => {
       });
 
       if (!event.sender.isDestroyed()) {
-        event.sender.send('llm-chat-stream-part', { type: 'finish' });
+        const finishReason = chatResult?.finishReason || 'stop';
+        event.sender.send('llm-chat-stream-part', { type: 'finish', finishReason });
       }
       return;
     }
@@ -2559,11 +2725,18 @@ const llmStreamHandler = async (event, messages, options = {}) => {
       providerOptions: { ...providerOptions }
     });
 
+    let lastFinishReason = 'stop';
     for await (const part of result.fullStream) {
       if (event.sender.isDestroyed()) break;
+      if (part.type === 'finish') {
+        lastFinishReason = part.finishReason || 'stop';
+      }
       event.sender.send('llm-chat-stream-part', part);
     }
-    event.sender.send('llm-chat-stream-part', { type: 'finish' });
+    
+    if (!event.sender.isDestroyed()) {
+      event.sender.send('llm-chat-stream-part', { type: 'finish', finishReason: lastFinishReason });
+    }
   } catch (error) {
     console.error("Streaming Error:", error);
     event.sender.send('llm-chat-stream-part', { type: 'error', error: error.message });
@@ -7767,7 +7940,93 @@ app.whenReady().then(async () => {
       res.json({ success: true });
     });
 
-    nativeMacUiApp.post('/native-mac-ui/summarize-page', async (req, res) => {
+    // --- CLI TERMINAL CONTROL ENDPOINTS ---
+    nativeMacUiApp.post('/native-mac-ui/cli/ask', async (req, res) => {
+      const prompt = `${req.body?.prompt || ''}`.trim();
+      if (!prompt) {
+        res.status(400).json({ success: false, error: 'Missing prompt.' });
+        return;
+      }
+
+      // Set headers for streaming text
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Transfer-Encoding', 'chunked');
+
+      try {
+        const requestId = `cli-${Date.now()}`;
+        
+        // Relay to AIChatSidebar via IPC
+        const target = getTopWindow();
+        if (!target) {
+          res.write(JSON.stringify({ error: 'Browser window not available.' }));
+          res.end();
+          return;
+        }
+
+        const onStreamPart = (event, part) => {
+          if (part.type === 'text-delta' && part.textDelta) {
+            res.write(JSON.stringify({ textDelta: part.textDelta }) + '\n');
+          } else if (part.type === 'error') {
+            res.write(JSON.stringify({ error: part.error }) + '\n');
+          } else if (part.type === 'finish') {
+            ipcMain.removeListener('llm-chat-stream-part', onStreamPart);
+            res.end();
+          }
+        };
+
+        ipcMain.on('llm-chat-stream-part', onStreamPart);
+        
+        // Trigger the prompt in the sidebar
+        target.webContents.send('native-mac-ui-submit-prompt', {
+          prompt,
+          source: 'terminal',
+          requestId
+        });
+
+        req.on('close', () => {
+          ipcMain.removeListener('llm-chat-stream-part', onStreamPart);
+        });
+
+      } catch (error) {
+        res.write(JSON.stringify({ error: error.message }));
+        res.end();
+      }
+    });
+
+    nativeMacUiApp.post('/native-mac-ui/cli/search', async (req, res) => {
+      const query = `${req.body?.prompt || ''}`.trim();
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      
+      try {
+        const searchResults = await cometAiEngine.search(query);
+        res.write(JSON.stringify({ textDelta: `🔍 Search Results for: ${query}\n\n` }));
+        res.write(JSON.stringify({ textDelta: searchResults }) + '\n');
+        res.end();
+      } catch (error) {
+        res.write(JSON.stringify({ error: error.message }));
+        res.end();
+      }
+    });
+
+    nativeMacUiApp.post('/native-mac-ui/screenshot', async (req, res) => {
+      try {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          res.status(400).json({ success: false, error: 'Browser not running' });
+          return;
+        }
+
+        const screenshot = await mainWindow.webContents.capturePage();
+        const fileName = `Comet-Screenshot-${Date.now()}.png`;
+        const filePath = path.join(app.getPath('downloads'), fileName);
+        fs.writeFileSync(filePath, screenshot.toPNG());
+
+        res.json({ success: true, path: filePath });
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    nativeMacUiApp.all('/native-mac-ui/summarize-page', async (req, res) => {
       try {
         if (!mainWindow || mainWindow.isDestroyed()) {
           res.status(400).json({ success: false, error: 'Browser not running' });

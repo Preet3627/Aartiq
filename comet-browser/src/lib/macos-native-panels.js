@@ -58,7 +58,7 @@ async function ensureLocalMacNativePanelBinary(swiftSource, localBinary, mode) {
         'apple-ai': ['AppleIntelligencePanelView.swift']
       };
       const requiredForMode = modeFiles[mode] || [];
-      const coreFiles = ['Main.swift', 'Models.swift', 'ViewModel.swift', 'Components.swift', 'NativeContextMenu.swift', 'AICommandParser.swift'];
+      const coreFiles = ['Main.swift', 'Models.swift', 'ViewModel.swift', 'Components.swift', 'NativeContextMenu.swift', 'AICommandParser.swift', 'AppIntents.swift'];
       
       swiftFiles = swiftFiles.filter(f => {
         const name = path.basename(f);

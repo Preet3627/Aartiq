@@ -70,6 +70,7 @@ export const COMMAND_REGISTRY = {
     GENERATE_IMAGE: { desc: 'Generate an AI image with a detailed prompt', example: '[GENERATE_IMAGE: a futuristic city at sunset]' },
     APPLE_INTELLIGENCE_IMAGE: { desc: 'Generate an image using Apple Intelligence with local models', example: '[APPLE_INTELLIGENCE_IMAGE: a beautiful sunset over mountains]' },
     APPLE_INTELLIGENCE_SUMMARY: { desc: 'Summarize text using Apple Intelligence local models', example: '[APPLE_INTELLIGENCE_SUMMARY: The text to summarize]' },
+    ENABLE_CLI: { desc: 'Automatically enable the Comet-AI CLI terminal tool', example: '[ENABLE_CLI]' },
 } as const;
 
 export const SUPPORTED_COMMANDS = Object.keys(COMMAND_REGISTRY) as Array<keyof typeof COMMAND_REGISTRY>;
@@ -95,7 +96,7 @@ function getCategoryForType(type: string): string {
         GMAIL_AUTHORIZE: 'gmail', GMAIL_LIST_MESSAGES: 'gmail', GMAIL_GET_MESSAGE: 'gmail',
         GMAIL_SEND_MESSAGE: 'gmail', GMAIL_ADD_LABEL: 'gmail',
         THINK: 'meta', PLAN: 'meta', EXPLAIN_CAPABILITIES: 'meta',
-        ORGANIZE_TABS: 'automation', CLOSE_TAB: 'browser',
+        ORGANIZE_TABS: 'automation', CLOSE_TAB: 'browser', ENABLE_CLI: 'automation',
     };
     return catMap[type] || 'utility';
 }

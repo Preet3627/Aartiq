@@ -124,6 +124,24 @@ const AutomationSettings = () => {
   const [minute, setMinute] = useState('00');
   const [selectedDays, setSelectedDays] = useState<string[]>(['1', '2', '3', '4', '5']);
   const [hourlyInterval, setHourlyInterval] = useState('1');
+  const [serviceRunning, setServiceRunning] = useState(false);
+
+  // Monitor service status
+  useEffect(() => {
+    const checkService = async () => {
+      try {
+        if (window.electronAPI?.getServiceStatus) {
+          const status = await window.electronAPI.getServiceStatus();
+          setServiceRunning(status.running);
+        }
+      } catch (e) {
+        console.error('Service check failed:', e);
+      }
+    };
+    checkService();
+    const interval = setInterval(checkService, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Automatically update model when provider changes in the form
   useEffect(() => {
@@ -406,6 +424,99 @@ const AutomationSettings = () => {
           <p className="text-[11px] text-white/50 leading-relaxed">
             Ask the AI: <span className="text-sky-300 font-semibold">"Generate a daily report at 8am"</span> or <span className="text-sky-300 font-semibold">"Schedule a weekly web scrape every Monday"</span>
           </p>
+        </div>
+
+        {/* CLI activation card */}
+        <div className="mb-4 p-4 rounded-2xl bg-white/[0.03] border border-white/8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
+                <Terminal size={18} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white uppercase tracking-wider">Terminal Control (CLI)</h4>
+                <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest mt-0.5">Native Command Line Interface</p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const result = await window.electronAPI.enableCLI();
+                  if (result.success) {
+                    showFeedback(result.message || 'CLI enabled');
+                  } else {
+                    alert('Failed to enable CLI: ' + result.error);
+                  }
+                } catch (e) {
+                  console.error(e);
+                }
+              }}
+              className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-widest rounded-xl border border-amber-500/20 transition-all"
+            >
+              Enable CLI
+            </button>
+          </div>
+          <div className="mt-3 p-3 rounded-xl bg-black/40 border border-white/5 space-y-2">
+            <p className="text-[10px] text-white/40 leading-relaxed font-bold uppercase tracking-wide">
+              Access Comet-AI from your terminal using the <span className="text-amber-400">comet</span> command.
+            </p>
+            <div className="flex items-center gap-2 text-[10px] text-amber-400/60 font-mono">
+              <span className="opacity-40">$</span> comet ask "Summarize this page"
+            </div>
+          </div>
+        </div>
+
+        {/* Background Service card */}
+        <div className="mb-4 p-4 rounded-2xl bg-white/[0.03] border border-white/8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400">
+                <Bot size={18} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white uppercase tracking-wider">Background Automation</h4>
+                <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest mt-0.5">macOS LaunchDaemon / Windows Task</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border ${serviceRunning ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-white/30 border-white/10'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${serviceRunning ? 'bg-emerald-400 animate-pulse' : 'bg-white/20'}`} />
+                <span className="text-[9px] font-black uppercase tracking-widest">{serviceRunning ? 'Active' : 'Inactive'}</span>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const result = serviceRunning 
+                      ? await window.electronAPI.uninstallService({ userMode: false })
+                      : await window.electronAPI.installService({ userMode: false });
+                    
+                    if (result.success) {
+                      showFeedback(result.message || 'Action successful');
+                      // Refresh status
+                      const status = await window.electronAPI.getServiceStatus();
+                      setServiceRunning(status.running);
+                    } else {
+                      alert('Failed: ' + result.error);
+                    }
+                  } catch (e) {
+                    console.error(e);
+                  }
+                }}
+                className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-all ${
+                  serviceRunning 
+                    ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20' 
+                    : 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border-blue-500/20'
+                }`}
+              >
+                {serviceRunning ? 'Disable' : 'Enable'}
+              </button>
+            </div>
+          </div>
+          <div className="mt-3 p-3 rounded-xl bg-black/40 border border-white/5">
+            <p className="text-[10px] text-white/40 leading-relaxed font-bold uppercase tracking-wide">
+              Run scheduled tasks even when Comet-AI is closed. Integrates with system-level services for maximum reliability.
+            </p>
+          </div>
         </div>
 
         {/* Filter tabs */}

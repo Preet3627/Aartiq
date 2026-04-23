@@ -444,6 +444,7 @@ FOR AUTOMATION MANAGEMENT:
 - [EXPLAIN_CAPABILITIES]
 - [OPEN_MCP_SETTINGS]                  ← Open the Model Context Protocol (MCP) settings
 - [OPEN_AUTOMATION_SETTINGS]          ← Open the Automation settings panel
+- [ENABLE_CLI]                        ← Automatically enable the Comet-AI CLI terminal tool
 - [ORGANIZE_TABS]                     ← Use AI to intelligently group all open tabs
 - [CLOSE_TAB: tabId]                  ← Close a specific tab by ID
 - [THINK: reasoning_note]

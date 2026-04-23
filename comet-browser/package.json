@@ -1,10 +1,13 @@
 {
   "name": "Comet-AI",
-  "version": "0.2.9",
+  "version": "0.2.9.4",
   "private": true,
   "description": "Comet-AI Browser - A high-performance, intelligence-driven browsing workspace with local LLM support and advanced productivity features.",
   "author": "Latestinssan",
   "main": "main.js",
+  "bin": {
+    "comet": "./scripts/comet-cli.js"
+  },
   "homepage": "./",
   "scripts": {
     "dev": "concurrently \"npm:electron-dev\" \"wait-on http://localhost:3003 && electron .\"",

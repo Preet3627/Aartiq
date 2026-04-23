@@ -1,5 +1,30 @@
 # Comet Browser - Recent Changes
 
+## Version 0.2.9.4 - Terminal Control & AI Reliability (2026-04-23)
+
+### Overview
+Introduces the Comet-AI CLI for terminal-based control and hardens AI automation with auto-continuation and finalized Siri integration.
+
+### Changes
+
+#### Comet-AI CLI
+- **New CLI Tool**: `scripts/comet-cli.js` allows controlling the browser via terminal.
+- **Commands**: `comet ask`, `comet search`, `comet screenshot`.
+- **Authentication**: Secure token-based auth via `~/.comet-ai-token`.
+- **Global Access**: Registered as `comet` binary in `package.json`.
+
+#### AI Reliability & Automation
+- **Auto-Continuation**: Implemented "Keep-Alive" loop in `AIChatSidebar.tsx` to handle truncated AI responses.
+- **Siri & Shortcuts**: Finalized zero-setup `AppIntents` for macOS Shortcuts/Siri.
+- **Deep Link Sync**: Unified routing for `comet-ai://` across CLI and Siri.
+
+#### Technical
+- Added CLI endpoints to native bridge server in `main.js`.
+- Captured `finishReason` in LLM streams for better continuation logic.
+- Updated root `README.md` and `AI-GUIDE.md` with new standards.
+
+---
+
 ## Version 0.2.10 - Code Refactoring (2026-04-17)
 
 ### Overview

@@ -891,7 +891,11 @@ I couldn't schedule the task. The background service may not be running. Please 
           }
           flushStreamText();
           cleanup();
-          resolve({ text: fullText, thought: fullThought });
+          resolve({ 
+            text: fullText, 
+            thought: fullThought, 
+            finishReason: part.finishReason || 'stop' 
+          });
         }
       });
       window.electronAPI.streamChatContent(history, reasoningOptions);
@@ -1080,12 +1084,45 @@ I couldn't schedule the task. The background service may not be running. Please 
         iterations++;
         const aiId = addThinkingStep(iterations === 1 ? 'LLM Processing...' : `Action Chain Synthesis & Evaluation (Step ${iterations})...`);
 
-        const responseMessageId = createMessageId('assistant');
+        let responseMessageId = createMessageId('assistant');
         activeStreamingMessageIdRef.current = responseMessageId;
         setMessages(prev => [...prev, { id: responseMessageId, role: 'model', content: '' }] as ExtendedChatMessage[]);
-        const response = await getStreamingResponse(currentHistory, responseMessageId, () => {
+        
+        let response = await getStreamingResponse(currentHistory, responseMessageId, () => {
           updateThinkingStep(aiId, iterations === 1 ? 'AI is responding...' : `Comet is processing Step ${iterations}...`);
         });
+
+        // 🔄 AUTO-CONTINUATION: If the AI was cut off due to length, automatically continue
+        let continuationCount = 0;
+        const MAX_AUTO_CONTINUATIONS = 3;
+        
+        while (response.finishReason === 'length' && continuationCount < MAX_AUTO_CONTINUATIONS) {
+          continuationCount++;
+          const continueThinkId = addThinkingStep(`Continuing response (Part ${continuationCount + 1})...`);
+          
+          // Append the partial text to history so the AI knows where it left off
+          const partialHistory: ExtendedChatMessage[] = [
+            ...currentHistory,
+            { role: 'model', content: response.text } as ExtendedChatMessage
+          ];
+          
+          const nextPart = await getStreamingResponse(partialHistory as any, responseMessageId!, () => {
+            updateThinkingStep(continueThinkId, "Generating next part...");
+          });
+          
+          if (nextPart.error) {
+            resolveThinkingStep(continueThinkId, 'error', nextPart.error);
+            break;
+          }
+          
+          // Stitch the text together
+          response.text += nextPart.text;
+          response.thought += (nextPart.thought || '');
+          response.finishReason = nextPart.finishReason;
+          
+          resolveThinkingStep(continueThinkId, 'done');
+        }
+
         resolveThinkingStep(aiId, response.error ? 'error' : 'done');
 
         if (response.error) throw new Error(response.error);
@@ -3369,6 +3406,20 @@ I've successfully executed the following real tasks:
           } else {
             console.log('[AI] No method available - props exists:', !!props.setShowSettings, 'IPC exists:', !!window.electronAPI?.openSettingsPopup);
             output = 'Automation settings not available in current context.';
+          }
+          break;
+        }
+
+        case 'ENABLE_CLI': {
+          try {
+            const result = await window.electronAPI.enableCLI();
+            if (result.success) {
+              output = `SUCCESS: ${result.message}`;
+            } else {
+              output = `FAILED: ${result.error}`;
+            }
+          } catch (e: any) {
+            output = `ERROR: ${e.message}`;
           }
           break;
         }
