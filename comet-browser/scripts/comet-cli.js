@@ -23,6 +23,7 @@ const HOST = '127.0.0.1';
 const CONFIG_DIR = path.join(process.env.HOME || process.env.USERPROFILE, '.comet-ai');
 const SESSIONS_DIR = path.join(CONFIG_DIR, 'sessions');
 const HISTORY_FILE = path.join(CONFIG_DIR, 'history.json');
+const CLI_CONFIG_FILE = path.join(CONFIG_DIR, 'cli-config.json');
 
 // Ensure directories exist
 if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true });
@@ -31,6 +32,80 @@ if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true }
 // Default config
 const DEFAULT_MODEL = 'ollama';
 
+// CLI Config management
+function loadCliConfig() {
+    try {
+        if (fs.existsSync(CLI_CONFIG_FILE)) {
+            return JSON.parse(fs.readFileSync(CLI_CONFIG_FILE, 'utf8'));
+        }
+    } catch (e) {}
+    return { lastModel: DEFAULT_MODEL, models: [] };
+}
+
+function saveCliConfig(config) {
+    fs.writeFileSync(CLI_CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+// Fetch available models from browser config
+function getAvailableModels() {
+    try {
+        const configPath = path.join(process.env.HOME || process.env.USERPROFILE, 'Library/Application Support/comet-ai/config.json');
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            const models = [];
+            
+            // Add configured models
+            if (config.ollama_model) models.push({ id: 'ollama', name: config.ollama_model, provider: 'ollama' });
+            if (config.openai_model) models.push({ id: 'openai', name: config.openai_model, provider: 'openai' });
+            if (config.anthropic_model) models.push({ id: 'anthropic', name: config.anthropic_model, provider: 'anthropic' });
+            if (config.gemini_model) models.push({ id: 'gemini', name: config.gemini_model, provider: 'gemini' });
+            if (config.xai_model) models.push({ id: 'xai', name: config.xai_model, provider: 'xai' });
+            if (config.groq_model) models.push({ id: 'groq', name: config.groq_model, provider: 'groq' });
+            
+            return models;
+        }
+    } catch (e) {}
+    return [];
+}
+
+// Interactive model selection
+async function selectModel() {
+    const models = getAvailableModels();
+    const cliConfig = loadCliConfig();
+    
+    if (models.length === 0) {
+        console.log('\nNo models configured in Comet-AI browser.');
+        console.log('Please configure AI models in Comet-AI Settings first.\n');
+        return cliConfig.lastModel || DEFAULT_MODEL;
+    }
+    
+    console.log('\n🤖 Available Models:\n');
+    models.forEach((m, i) => {
+        const selected = m.id === cliConfig.lastModel ? '👉 ' : '  ';
+        console.log(`${selected}${i + 1}. ${m.provider}: ${m.name}`);
+    });
+    console.log(`\n  0. Use last model (${cliConfig.lastModel})`);
+    
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    
+    return new Promise((resolve) => {
+        rl.question('\nSelect model number: ', (answer) => {
+            rl.close();
+            const num = parseInt(answer);
+            if (num === 0) {
+                resolve(cliConfig.lastModel || DEFAULT_MODEL);
+            } else if (num >= 1 && num <= models.length) {
+                const selected = models[num - 1].id;
+                cliConfig.lastModel = selected;
+                saveCliConfig(cliConfig);
+                resolve(selected);
+            } else {
+                resolve(cliConfig.lastModel || DEFAULT_MODEL);
+            }
+        });
+    });
+}
+
 // Parse command line arguments
 const args = process.argv.slice(2);
 const flags = {
@@ -38,11 +113,12 @@ const flags = {
     version: false,
     interactive: false,
     session: null,
-    model: DEFAULT_MODEL,
+    model: null, // Will load from saved config
     web: false,
     stream: true,
     list: false,
-    clear: false
+    clear: false,
+    selectModel: false
 };
 
 const positional = [];
@@ -59,6 +135,8 @@ for (let i = 0; i < args.length; i++) {
     else if (arg === '--no-stream') flags.stream = false;
     else if (arg === '--list') flags.list = true;
     else if (arg === '--clear') flags.clear = true;
+    else if (arg === '--select-model') flags.selectModel = true;
+    else if (arg === '-m') flags.model = args[++i];
     else if (arg.startsWith('-')) {
         console.error(`Unknown flag: ${arg}`);
         process.exit(1);
@@ -127,31 +205,31 @@ function printHelp() {
 
 Usage:
   comet ask "<prompt>"              Send a prompt to the AI
-  comet search "<query>"        Search the web
-  comet chat                  Start interactive chat mode
-  comet session [name]           Create or use a session
-  comet history             Show chat history
-  comet models              List available models
-  comet help                Show this help
+  comet search "<query>"            Search the web
+  comet chat                       Start interactive chat mode
+  comet models                     List configured models
+  comet select-model              Choose model interactively
+  comet session [name]             Create or use a session
+  comet history                    Show chat history
+  comet help                       Show this help
 
 Options:
-  -h, --help                  Show this help menu
-  -v, --version               Show version
-  -i, --interactive          Start interactive chat mode
-  --session <name>            Specify session name
-  --model <name>            Select AI model (ollama, openai, anthropic, gemini)
-  --web                     Force web search
-  --no-stream               Disable streaming output
-  --list                    List sessions
-  --clear                   Clear history
+  -h, --help                      Show this help menu
+  -v, --version                   Show version
+  -i, --interactive               Start interactive chat mode
+  -m, --model <name>              Specify model (ollama, openai, etc.)
+  --select-model                   Interactive model selection
+  --web                           Force web search
+  --no-stream                     Disable streaming output
+  --list                           List sessions
+  --clear                          Clear history
 
 Examples:
   comet ask "How do I create a PDF?"
-  comet ask "Summarize the latest AI news" --model openai
-  comet search "SpaceX launch today"
+  comet ask "Summarize news" -m openai
+  comet select-model
   comet chat
-  comet session my-research
-  comet history
+  comet models
     `);
 }
 
@@ -498,6 +576,14 @@ function handleHistory() {
 
 // Main
 async function main() {
+    // Load saved model if not specified
+    const cliConfig = loadCliConfig();
+    if (!flags.model && cliConfig.lastModel) {
+        flags.model = cliConfig.lastModel;
+    } else if (!flags.model) {
+        flags.model = DEFAULT_MODEL;
+    }
+    
     if (flags.help) {
         printHelp();
         process.exit(0);
@@ -517,8 +603,21 @@ async function main() {
         handleList();
         process.exit(0);
     }
-
+    
+    // Handle model selection
+    if (flags.selectModel) {
+        const selected = await selectModel();
+        console.log(`\n✅ Using model: ${selected}`);
+        process.exit(0);
+    }
+    
+    // Interactive mode - show model selection if no model saved
     if (flags.interactive || !command) {
+        if (!cliConfig.lastModel) {
+            const selected = await selectModel();
+            flags.model = selected;
+            console.log(`\n🤖 Using model: ${flags.model}`);
+        }
         handleInteractive();
         return;
     }
@@ -531,6 +630,11 @@ async function main() {
             await handleSearch();
             break;
         case 'chat':
+            if (!cliConfig.lastModel) {
+                const selected = await selectModel();
+                flags.model = selected;
+                console.log(`\n🤖 Using model: ${flags.model}`);
+            }
             handleInteractive();
             break;
         case 'session':
@@ -541,11 +645,23 @@ async function main() {
             handleHistory();
             break;
         case 'models':
-            console.log('\n🤖 Available Models:');
-            console.log('  ollama       - Local Ollama models');
-            console.log('  openai      - OpenAI GPT models');
-            console.log('  anthropic   - Anthropic Claude');
-            console.log('  gemini     - Google Gemini');
+            const models = getAvailableModels();
+            if (models.length === 0) {
+                console.log('\n🤖 Available Models (from browser config):');
+                console.log('  ollama       - Local Ollama models');
+                console.log('  openai      - OpenAI GPT models');
+                console.log('  anthropic   - Anthropic Claude');
+                console.log('  gemini     - Google Gemini');
+                console.log('\nConfigure models in Comet-AI browser settings.');
+            } else {
+                console.log('\n🤖 Available Models:\n');
+                models.forEach((m, i) => {
+                    const selected = m.id === cliConfig.lastModel ? '👉 ' : '  ';
+                    console.log(`${selected}${i + 1}. ${m.provider}: ${m.name}`);
+                });
+                console.log(`\nLast used: ${cliConfig.lastModel || 'none'}`);
+                console.log('Use --select-model to choose interactively');
+            }
             console.log('');
             break;
         default:
@@ -553,10 +669,6 @@ async function main() {
                 // Try as direct prompt
                 const data = [...positional, ...args.filter(a => !a.startsWith('-'))].join(' ');
                 if (data) {
-                    //@ts-ignore
-                    const oldPayload = payload;
-                    //@ts-ignore  
-                    // Reconstruct args for ask
                     args.unshift('ask');
                     await handleAsk();
                 } else {
