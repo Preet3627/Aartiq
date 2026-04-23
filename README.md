@@ -8,7 +8,7 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blue)]()
-[![Version](https://img.shields.io/badge/Version-0.2.9.3-blue)]()
+[![Version](https://img.shields.io/badge/Version-0.2.9.4-blue)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)]()
 [![Built by 16yo](https://img.shields.io/badge/Developer-16_Year_Old_Student-FF69B4?style=for-the-badge&logo=github)](https://github.com/Preet3627)
 [![Low Spec](https://img.shields.io/badge/Tested_On-i5--U_|_8GB_RAM-orange)]()
@@ -166,6 +166,7 @@ npm install && npm run build
 - **Typing Animations** — Character-by-character streaming with configurable cursor styles
 
 ### 🔌 Extensibility (v0.2.9+)
+- **Comet-AI CLI** — Full terminal-based browser control (`comet ask`, `comet search`)
 - **Raycast Extension** — Control Comet from macOS Spotlight (chat, browse, OCR, PDF, automation)
 - **Plugin System** — Dynamic plugin loading with marketplace support
 - **MCP Integration** — Model Context Protocol for external tools
@@ -419,15 +420,31 @@ Cross-platform automation priority chain for reliable clicking:
 | 3rd | robotjs | robotjs | robotjs |
 
 ### 📷 Native OCR Alternatives
-
-Cross-platform OCR for screen text recognition:
-
-| Priority | macOS | Windows | Linux |
-|----------|-------|---------|-------|
-| 1st | uniOCR (Vision) | uniOCR (Windows) | uniOCR (Tesseract) |
-| 2nd | RustO! (PaddleOCR) | RustO! | RustO! |
-| 3rd | Native Vision API | Windows OCR | AT-SPI2 |
+...
 | 4th | Tesseract.js | Tesseract.js | Tesseract.js |
+
+---
+
+### 💻 Terminal Control (Comet-AI CLI)
+
+Comet now features a powerful command-line interface for headless control and automation.
+
+#### Installation
+```bash
+cd comet-browser
+sudo npm link
+```
+
+#### Usage
+| Command | Action | Example |
+|---------|--------|---------|
+| `comet ask "<prompt>"` | Query the AI | `comet ask "Summarize today's tech news"` |
+| `comet search "<query>"` | Smart Web Search | `comet search "Latest NVIDIA GPU specs"` |
+| `comet screenshot` | Capture Browser | `comet screenshot` |
+| `comet help` | Show help | `comet help` |
+
+#### How it Works
+The CLI communicates with the Electron app via a secure **Native Bridge Server** (Port 3004). Authentication is handled automatically via a secure token stored in `~/.comet-ai-token`.
 
 ---
 
