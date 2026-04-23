@@ -474,10 +474,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // WiFi Sync
   getWifiSyncQr: () => ipcRenderer.invoke('get-wifi-sync-qr'),
   getWifiSyncInfo: () => ipcRenderer.invoke('get-wifi-sync-info'),
+  getWifiSyncDevices: () => ipcRenderer.invoke('get-wifi-sync-devices'),
+  setWifiSyncDeviceTrust: (payload) => ipcRenderer.invoke('set-wifi-sync-device-trust', payload),
+  removeWifiSyncDevice: (deviceId) => ipcRenderer.invoke('remove-wifi-sync-device', deviceId),
   onWifiSyncStatus: (callback) => {
     const subscription = (event, data) => callback(data);
     ipcRenderer.on('wifi-sync-status', subscription);
     return () => ipcRenderer.removeListener('wifi-sync-status', subscription);
+  },
+  onWifiSyncDevicesUpdated: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('wifi-sync-devices-updated', subscription);
+    return () => ipcRenderer.removeListener('wifi-sync-devices-updated', subscription);
   },
   onRemoteAiPrompt: (callback) => {
     const subscription = (event, data) => callback(data);

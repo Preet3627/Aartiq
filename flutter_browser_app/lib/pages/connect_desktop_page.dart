@@ -25,6 +25,7 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
   String? errorMessage;
   final List<Map<String, dynamic>> _discoveredDevices = [];
   final List<Map<String, dynamic>> _cloudDevices = [];
+  final List<Map<String, dynamic>> _savedDevices = [];
   StreamSubscription? _discoverySubscription;
   StreamSubscription? _cloudDevicesSubscription;
 
@@ -36,7 +37,26 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
       desktopIp = SyncService().getConnectionInfo()['desktopIp'];
       desktopLabel = SyncService().getConnectionInfo()['label'] as String?;
     }
+    _refreshSavedDevices();
     _startDiscovery();
+  }
+
+  void _refreshSavedDevices() {
+    final devices =
+        List<Map<String, dynamic>>.from(SyncService().getSavedDevices())
+          ..sort((a, b) =>
+              (b['lastConnected'] ?? 0).compareTo(a['lastConnected'] ?? 0));
+    if (mounted) {
+      setState(() {
+        _savedDevices
+          ..clear()
+          ..addAll(devices);
+      });
+    } else {
+      _savedDevices
+        ..clear()
+        ..addAll(devices);
+    }
   }
 
   @override
@@ -71,6 +91,7 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
     _discoveredDevices.clear();
     SyncService().startDiscovery();
     _discoverySubscription = SyncService().onDeviceDiscovered.listen((device) {
+      _refreshSavedDevices();
       if (mounted) {
         setState(() {
           if (!_discoveredDevices
@@ -84,26 +105,24 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
 
   void _startCloudDiscovery() {
     _cloudDevices.clear();
-    if (SyncService().onCloudDevicesUpdated != null) {
-      _cloudDevicesSubscription =
-          SyncService().onCloudDevicesUpdated.listen((devices) {
-        if (mounted) {
-          setState(() {
-            _cloudDevices.clear();
-            devices.forEach((key, value) {
-              if (key != SyncService().deviceId) {
-                _cloudDevices.add({
-                  'deviceId': key,
-                  'deviceName': value['deviceName'] ?? 'Unknown',
-                  'deviceType': value['deviceType'] ?? 'desktop',
-                  'isOnline': value['online'] ?? false,
-                });
-              }
-            });
+    _cloudDevicesSubscription =
+        SyncService().onCloudDevicesUpdated.listen((devices) {
+      if (mounted) {
+        setState(() {
+          _cloudDevices.clear();
+          devices.forEach((key, value) {
+            if (key != SyncService().deviceId) {
+              _cloudDevices.add({
+                'deviceId': key,
+                'deviceName': value['deviceName'] ?? 'Unknown',
+                'deviceType': value['deviceType'] ?? 'desktop',
+                'isOnline': value['online'] ?? false,
+              });
+            }
           });
-        }
-      });
-    }
+        });
+      }
+    });
   }
 
   @override
@@ -190,9 +209,11 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
         setState(() {
           isConnected = true;
           desktopIp = ip;
-          desktopLabel = ip;
+          desktopLabel =
+              SyncService().getConnectionInfo()['label'] as String? ?? ip;
           isConnecting = false;
         });
+        _refreshSavedDevices();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -209,6 +230,7 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
               ? 'Invalid pairing code'
               : 'Connection failed: $e';
         });
+        _refreshSavedDevices();
       }
     }
   }
@@ -303,8 +325,8 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
                     if (digitsOnly != value) {
                       controller.value = TextEditingValue(
                         text: digitsOnly,
-                        selection: TextSelection.collapsed(
-                            offset: digitsOnly.length),
+                        selection:
+                            TextSelection.collapsed(offset: digitsOnly.length),
                       );
                     }
                     if (errorText != null) {
@@ -586,6 +608,88 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
                   ),
                 ),
               ),
+            ),
+          ],
+          if (_savedDevices.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 10),
+              child: Row(
+                children: [
+                  Icon(Icons.devices, color: Color(0xFF00E5FF), size: 16),
+                  SizedBox(width: 8),
+                  Text(
+                    'SAVED DEVICES',
+                    style: TextStyle(
+                      color: Color(0xFF00E5FF),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: _savedDevices.length,
+              itemBuilder: (context, index) {
+                final device = _savedDevices[index];
+                final bool isOnline = device['isOnline'] == true;
+                final bool isTrusted = device['trusted'] == true;
+                final String? savedIp = device['ip'] as String?;
+                final int savedPort = (device['port'] as int?) ?? 3004;
+                return Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(15),
+                    child: Material(
+                      color: Colors.white.withOpacity(0.05),
+                      child: ListTile(
+                        onTap: (savedIp != null && savedIp.isNotEmpty)
+                            ? () =>
+                                _connect(savedIp, savedPort, device['deviceId'])
+                            : null,
+                        leading: Container(
+                          padding: EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isOnline
+                                ? Color(0xFF00E5FF).withOpacity(0.12)
+                                : Colors.white.withOpacity(0.05),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.desktop_windows,
+                            color:
+                                isOnline ? Color(0xFF00E5FF) : Colors.white30,
+                          ),
+                        ),
+                        title: Text(
+                          device['deviceName'] ?? 'Saved Desktop',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Text(
+                          isOnline
+                              ? '${savedIp ?? 'Online'}${isTrusted ? ' • trusted' : ''}'
+                              : 'Offline${isTrusted ? ' • trusted' : ''}',
+                          style: TextStyle(
+                            color:
+                                isOnline ? Colors.greenAccent : Colors.white38,
+                          ),
+                        ),
+                        trailing: Icon(
+                          isOnline ? Icons.chevron_right : Icons.cloud_off,
+                          color: isOnline ? Colors.white24 : Colors.white30,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ],
           if (isCloudMode && _cloudDevices.isNotEmpty) ...[

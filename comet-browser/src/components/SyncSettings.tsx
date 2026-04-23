@@ -16,6 +16,8 @@ interface DeviceInfo {
     isOnline: boolean;
     connectionType: 'local' | 'cloud';
     lastSeen?: number;
+    trustLevel?: 'trusted' | 'ask_once' | 'blocked';
+    autoConnect?: boolean;
 }
 
 type SyncMode = 'local' | 'cloud' | 'local_cloud';
@@ -60,13 +62,44 @@ const SyncSettings: React.FC = () => {
     useEffect(() => {
         if (!window.electronAPI) return;
 
+        const loadWifiDevices = async () => {
+            try {
+                const knownDevices = await window.electronAPI.getWifiSyncDevices();
+                setDevices((knownDevices || []).map((device: any) => ({
+                    deviceId: device.deviceId,
+                    deviceName: device.deviceName,
+                    deviceType: device.deviceType,
+                    isOnline: !!device.online,
+                    connectionType: 'local',
+                    lastSeen: device.lastSeen || device.lastConnected,
+                    trustLevel: device.trustLevel,
+                    autoConnect: device.autoConnect,
+                })));
+            } catch (error) {
+                console.error('[SyncSettings] Failed to load WiFi devices:', error);
+            }
+        };
+
         window.electronAPI.getWifiSyncQr(qrMode === 'cloud').then(qr => setWifiSyncQr(qr));
         window.electronAPI.getWifiSyncInfo().then(info => {
             if (info) setWifiSyncInfo(info);
         });
+        loadWifiDevices();
         
         const cleanupWifiStatus = window.electronAPI.onWifiSyncStatus((data) => {
             setWifiConnected(data.connected);
+        });
+        const cleanupWifiDevices = window.electronAPI.onWifiSyncDevicesUpdated((updatedDevices) => {
+            setDevices((updatedDevices || []).map((device: any) => ({
+                deviceId: device.deviceId,
+                deviceName: device.deviceName,
+                deviceType: device.deviceType,
+                isOnline: !!device.online,
+                connectionType: 'local',
+                lastSeen: device.lastSeen || device.lastConnected,
+                trustLevel: device.trustLevel,
+                autoConnect: device.autoConnect,
+            })));
         });
 
         const cleanupCloudStatus = window.electronAPI.onCloudSyncStatus((data) => {
@@ -79,9 +112,26 @@ const SyncSettings: React.FC = () => {
 
         return () => {
             cleanupWifiStatus();
+            cleanupWifiDevices();
             cleanupCloudStatus();
         };
     }, [qrMode]);
+
+    const setDeviceTrust = async (deviceId: string, trustLevel: 'trusted' | 'ask_once' | 'blocked', autoConnect?: boolean) => {
+        if (!window.electronAPI?.setWifiSyncDeviceTrust) return;
+        const result = await window.electronAPI.setWifiSyncDeviceTrust({ deviceId, trustLevel, autoConnect });
+        if (!result?.success) {
+            setStatusMessage(result?.error || 'Failed to update device trust');
+        }
+    };
+
+    const removeDevice = async (deviceId: string) => {
+        if (!window.electronAPI?.removeWifiSyncDevice) return;
+        const result = await window.electronAPI.removeWifiSyncDevice(deviceId);
+        if (!result?.success) {
+            setStatusMessage(result?.error || 'Failed to remove device');
+        }
+    };
 
     const handleQrModeChange = async (mode: 'local' | 'cloud') => {
         setQrMode(mode);
@@ -537,6 +587,26 @@ const SyncSettings: React.FC = () => {
                                     <span className={`px-2 py-1 text-xs rounded-lg ${device.connectionType === 'cloud' ? 'bg-purple-500/20 text-purple-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
                                         {device.connectionType}
                                     </span>
+                                    <span className={`px-2 py-1 text-xs rounded-lg ${device.trustLevel === 'trusted' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white/40'}`}>
+                                        {device.trustLevel === 'trusted' ? 'Trusted' : 'Needs Trust'}
+                                    </span>
+                                    {device.deviceType === 'mobile' && (
+                                        <>
+                                            <button
+                                                onClick={() => setDeviceTrust(device.deviceId, device.trustLevel === 'trusted' ? 'ask_once' : 'trusted')}
+                                                className={`px-3 py-1 text-xs rounded-lg transition-all ${device.trustLevel === 'trusted' ? 'bg-white/10 text-white/60 hover:bg-white/15' : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'}`}
+                                            >
+                                                {device.trustLevel === 'trusted' ? 'Untrust' : 'Trust'}
+                                            </button>
+                                            <button
+                                                onClick={() => removeDevice(device.deviceId)}
+                                                className="p-2 rounded-lg bg-red-500/10 text-red-300 hover:bg-red-500/20 transition-all"
+                                                title="Remove device"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         ))}

@@ -366,10 +366,14 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
         '/': (context) => const SplashScreen(),
         '/auth': (context) => AuthPage(
               onAuthComplete: () {
+                unawaited(SyncService()
+                    .initialize(AuthService().userId ?? 'comet-guest')
+                    .then((_) => SyncService().tryAutoReconnect()));
                 navigatorKey.currentState
                     ?.pushNamedAndRemoveUntil('/home', (route) => false);
               },
               onGuestMode: () {
+                unawaited(SyncService().initialize('comet-guest'));
                 navigatorKey.currentState
                     ?.pushNamedAndRemoveUntil('/home', (route) => false);
               },

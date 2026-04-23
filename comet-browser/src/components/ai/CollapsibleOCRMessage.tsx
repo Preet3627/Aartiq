@@ -65,6 +65,19 @@ const CollapsibleOCRMessage = memo(function CollapsibleOCRMessage({
   const displayedContent = isRevealing 
     ? content.substring(0, revealedChars) + (revealedChars < content.length ? '█' : '')
     : content;
+  const normalizedLabel = label.toUpperCase();
+  const isDomSource = normalizedLabel.includes('DOM') || normalizedLabel.includes('PAGE_CONTENT');
+  const isSearchDom = normalizedLabel.includes('SEARCH_PAGE_DOM');
+  const sourceBadgeText = isDomSource
+    ? (isSearchDom ? 'Search DOM' : 'DOM Result')
+    : 'OCR Result';
+  const sourceHint = isDomSource
+    ? (open ? 'click to hide DOM snapshot' : `${content.length} chars — click to inspect DOM content`)
+    : (open
+      ? isRevealing
+        ? `typing... ${Math.round((revealedChars / content.length) * 100)}%`
+        : 'click to hide'
+      : `${content.length} chars — click to view`);
 
   return (
     <div className="w-full mt-1 rounded-2xl border border-white/10 overflow-hidden bg-gradient-to-br from-black/40 via-slate-900/30 to-black/40 relative">
@@ -110,27 +123,22 @@ const CollapsibleOCRMessage = memo(function CollapsibleOCRMessage({
             animate={open ? { rotate: [0, 360] } : {}}
             transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
           >
-            {open ? (
+          {open ? (
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="text-cyan-400"
+                className={isDomSource ? 'text-sky-400' : 'text-cyan-400'}
               >
                 <Scan size={14} />
               </motion.div>
             ) : (
-              <Eye size={11} className="text-amber-400" />
+              <Eye size={11} className={isDomSource ? 'text-sky-400' : 'text-amber-400'} />
             )}
           </motion.div>
           <div className="flex items-center gap-2">
-            <span className="text-cyan-400/60">[{label}]</span>
+            <span className={isDomSource ? 'text-sky-400/70' : 'text-cyan-400/60'}>[{label}]</span>
             <span className="text-white/20 font-normal normal-case tracking-normal">
-              {open 
-                ? isRevealing 
-                  ? `typing... ${Math.round((revealedChars / content.length) * 100)}%`
-                  : 'click to hide'
-                : `${content.length} chars — click to view`
-              }
+              {sourceHint}
             </span>
           </div>
         </div>
@@ -141,15 +149,15 @@ const CollapsibleOCRMessage = memo(function CollapsibleOCRMessage({
               animate={{ opacity: 1, scale: 1 }}
               className="flex items-center gap-1"
             >
-              <Sparkles size={10} className="text-cyan-400 animate-pulse" />
-              <span className="text-[9px] text-cyan-400/60">OCR Result</span>
+              <Sparkles size={10} className={`${isDomSource ? 'text-sky-400' : 'text-cyan-400'} animate-pulse`} />
+              <span className={`text-[9px] ${isDomSource ? 'text-sky-400/70' : 'text-cyan-400/60'}`}>{sourceBadgeText}</span>
             </motion.div>
           )}
           <motion.div
             animate={{ rotate: open ? 180 : 0 }}
             transition={{ type: 'spring', stiffness: 200 }}
           >
-            {open ? <ChevronUp size={14} className="text-cyan-400" /> : <ChevronDown size={12} />}
+            {open ? <ChevronUp size={14} className={isDomSource ? 'text-sky-400' : 'text-cyan-400'} /> : <ChevronDown size={12} />}
           </motion.div>
         </div>
       </button>

@@ -8637,12 +8637,28 @@ app.whenReady().then(async () => {
       }
     });
 
-    wifiSyncService.on('client-connected', () => {
-      if (mainWindow) mainWindow.webContents.send('wifi-sync-status', { connected: true });
+    wifiSyncService.on('client-connected', (payload = {}) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('wifi-sync-status', {
+          connected: wifiSyncService.getConnectedClients().length > 0,
+        });
+        mainWindow.webContents.send('wifi-sync-devices-updated', payload.devices || wifiSyncService.getKnownDevices());
+      }
     });
 
-    wifiSyncService.on('client-disconnected', () => {
-      if (mainWindow) mainWindow.webContents.send('wifi-sync-status', { connected: false });
+    wifiSyncService.on('client-disconnected', (payload = {}) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('wifi-sync-status', {
+          connected: wifiSyncService.getConnectedClients().length > 0,
+        });
+        mainWindow.webContents.send('wifi-sync-devices-updated', payload.devices || wifiSyncService.getKnownDevices());
+      }
+    });
+
+    wifiSyncService.on('devices-updated', (devices = []) => {
+      if (mainWindow) {
+        mainWindow.webContents.send('wifi-sync-devices-updated', devices);
+      }
     });
   } catch (e) {
     console.error('[Main] Failed to initialize WiFi Sync Service:', e);
@@ -8803,6 +8819,32 @@ app.whenReady().then(async () => {
       ip: wifiSyncService.getLocalIp(),
       port: 3004
     };
+  });
+
+  ipcMain.handle('get-wifi-sync-devices', () => {
+    if (!wifiSyncService) return [];
+    return wifiSyncService.getKnownDevices();
+  });
+
+  ipcMain.handle('set-wifi-sync-device-trust', async (event, { deviceId, trustLevel, autoConnect } = {}) => {
+    if (!wifiSyncService || !deviceId || !trustLevel) {
+      return { success: false, error: 'Missing WiFi sync device or trust payload' };
+    }
+
+    const device = wifiSyncService.setDeviceTrust(deviceId, trustLevel, autoConnect);
+    if (!device) {
+      return { success: false, error: 'Device not found' };
+    }
+
+    return { success: true, device };
+  });
+
+  ipcMain.handle('remove-wifi-sync-device', async (event, deviceId) => {
+    if (!wifiSyncService || !deviceId) {
+      return { success: false, error: 'Missing WiFi sync device id' };
+    }
+
+    return { success: wifiSyncService.removeKnownDevice(deviceId) };
   });
 
   // Cloud Sync IPC Handlers
@@ -9274,7 +9316,12 @@ app.whenReady().then(async () => {
       let searchResults = [];
       try {
         const results = await webSearchProvider.search(query, 'duckduckgo', 6);
-        searchResults = results.map(r => `[${r.title}](${r.url})\n${r.snippet}`);
+        searchResults = results.map((r, index) => [
+          `[Result ${index + 1}]`,
+          `Title: ${r.title || 'Untitled result'}`,
+          `URL: ${r.url || ''}`,
+          `Snippet: ${r.snippet || ''}`,
+        ].join('\n'));
       } catch (e) {
         console.warn(`[RAG] Deep search failed for ${query}`);
       }

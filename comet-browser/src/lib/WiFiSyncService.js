@@ -94,6 +94,9 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WiFiSyncService = void 0;
 exports.getWiFiSync = getWiFiSync;
@@ -102,6 +105,7 @@ var ws_1 = require("ws");
 var os = __importStar(require("os"));
 var dgram = __importStar(require("dgram"));
 var electron_1 = require("electron");
+var electron_store_1 = __importDefault(require("electron-store"));
 var WiFiSyncService = /** @class */ (function (_super) {
     __extends(WiFiSyncService, _super);
     function WiFiSyncService(port) {
@@ -113,10 +117,15 @@ var WiFiSyncService = /** @class */ (function (_super) {
         _this.clients = new Set();
         _this._lastReceivedClipboard = '';
         _this.clientSockets = new Map();
+        _this.socketDeviceIds = new WeakMap();
+        _this.store = new electron_store_1.default({ name: 'comet-wifi-sync' });
+        _this.knownDevices = new Map();
+        _this.knownDevicesKey = 'knownWifiSyncDevices';
         _this.port = port;
         _this.deviceId = "desktop-".concat(os.hostname().substring(0, 8));
         _this.deviceName = os.hostname();
         _this.pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
+        _this._loadKnownDevices();
         return _this;
     }
     WiFiSyncService.prototype.setDeviceId = function (deviceId, deviceName) {
@@ -143,12 +152,11 @@ var WiFiSyncService = /** @class */ (function (_super) {
                 ws.on('close', function () {
                     console.log('[WiFi-Sync] Mobile client disconnected');
                     _this.clients.delete(ws);
-                    _this.emit('client-disconnected');
+                    _this._handleSocketClose(ws);
                 });
                 ws.on('error', function (err) {
                     console.error('[WiFi-Sync] WebSocket error:', err);
                 });
-                _this.emit('client-connected');
             });
             this._startDiscovery();
             return true;
@@ -158,26 +166,87 @@ var WiFiSyncService = /** @class */ (function (_super) {
             return false;
         }
     };
+    WiFiSyncService.prototype._loadKnownDevices = function () {
+        var saved = this.store.get(this.knownDevicesKey);
+        if (!Array.isArray(saved))
+            return;
+        for (var _i = 0, saved_1 = saved; _i < saved_1.length; _i++) {
+            var entry = saved_1[_i];
+            if (!entry || typeof entry !== 'object' || !entry.deviceId)
+                continue;
+            var normalized = this._normalizeKnownDevice(entry);
+            normalized.online = false;
+            this.knownDevices.set(normalized.deviceId, normalized);
+        }
+    };
+    WiFiSyncService.prototype._persistKnownDevices = function () {
+        this.store.set(this.knownDevicesKey, Array.from(this.knownDevices.values()));
+        this.emit('devices-updated', this.getKnownDevices());
+    };
+    WiFiSyncService.prototype._normalizeKnownDevice = function (device) {
+        var _a, _b;
+        return {
+            deviceId: device.deviceId,
+            deviceName: device.deviceName || 'Unknown Mobile',
+            deviceType: device.deviceType || 'mobile',
+            ip: device.ip || '',
+            port: device.port || this.port,
+            platform: device.platform || 'unknown',
+            trustLevel: device.trustLevel || 'ask_once',
+            autoConnect: (_a = device.autoConnect) !== null && _a !== void 0 ? _a : device.trustLevel === 'trusted',
+            online: (_b = device.online) !== null && _b !== void 0 ? _b : false,
+            lastConnected: device.lastConnected,
+            lastSeen: device.lastSeen,
+        };
+    };
+    WiFiSyncService.prototype._upsertKnownDevice = function (device) {
+        var existing = this.knownDevices.get(device.deviceId);
+        var merged = this._normalizeKnownDevice(__assign(__assign({}, (existing || {})), device));
+        this.knownDevices.set(merged.deviceId, merged);
+        this._persistKnownDevices();
+        return merged;
+    };
+    WiFiSyncService.prototype._getSocketIp = function (ws) {
+        var _a;
+        var remoteAddress = (_a = ws === null || ws === void 0 ? void 0 : ws._socket) === null || _a === void 0 ? void 0 : _a.remoteAddress;
+        return (remoteAddress === null || remoteAddress === void 0 ? void 0 : remoteAddress.replace(/^::ffff:/, '')) || '';
+    };
+    WiFiSyncService.prototype._handleSocketClose = function (ws) {
+        var deviceId = this.socketDeviceIds.get(ws);
+        if (!deviceId)
+            return;
+        this.clientSockets.delete(deviceId);
+        this.socketDeviceIds.delete(ws);
+        var device = this.knownDevices.get(deviceId);
+        if (device) {
+            this._upsertKnownDevice(__assign(__assign({}, device), { online: false, lastSeen: Date.now() }));
+        }
+        this.emit('client-disconnected', {
+            deviceId: deviceId,
+            connected: this.clientSockets.size > 0,
+            devices: this.getKnownDevices(),
+        });
+    };
     WiFiSyncService.prototype._startDiscovery = function () {
         var _this = this;
         try {
             this.discoverySocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
-            var discoveryPort_1 = 3005; // Different port for discovery
-            var beacon_1 = JSON.stringify({
+            var discoveryPort_1 = 3005;
+            var beacon_1 = function () { return JSON.stringify({
                 type: 'comet-ai-beacon',
-                deviceId: this.deviceId,
+                deviceId: _this.deviceId,
                 deviceName: os.hostname(),
-                ip: this.getLocalIp(),
-                port: this.port
-            });
+                ip: _this.getLocalIp(),
+                port: _this.port,
+            }); };
             this.discoveryInterval = setInterval(function () {
-                if (_this.discoverySocket) {
-                    var message = Buffer.from(beacon_1);
-                    _this.discoverySocket.send(message, discoveryPort_1, '255.255.255.255', function (err) {
-                        if (err)
-                            console.error('[WiFi-Sync] Discovery send failed:', err);
-                    });
-                }
+                if (!_this.discoverySocket)
+                    return;
+                var message = Buffer.from(beacon_1());
+                _this.discoverySocket.send(message, discoveryPort_1, '255.255.255.255', function (err) {
+                    if (err)
+                        console.error('[WiFi-Sync] Discovery send failed:', err);
+                });
             }, 3000);
             this.discoverySocket.bind(0, function () {
                 if (_this.discoverySocket) {
@@ -191,33 +260,60 @@ var WiFiSyncService = /** @class */ (function (_super) {
         }
     };
     WiFiSyncService.prototype._handleMessage = function (ws, data) {
+        var _a;
         try {
             var msg = JSON.parse(data.toString());
             console.log("[WiFi-Sync] Received: ".concat(msg.type));
             switch (msg.type) {
-                case 'handshake':
-                    console.log('[WiFi-Sync] Handshake received from:', msg.deviceId);
-                    if (msg.pairingCode === this.pairingCode) {
+                case 'handshake': {
+                    var deviceId = "".concat(msg.deviceId || "mobile-".concat(Date.now()));
+                    var knownDevice = this.knownDevices.get(deviceId);
+                    var isTrusted = (knownDevice === null || knownDevice === void 0 ? void 0 : knownDevice.trustLevel) === 'trusted';
+                    var pairingAccepted = typeof msg.pairingCode === 'string' && msg.pairingCode === this.pairingCode;
+                    console.log('[WiFi-Sync] Handshake received from:', deviceId, 'trusted=', isTrusted);
+                    if (isTrusted || pairingAccepted) {
+                        var device = this._upsertKnownDevice({
+                            deviceId: deviceId,
+                            deviceName: msg.deviceName || (knownDevice === null || knownDevice === void 0 ? void 0 : knownDevice.deviceName) || 'Comet Mobile',
+                            deviceType: 'mobile',
+                            ip: this._getSocketIp(ws),
+                            port: Number(msg.port) || (knownDevice === null || knownDevice === void 0 ? void 0 : knownDevice.port) || this.port,
+                            platform: msg.platform || (knownDevice === null || knownDevice === void 0 ? void 0 : knownDevice.platform) || 'mobile',
+                            trustLevel: isTrusted ? 'trusted' : ((knownDevice === null || knownDevice === void 0 ? void 0 : knownDevice.trustLevel) || 'ask_once'),
+                            autoConnect: (_a = knownDevice === null || knownDevice === void 0 ? void 0 : knownDevice.autoConnect) !== null && _a !== void 0 ? _a : isTrusted,
+                            online: true,
+                            lastConnected: Date.now(),
+                            lastSeen: Date.now(),
+                        });
+                        this.clientSockets.set(deviceId, ws);
+                        this.socketDeviceIds.set(ws, deviceId);
                         ws.send(JSON.stringify({
                             type: 'handshake-ack',
                             deviceId: this.deviceId,
+                            deviceName: this.deviceName,
                             hostname: os.hostname(),
                             platform: os.platform(),
-                            authenticated: true
+                            authenticated: true,
+                            trusted: device.trustLevel === 'trusted',
+                            autoConnect: device.autoConnect,
                         }));
                         console.log('[WiFi-Sync] Client authenticated successfully');
+                        this.emit('client-connected', {
+                            deviceId: deviceId,
+                            connected: this.clientSockets.size > 0,
+                            devices: this.getKnownDevices(),
+                        });
                     }
                     else {
                         ws.send(JSON.stringify({
                             type: 'error',
                             code: 'AUTH_FAILED',
-                            message: 'Invalid pairing code'
+                            message: 'Invalid pairing code',
                         }));
                         console.log('[WiFi-Sync] Client authentication failed');
-                        // Optional: ws.close() or keep open for retry? 
-                        // Flutter UI allows retry.
                     }
                     break;
+                }
                 case 'execute-command':
                     this._handleCommand(ws, msg);
                     break;
@@ -231,13 +327,14 @@ var WiFiSyncService = /** @class */ (function (_super) {
                         this.emit('clipboard-received', msg.text);
                     }
                     break;
-                case 'clipboard-sync-request':
+                case 'clipboard-sync-request': {
                     var currentClipboard = electron_1.clipboard.readText();
                     ws.send(JSON.stringify({
                         type: 'clipboard-sync',
-                        text: currentClipboard
+                        text: currentClipboard,
                     }));
                     break;
+                }
                 case 'ping':
                     ws.send(JSON.stringify({ type: 'pong' }));
                     break;
@@ -252,14 +349,13 @@ var WiFiSyncService = /** @class */ (function (_super) {
             var commandId, command, args;
             return __generator(this, function (_a) {
                 commandId = msg.commandId, command = msg.command, args = msg.args;
-                // Forward to main process via event
                 this.emit('command', {
                     commandId: commandId,
                     command: command,
                     args: args,
                     sendResponse: function (responseBody) {
                         ws.send(JSON.stringify(__assign({ type: 'command-response', commandId: commandId }, responseBody)));
-                    }
+                    },
                 });
                 return [2 /*return*/];
             });
@@ -274,7 +370,7 @@ var WiFiSyncService = /** @class */ (function (_super) {
             promptId: promptId,
             response: response,
             isStreaming: isStreaming !== null && isStreaming !== void 0 ? isStreaming : false,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
     };
     WiFiSyncService.prototype.sendDesktopStatus = function (status) {
@@ -285,7 +381,7 @@ var WiFiSyncService = /** @class */ (function (_super) {
             type: 'desktop-control',
             action: action,
             args: args || {},
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
     };
     WiFiSyncService.prototype._handleDesktopControl = function (ws, msg) {
@@ -294,14 +390,13 @@ var WiFiSyncService = /** @class */ (function (_super) {
             return __generator(this, function (_a) {
                 commandId = msg.commandId, action = msg.action, prompt = msg.prompt, promptId = msg.promptId, args = msg.args;
                 console.log("[WiFi-Sync] Desktop Control: action=".concat(action));
-                // Forward to main process via event
                 this.emit('command', {
                     commandId: commandId,
                     command: 'desktop-control',
                     args: __assign({ action: action, prompt: prompt, promptId: promptId }, args),
                     sendResponse: function (responseBody) {
                         ws.send(JSON.stringify(__assign({ type: 'desktop-control-response', commandId: commandId, action: action }, responseBody)));
-                    }
+                    },
                 });
                 return [2 /*return*/];
             });
@@ -347,10 +442,11 @@ var WiFiSyncService = /** @class */ (function (_super) {
         return this.pairingCode;
     };
     WiFiSyncService.prototype.broadcast = function (message) {
-        if (!this.wss)
-            return;
         var data = JSON.stringify(message);
-        this.clients.forEach(function (client) {
+        var recipients = this.clientSockets.size > 0
+            ? Array.from(this.clientSockets.values())
+            : Array.from(this.clients.values());
+        recipients.forEach(function (client) {
             if (client.readyState === ws_1.WebSocket.OPEN) {
                 client.send(data);
             }
@@ -360,7 +456,7 @@ var WiFiSyncService = /** @class */ (function (_super) {
         this.broadcast({
             type: 'clipboard-sync',
             text: text,
-            timestamp: Date.now()
+            timestamp: Date.now(),
         });
     };
     WiFiSyncService.prototype.connectToDevice = function (deviceId) {
@@ -380,6 +476,39 @@ var WiFiSyncService = /** @class */ (function (_super) {
     };
     WiFiSyncService.prototype.getConnectedClients = function () {
         return Array.from(this.clientSockets.keys());
+    };
+    WiFiSyncService.prototype.getKnownDevices = function () {
+        return Array.from(this.knownDevices.values()).sort(function (a, b) { return (b.lastSeen || b.lastConnected || 0) - (a.lastSeen || a.lastConnected || 0); });
+    };
+    WiFiSyncService.prototype.setDeviceTrust = function (deviceId, trustLevel, autoConnect) {
+        var existing = this.knownDevices.get(deviceId);
+        if (!existing)
+            return null;
+        var updated = this._upsertKnownDevice(__assign(__assign({}, existing), { trustLevel: trustLevel, autoConnect: autoConnect !== null && autoConnect !== void 0 ? autoConnect : trustLevel === 'trusted', lastSeen: Date.now() }));
+        var socket = this.clientSockets.get(deviceId);
+        if (socket && socket.readyState === ws_1.WebSocket.OPEN) {
+            socket.send(JSON.stringify({
+                type: 'device-trust-updated',
+                deviceId: deviceId,
+                deviceName: updated.deviceName,
+                trustLevel: updated.trustLevel,
+                autoConnect: updated.autoConnect,
+                timestamp: Date.now(),
+            }));
+        }
+        return updated;
+    };
+    WiFiSyncService.prototype.removeKnownDevice = function (deviceId) {
+        var socket = this.clientSockets.get(deviceId);
+        if (socket) {
+            socket.close();
+        }
+        this.clientSockets.delete(deviceId);
+        var deleted = this.knownDevices.delete(deviceId);
+        if (deleted) {
+            this._persistKnownDevices();
+        }
+        return deleted;
     };
     return WiFiSyncService;
 }(events_1.EventEmitter));

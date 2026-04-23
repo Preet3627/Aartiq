@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:path_provider/path_provider.dart';
@@ -18,6 +17,7 @@ class SyncService {
   // Device memory for persistent local devices
   static const String _deviceMemoryKey = 'paired_devices_memory';
   List<Map<String, dynamic>> _savedDevices = [];
+  final Set<String> _pendingDiscoveryReconnects = <String>{};
 
   DatabaseReference? _signalRef;
   RTCPeerConnection? _peerConnection;
@@ -42,7 +42,7 @@ class SyncService {
       if (savedJson != null) {
         _savedDevices = List<Map<String, dynamic>>.from(
           (jsonDecode(savedJson) as List)
-              .map((d) => Map<String, dynamic>.from(d)),
+              .map((d) => _normalizeSavedDevice(Map<String, dynamic>.from(d))),
         );
         print(
             '[Sync] Loaded ${_savedDevices.length} saved devices from memory');
@@ -54,17 +54,21 @@ class SyncService {
 
   Future<void> saveDeviceToMemory(Map<String, dynamic> device) async {
     try {
+      final normalizedDevice = _normalizeSavedDevice(device);
       final existingIndex = _savedDevices.indexWhere(
-        (d) => d['deviceId'] == device['deviceId'],
+        (d) => d['deviceId'] == normalizedDevice['deviceId'],
       );
       if (existingIndex >= 0) {
-        _savedDevices[existingIndex] = device;
+        _savedDevices[existingIndex] = {
+          ..._savedDevices[existingIndex],
+          ...normalizedDevice,
+        };
       } else {
-        _savedDevices.add(device);
+        _savedDevices.add(normalizedDevice);
       }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_deviceMemoryKey, jsonEncode(_savedDevices));
-      print('[Sync] Saved device to memory: ${device['deviceName']}');
+      print('[Sync] Saved device to memory: ${normalizedDevice['deviceName']}');
     } catch (e) {
       print('[Sync] Error saving device: $e');
     }
@@ -82,6 +86,61 @@ class SyncService {
   }
 
   List<Map<String, dynamic>> getSavedDevices() => _savedDevices;
+
+  Map<String, dynamic> _normalizeSavedDevice(Map<String, dynamic> device) {
+    return {
+      'deviceId': device['deviceId'],
+      'deviceName': device['deviceName'] ?? 'Desktop Device',
+      'deviceType': device['deviceType'] ?? 'desktop',
+      'ip': device['ip'],
+      'port': device['port'] ?? 3004,
+      'timestamp': device['timestamp'] ?? DateTime.now().millisecondsSinceEpoch,
+      'lastConnected': device['lastConnected'] ?? device['timestamp'],
+      'lastSeen':
+          device['lastSeen'] ?? device['lastConnected'] ?? device['timestamp'],
+      'autoConnect': device['autoConnect'] ?? true,
+      'trusted': device['trusted'] ?? false,
+      'connectionMode': device['connectionMode'] ?? 'local',
+      'isOnline': device['isOnline'] ?? false,
+    };
+  }
+
+  Map<String, dynamic>? getSavedDevice(String deviceId) {
+    try {
+      return _savedDevices
+          .firstWhere((device) => device['deviceId'] == deviceId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _updateSavedDevice(
+    String deviceId, {
+    String? deviceName,
+    String? ip,
+    int? port,
+    bool? trusted,
+    bool? autoConnect,
+    bool? isOnline,
+    String? connectionMode,
+    int? lastConnected,
+    int? lastSeen,
+  }) async {
+    final existing = getSavedDevice(deviceId) ?? {'deviceId': deviceId};
+    await saveDeviceToMemory({
+      ...existing,
+      if (deviceName != null) 'deviceName': deviceName,
+      if (ip != null) 'ip': ip,
+      if (port != null) 'port': port,
+      if (trusted != null) 'trusted': trusted,
+      if (autoConnect != null) 'autoConnect': autoConnect,
+      if (isOnline != null) 'isOnline': isOnline,
+      if (connectionMode != null) 'connectionMode': connectionMode,
+      if (lastConnected != null) 'lastConnected': lastConnected,
+      if (lastSeen != null) 'lastSeen': lastSeen,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
 
   Future<void> initialize(String userId, {String? customDeviceId}) async {
     this.userId = userId;
@@ -253,6 +312,8 @@ class SyncService {
   bool isConnectedToDesktop = false;
   bool _isReconnecting = false;
   Timer? _reconnectTimer;
+  Timer? _desktopHeartbeatTimer;
+  DateTime? _lastDesktopPongAt;
   static const String _lastDeviceKey = 'last_connected_device';
   String _desktopConnectionMode = 'none';
   String? _connectedDesktopLabel;
@@ -314,6 +375,40 @@ class SyncService {
                     'port': data['port'] ?? 3004,
                   });
                 }
+
+                if (deviceId != null) {
+                  unawaited(_updateSavedDevice(
+                    deviceId,
+                    deviceName: data['deviceName'] ?? 'Unknown Desktop',
+                    ip: dg.address.address,
+                    port: data['port'] ?? 3004,
+                    isOnline: true,
+                    lastSeen: DateTime.now().millisecondsSinceEpoch,
+                    connectionMode: 'local',
+                  ));
+
+                  final savedDevice = getSavedDevice(deviceId);
+                  final canAutoReconnect = savedDevice != null &&
+                      savedDevice['trusted'] == true &&
+                      savedDevice['autoConnect'] != false &&
+                      !isConnectedToDesktop &&
+                      !_isReconnecting &&
+                      !_pendingDiscoveryReconnects.contains(deviceId);
+
+                  if (canAutoReconnect) {
+                    _pendingDiscoveryReconnects.add(deviceId);
+                    unawaited(connectToDesktop(
+                      dg.address.address,
+                      data['port'] ?? 3004,
+                      deviceId,
+                    ).catchError((error) {
+                      print(
+                          '[Sync] Trusted discovery reconnect failed: $error');
+                    }).whenComplete(() {
+                      _pendingDiscoveryReconnects.remove(deviceId);
+                    }));
+                  }
+                }
               }
             } catch (e) {
               print('[Sync] Error parsing discovery beacon: $e');
@@ -339,6 +434,7 @@ class SyncService {
       _desktopIp = ip;
       _desktopPort = port;
       remoteDeviceId = deviceId;
+      Map<String, dynamic>? handshakeAck;
 
       // Connect via WebSocket
       _desktopSocket = await WebSocket.connect('ws://$ip:$port')
@@ -353,6 +449,7 @@ class SyncService {
             final msg = jsonDecode(data);
             if (msg['type'] == 'handshake-ack' &&
                 msg['authenticated'] == true) {
+              handshakeAck = Map<String, dynamic>.from(msg);
               if (!completer.isCompleted) completer.complete();
             } else if (msg['type'] == 'error' && msg['code'] == 'AUTH_FAILED') {
               if (!completer.isCompleted)
@@ -364,12 +461,28 @@ class SyncService {
         onDone: () {
           print('[Sync] Desktop connection closed');
           isConnectedToDesktop = false;
+          _stopDesktopHeartbeat();
+          if (remoteDeviceId != null) {
+            unawaited(_updateSavedDevice(
+              remoteDeviceId!,
+              isOnline: false,
+              lastSeen: DateTime.now().millisecondsSinceEpoch,
+            ));
+          }
           if (!completer.isCompleted) completer.completeError('Disconnected');
           _scheduleReconnect();
         },
         onError: (error) {
           print('[Sync] Desktop connection error: $error');
           isConnectedToDesktop = false;
+          _stopDesktopHeartbeat();
+          if (remoteDeviceId != null) {
+            unawaited(_updateSavedDevice(
+              remoteDeviceId!,
+              isOnline: false,
+              lastSeen: DateTime.now().millisecondsSinceEpoch,
+            ));
+          }
           if (!completer.isCompleted) completer.completeError(error);
           _scheduleReconnect();
         },
@@ -380,6 +493,7 @@ class SyncService {
         jsonEncode({
           'type': 'handshake',
           'deviceId': this.deviceId,
+          'deviceName': 'Comet Mobile (${Platform.operatingSystem})',
           'platform': 'mobile',
           'pairingCode': pairingCode,
         }),
@@ -390,15 +504,31 @@ class SyncService {
 
       isConnectedToDesktop = true;
       _desktopConnectionMode = 'local';
-      _connectedDesktopLabel = ip;
+      _connectedDesktopLabel =
+          handshakeAck?['deviceName'] ?? handshakeAck?['hostname'] ?? ip;
       _isReconnecting = false;
       _reconnectTimer?.cancel();
+      _startDesktopHeartbeat();
       _saveDeviceLocally(ip, port, deviceId);
+      await saveDeviceToMemory({
+        'deviceId': deviceId,
+        'deviceName': _connectedDesktopLabel,
+        'deviceType': 'desktop',
+        'ip': ip,
+        'port': port,
+        'trusted': handshakeAck?['trusted'] == true,
+        'autoConnect': true,
+        'isOnline': true,
+        'connectionMode': 'local',
+        'lastConnected': DateTime.now().millisecondsSinceEpoch,
+        'lastSeen': DateTime.now().millisecondsSinceEpoch,
+      });
       print('[Sync] Connected and Authenticated to desktop at $ip:$port');
     } catch (e) {
       _desktopSocket?.close();
       _desktopSocket = null;
       isConnectedToDesktop = false;
+      _stopDesktopHeartbeat();
       print('[Sync] Failed to connect to desktop: $e');
       if (_isReconnecting) {
         _scheduleReconnect();
@@ -427,6 +557,30 @@ class SyncService {
     if (isConnectedToDesktop || _isReconnecting) return;
 
     try {
+      await loadSavedDevices();
+      final trustedDevices = _savedDevices
+          .where((device) =>
+              device['trusted'] == true && device['autoConnect'] != false)
+          .toList()
+        ..sort((a, b) =>
+            (b['lastConnected'] ?? 0).compareTo(a['lastConnected'] ?? 0));
+
+      for (final device in trustedDevices) {
+        final ip = device['ip'];
+        final port = device['port'];
+        final deviceId = device['deviceId'];
+        if (ip is String && ip.isNotEmpty && deviceId is String) {
+          print('[Sync] Attempting trusted auto-reconnect to $ip:$port...');
+          _isReconnecting = true;
+          try {
+            await connectToDesktop(ip, port ?? 3004, deviceId);
+            return;
+          } catch (error) {
+            print('[Sync] Trusted auto-reconnect failed for $deviceId: $error');
+          }
+        }
+      }
+
       final prefs = await SharedPreferences.getInstance();
       final deviceJson = prefs.getString(_lastDeviceKey);
       if (deviceJson == null) return;
@@ -455,6 +609,40 @@ class SyncService {
     });
   }
 
+  void _startDesktopHeartbeat() {
+    _desktopHeartbeatTimer?.cancel();
+    _lastDesktopPongAt = DateTime.now();
+    _desktopHeartbeatTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!isConnectedToDesktop || _desktopSocket == null) {
+        return;
+      }
+
+      final lastPong = _lastDesktopPongAt;
+      if (lastPong != null &&
+          DateTime.now().difference(lastPong) > const Duration(seconds: 45)) {
+        print('[Sync] Desktop heartbeat timed out, reconnecting...');
+        _desktopSocket?.close();
+        return;
+      }
+
+      try {
+        _desktopSocket!.add(jsonEncode({
+          'type': 'ping',
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        }));
+      } catch (error) {
+        print('[Sync] Heartbeat ping failed: $error');
+        _desktopSocket?.close();
+      }
+    });
+  }
+
+  void _stopDesktopHeartbeat() {
+    _desktopHeartbeatTimer?.cancel();
+    _desktopHeartbeatTimer = null;
+    _lastDesktopPongAt = null;
+  }
+
   void _handleDesktopMessage(dynamic data) {
     try {
       final msg = jsonDecode(data);
@@ -462,6 +650,19 @@ class SyncService {
       if (msg['type'] == 'command-response') {
         _commandResponseController.add(msg);
         print('[Sync] Command response received: ${msg['output']}');
+      } else if (msg['type'] == 'pong') {
+        _lastDesktopPongAt = DateTime.now();
+      } else if (msg['type'] == 'handshake-ack') {
+        final ackDeviceId = remoteDeviceId;
+        if (ackDeviceId != null) {
+          unawaited(_updateSavedDevice(
+            ackDeviceId,
+            deviceName: msg['deviceName'] ?? msg['hostname'],
+            trusted: msg['trusted'] == true,
+            isOnline: true,
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
       } else if (msg['type'] == 'clipboard-sync') {
         _lastSentClipboard = msg['text'];
         Clipboard.setData(ClipboardData(text: msg['text']));
@@ -492,6 +693,17 @@ class SyncService {
       } else if (msg['type'] == 'desktop-control-response') {
         _desktopControlController.add(msg);
         print('[Sync] Desktop control response: ${msg['action']}');
+      } else if (msg['type'] == 'device-trust-updated') {
+        final updatedDeviceId = msg['deviceId']?.toString();
+        if (updatedDeviceId != null) {
+          unawaited(_updateSavedDevice(
+            updatedDeviceId,
+            trusted: msg['trustLevel'] == 'trusted',
+            autoConnect: msg['autoConnect'] != false,
+            deviceName: msg['deviceName']?.toString(),
+            lastSeen: DateTime.now().millisecondsSinceEpoch,
+          ));
+        }
       }
     } catch (e) {
       print('[Sync] Error handling desktop message: $e');
@@ -521,7 +733,7 @@ class SyncService {
 
     // Wait for response (with timeout)
     try {
-      final response = await onCommandResponse
+      final response = await onDesktopControl
           .firstWhere(
             (msg) => msg['commandId'] == commandId,
             orElse: () => {'error': 'Timeout'},
@@ -548,6 +760,7 @@ class SyncService {
     if (_desktopConnectionMode == 'local') {
       _desktopSocket?.close();
     }
+    _stopDesktopHeartbeat();
     _desktopSocket = null;
     isConnectedToDesktop = false;
     _desktopIp = null;

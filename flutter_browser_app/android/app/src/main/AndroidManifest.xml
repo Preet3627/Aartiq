@@ -109,7 +109,7 @@
 
         <meta-data
             android:name="com.google.android.gms.signin.client_webview_client_id"
-            android:value="507073680966.apps.googleusercontent.com" />
+            android:value="507073680966-htnpcip4v3o5fhse7iqsdon9rqq8bhmk.apps.googleusercontent.com" />
 
         <receiver android:name=".SearchWidget" android:exported="true">
             <intent-filter>

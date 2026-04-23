@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import '../auth_service.dart';
 
 class AuthPage extends StatefulWidget {
@@ -26,6 +27,7 @@ class _AuthPageState extends State<AuthPage>
   bool _isLoading = false;
   String? _errorMessage;
   bool _isSignUp = false;
+  StreamSubscription<Map<String, dynamic>?>? _authSubscription;
 
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -47,8 +49,8 @@ class _AuthPageState extends State<AuthPage>
     );
     _controller.forward();
 
-    AuthService().onAuthStateChanged.listen((user) {
-      if (user != null && !_isLoading) {
+    _authSubscription = AuthService().onAuthStateChanged.listen((user) {
+      if (user != null && mounted) {
         widget.onAuthComplete();
       }
     });
@@ -57,6 +59,7 @@ class _AuthPageState extends State<AuthPage>
   @override
   void dispose() {
     _controller.dispose();
+    _authSubscription?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();

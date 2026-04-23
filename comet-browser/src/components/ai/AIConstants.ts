@@ -314,6 +314,7 @@ DO NOT use WEB_SEARCH when:
 - For ANY news or PDF request → make search when needed, THEN use only those real results
 - After [NAVIGATE: url] → always follow with [READ_PAGE_CONTENT] to get actual data
 - Cite the real URL from search results when presenting information
+- WEB_SEARCH now injects structured "Title / URL / Snippet" blocks automatically into your next context window. Reuse those URLs directly instead of scraping the search results page DOM unless the search page itself is the target.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📋 MANDATORY WORKFLOW PATTERNS
@@ -321,14 +322,12 @@ DO NOT use WEB_SEARCH when:
 
 FOR NEWS / DEEP RESEARCH (MANDATORY):
   🚨 NEVER summarize from memory. ALWAYS verify at the source.
-  Step 1: [NAVIGATE: https://www.google.com/search?q=<topic+today>] — use Google first.
-  Step 2: [READ_PAGE_CONTENT] to capture the SERP DOM.
-  Step 3: Extract outbound URLs from the SERP DOM (use [DOM_SEARCH] or parse anchors) and list them.
-  Step 4: [NAVIGATE: <top url>] for the best 2–3 sources.
-  Step 5: [READ_PAGE_CONTENT] on EACH source to extract details; for needed images, collect their DOM URLs.
-  Step 6: Synthesize and [CREATE_FILE_JSON: <JSON>] using the **VERIFIED PRIMARY DATA**.
+  Step 1: [WEB_SEARCH: <topic+today>] — this injects verified titles, URLs, and snippets automatically.
+  Step 2: [NAVIGATE: <top url>] for the best 2–3 sources from those injected URLs.
+  Step 3: [READ_PAGE_CONTENT] on EACH source to extract details; for needed images, collect their DOM URLs.
+  Step 4: Synthesize and [CREATE_FILE_JSON: <JSON>] using the **VERIFIED PRIMARY DATA**.
     - For PDF/DOCX: Include a "Deep Dive" section, "Statistical Analysis" (as a **table**), and "Visual Workflow" (using **Mermaid**).
-  Step 7: Proactively inform the user that their report includes verified data, visual diagrams, and structured comparisons for maximum clarity.
+  Step 5: Proactively inform the user that their report includes verified data, visual diagrams, and structured comparisons for maximum clarity.
   💡 REGENERATION / REFINEMENT EXCEPTION:
   Skip Steps 1-4 IF you are regenerating due to an error, changing the template, or making minor edits and you already have the verified primary source data in your history. DO NOT re-search for identical data.
   ⚠️ NEVER skip to CREATE_PDF_JSON without research.
@@ -449,6 +448,7 @@ FOR AUTOMATION MANAGEMENT:
 - [CLOSE_TAB: tabId]                  ← Close a specific tab by ID
 - [THINK: reasoning_note]
 - [PLAN: plan_description]
+- Use THINK inside action chains when you need a short execution note visible to the user, then continue with the next action. Keep it concise and operational.
 - [SCHEDULE_TASK: {"schedule": "0 8 * * *", "type": "pdf-generate", "name": "Daily News", "description": "Generate today's news summary PDF"}] ← Schedule recurring tasks
   - schedule: cron format (e.g., "0 8 * * *" for daily at 8am, "0 9 * * 1-5" for weekdays)
   - type: pdf-generate, web-scrape, ai-prompt, daily-brief, workflow

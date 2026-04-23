@@ -120,6 +120,70 @@ interface AIChatSidebarProps {
   bridgeOnly?: boolean;
 }
 
+interface SearchResultEntry {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+const parseSearchResultEntry = (result: any): SearchResultEntry | null => {
+  if (!result) return null;
+
+  if (typeof result === 'object' && result.url) {
+    return {
+      title: `${result.title || 'Untitled result'}`.trim(),
+      url: `${result.url || ''}`.trim(),
+      snippet: `${result.snippet || result.description || ''}`.trim(),
+    };
+  }
+
+  if (typeof result !== 'string') return null;
+
+  const trimmed = result.trim();
+  if (!trimmed) return null;
+
+  const markdownMatch = trimmed.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)\s*([\s\S]*)$/);
+  if (markdownMatch) {
+    return {
+      title: markdownMatch[1].trim(),
+      url: markdownMatch[2].trim(),
+      snippet: markdownMatch[3].trim(),
+    };
+  }
+
+  const lines = trimmed.split('\n').map(line => line.trim()).filter(Boolean);
+  const urlLine = lines.find(line => /^https?:\/\//i.test(line) || /^URL:\s*https?:\/\//i.test(line));
+  const normalizedUrl = urlLine?.replace(/^URL:\s*/i, '').trim() || '';
+
+  return {
+    title: lines[0] || 'Untitled result',
+    url: normalizedUrl,
+    snippet: lines.slice(normalizedUrl ? 2 : 1).join(' ').trim(),
+  };
+};
+
+const normalizeSearchResults = (results: any[]): SearchResultEntry[] => (
+  (results || [])
+    .map(parseSearchResultEntry)
+    .filter((entry): entry is SearchResultEntry => Boolean(entry?.url))
+);
+
+const formatSearchResultsForLLM = (query: string, results: SearchResultEntry[]): string => {
+  if (results.length === 0) return '';
+
+  return [
+    `WEB SEARCH RESULTS FOR: ${query}`,
+    'These URLs were injected automatically. Reuse them directly instead of scraping the search results page DOM again.',
+    '',
+    ...results.map((entry, index) => [
+      `[Result ${index + 1}]`,
+      `Title: ${entry.title}`,
+      `URL: ${entry.url}`,
+      `Snippet: ${entry.snippet || 'No snippet available.'}`,
+    ].join('\n')),
+  ].join('\n\n');
+};
+
 const renderMarkdownContent = (content: string) => (
   <ReactMarkdown
     remarkPlugins={[remarkGfm, remarkMath]}
@@ -770,12 +834,9 @@ I couldn't schedule the task. The background service may not be running. Please 
     for (const q of queries) {
       try {
         const res = await window.electronAPI.webSearchRag(q);
-        if (res && res.length > 0) {
-          const snippets = (res as string[])
-            .map((r) => r.trim())
-            .filter(Boolean)
-            .slice(0, 5);
-          results.push(`[Search: "${q}"]\n${snippets.join('\n')}`);
+        const normalizedResults = normalizeSearchResults(res as any[]);
+        if (normalizedResults.length > 0) {
+          results.push(formatSearchResultsForLLM(q, normalizedResults.slice(0, 5)));
         }
       } catch (e) {
         console.warn('[CometAI] Pre-flight search failed for:', q, e);
@@ -1580,10 +1641,13 @@ I couldn't schedule the task. The background service may not be running. Please 
         case 'WEB_SEARCH': {
           let query = command.value.trim().replace(/^["'](.*)["']$/, '$1') || 'Comet AI Browser';
           let searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+          const originalQuery = query;
+          let treatAsDirectUrl = false;
 
           // If the AI mistakenly uses WEB_SEARCH but provides a direct URL, handle it as a direct navigation
           if (query.match(/^https?:\/\/[^\s]+/i) || query.match(/^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}(\/.*)?$/)) {
             searchUrl = query.startsWith('http') ? query : `https://${query}`;
+            treatAsDirectUrl = true;
             query = `Opening URL: ${searchUrl}`; // Just for logging
           }
 
@@ -1593,22 +1657,23 @@ I couldn't schedule the task. The background service may not be running. Please 
           output = `Opened new tab for: "${query}" (${navigationResult.url || searchUrl})`;
 
           // Fetch real results and store in vector memory for LLM context
-          const results = await window.electronAPI.webSearchRag(query);
-          if (results && results.length > 0) {
-            const snippets = (results as string[])
-              .map((r) => r.trim())
-              .filter(Boolean)
-              .slice(0, 6); // More snippets = richer context for LLM
+          const results = treatAsDirectUrl ? [] : await window.electronAPI.webSearchRag(originalQuery);
+          const normalizedResults = normalizeSearchResults(results as any[]);
+          if (normalizedResults.length > 0) {
+            const injectedResults = normalizedResults.slice(0, 6);
+            const fullSnippet = formatSearchResultsForLLM(originalQuery, injectedResults);
 
             // ✅ Store in BrowserAI so the synthesis step gets REAL data
-            const fullSnippet = `[WEB_SEARCH RESULTS for "${query}"]\n${snippets.join('\n---\n')}`;
             await BrowserAI.addToVectorMemory(fullSnippet, {
               type: 'web_search',
-              query,
+              query: originalQuery,
               timestamp: Date.now()
             });
+            searchContextStore.addWebSearch(originalQuery, fullSnippet);
 
-            output = `Search results for "${query}":\n${snippets.join('\n')}`;
+            output = `Search results for "${originalQuery}":\n${injectedResults
+              .map((entry, index) => `${index + 1}. ${entry.title}\n${entry.url}\n${entry.snippet}`)
+              .join('\n\n')}`;
           } else {
             // Fallback: wait for the search page to load slightly and try DOM / OCR extraction
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1616,11 +1681,11 @@ I couldn't schedule the task. The background service may not be running. Please 
               const domRes = await window.electronAPI.extractPageContent();
               if (domRes && domRes.content && domRes.content.length > 100) {
                 const scrubbed = scrubbedContent(domRes.content).substring(0, 1000); // 🚀 Truncate fallback DOM
-                output = `Search results for "${query}" (fallback DOM snippet):\n${scrubbed}...`;
+                output = `Search results for "${query}" (search page DOM snapshot):\n${scrubbed}...`;
                 await BrowserAI.addToVectorMemory(scrubbed, { type: 'web_search_fallback', query, url: searchUrl });
                 setMessages(prev => {
                   const last = prev[prev.length - 1];
-                  const newOcrLabel = `WEB_SEARCH_FALLBACK_DOM`;
+                  const newOcrLabel = `SEARCH_PAGE_DOM`;
                   if (last && last.role === 'model') {
                     // Update last message with truncated text
                     return [...prev.slice(0, -1), {
@@ -4703,12 +4768,14 @@ I've successfully executed the following real tasks:
                         const isClick = log.type.includes('CLICK');
                         const isOcr = log.type.includes('SCREENSHOT') || log.type.includes('OCR') || log.type.includes('VISION');
                         const isPdf = log.type === 'PDF_READY';
+                        const isMeta = log.type === 'THINK' || log.type === 'PLAN';
 
                         let colorClass = log.success ? 'bg-sky-500/10 border-sky-500/30 text-sky-400' : 'bg-red-500/10 border-red-500/30 text-red-400';
                         if (log.success) {
                           if (isClick) colorClass = 'bg-amber-500/10 border-amber-500/30 text-amber-500';
                           else if (isOcr) colorClass = 'bg-purple-500/10 border-purple-500/30 text-purple-400';
                           else if (isPdf) colorClass = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 cursor-pointer hover:bg-emerald-500/20';
+                          else if (isMeta) colorClass = 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300';
                         }
 
                         return (
@@ -4722,7 +4789,8 @@ I've successfully executed the following real tasks:
                             {(isRead || isPdf) && <FileText size={12} />}
                             {isClick && <MousePointerClick size={12} />}
                             {isOcr && <Camera size={12} />}
-                            {!isSearch && !isRead && !isClick && !isOcr && !isPdf && (log.success ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />)}
+                            {isMeta && <Brain size={12} />}
+                            {!isSearch && !isRead && !isClick && !isOcr && !isPdf && !isMeta && (log.success ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />)}
                             <span>{isPdf ? 'Open PDF' : log.type.replace(/_/g, ' ')}</span>
                           </div>
                         );

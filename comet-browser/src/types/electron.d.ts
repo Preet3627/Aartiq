@@ -357,7 +357,11 @@ declare global {
             getWifiSyncUri: () => Promise<string | null>;
             getWifiSyncQr: (cloudMode?: boolean) => Promise<string | null>;
             getWifiSyncInfo: () => Promise<{ deviceName: string, pairingCode: string, ip: string, port: number }>;
+            getWifiSyncDevices: () => Promise<Array<{ deviceId: string; deviceName: string; deviceType: 'mobile' | 'desktop'; ip: string; port: number; platform?: string; trustLevel: 'trusted' | 'ask_once' | 'blocked'; autoConnect: boolean; online: boolean; lastConnected?: number; lastSeen?: number }>>;
+            setWifiSyncDeviceTrust: (payload: { deviceId: string; trustLevel: 'trusted' | 'ask_once' | 'blocked'; autoConnect?: boolean }) => Promise<{ success: boolean; device?: any; error?: string }>;
+            removeWifiSyncDevice: (deviceId: string) => Promise<{ success: boolean; error?: string }>;
             onWifiSyncStatus: (callback: (data: { connected: boolean }) => void) => () => void;
+            onWifiSyncDevicesUpdated: (callback: (devices: Array<{ deviceId: string; deviceName: string; deviceType: 'mobile' | 'desktop'; ip: string; port: number; platform?: string; trustLevel: 'trusted' | 'ask_once' | 'blocked'; autoConnect: boolean; online: boolean; lastConnected?: number; lastSeen?: number }>) => void) => () => void;
             onRemoteAiPrompt: (callback: (data: { prompt: string; commandId: string }) => void) => () => void;
             wifiSyncBroadcast: (data: any) => void;
 

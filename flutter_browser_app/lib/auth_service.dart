@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -118,7 +119,9 @@ class AuthService {
     try {
       print('[Auth] Starting native Google Sign-In...');
 
-      await _googleSignIn.signOut();
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
@@ -146,7 +149,7 @@ class AuthService {
 
       final UserCredential userCredential =
           await _firebaseAuth.signInWithCredential(credential);
-      final User? user = userCredential.user;
+      final User? user = userCredential.user ?? _firebaseAuth.currentUser;
 
       if (user != null) {
         await _syncFromFirebaseUser(user);
@@ -154,6 +157,14 @@ class AuthService {
         return true;
       }
 
+      return false;
+    } on FirebaseAuthException catch (e) {
+      print(
+          '[Auth] FirebaseAuth error during Google sign-in: ${e.code} ${e.message}');
+      return false;
+    } on PlatformException catch (e) {
+      print(
+          '[Auth] Platform error during Google sign-in: ${e.code} ${e.message}');
       return false;
     } catch (e) {
       print('[Auth] Google sign-in error: $e');
