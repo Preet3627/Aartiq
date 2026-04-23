@@ -249,7 +249,7 @@ ipcMain.handle('apple-intelligence-summary', async (event, text) => {
 });
 
 // --- CLI TOKEN PERSISTENCE ---
-const nativeMacUiToken = 'comet-native-dev-token-2026';
+const nativeMacUiToken = randomBytes(24).toString('hex');
 const tokenPath = path.join(os.homedir(), '.comet-ai-token');
 try {
   fs.writeFileSync(tokenPath, nativeMacUiToken, { mode: 0o600 });
@@ -752,7 +752,7 @@ const DEFAULT_MAC_NATIVE_UI_PREFERENCES = {
   sidebarShowCommandCenterButton: true,
   sidebarShowActionChainButton: true,
 };
-const nativeMacUiToken = randomBytes(24).toString('hex');
+// Token is declared above in the CLI PERSISTENCE section
 const nativeMacUiPort = parseInt(process.env.COMET_NATIVE_MAC_UI_PORT || '46203', 10);
 const nativeMacUiState = {
   mode: 'sidebar',
