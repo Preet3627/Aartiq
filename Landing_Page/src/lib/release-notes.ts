@@ -86,6 +86,7 @@ export const releases: ReleaseEntry[] = [
     }
   },
   {
+    version: '0.2.9.4.2',
     date: '2026-04-23',
     codename: 'Nebula',
     channel: 'stable',
