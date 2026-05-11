@@ -288,7 +288,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     borderColor: 'color-mix(in srgb, var(--border-color) 40%, transparent)',
     color: 'var(--primary-text)',
     backdropFilter: 'blur(24px)',
-    boxShadow: isLightTheme ? '0 6px 30px color-mix(in srgb, var(--shadow-color) 40%, transparent)' : '0 18px 60px color-mix(in srgb, var(--shadow-color) 55%, transparent)',
+    boxShadow: '0 6px 30px color-mix(in srgb, var(--shadow-color) 40%, transparent)',
   } as React.CSSProperties;
   const softPanelStyle = {
     background: 'color-mix(in srgb, var(--card-bg) 92%, transparent)',
@@ -4269,7 +4269,7 @@ I've successfully executed the following real tasks:
   return (
     <div
       className={`ai-sidebar-theme adaptive-theme-surface flex flex-col h-full overflow-hidden relative transition-[width,box-shadow,border-radius] duration-500 backdrop-blur-xl ${isFullScreen ? 'fixed inset-0 z-[9999]' : ''}`}
-      style={{ width: isFullScreen ? '100%' : effectiveSidebarWidth, ...sidebarShellStyle }}
+      style={{ width: isFullScreen ? '100%' : typeof effectiveSidebarWidth === 'number' ? `${effectiveSidebarWidth}px` : effectiveSidebarWidth, ...sidebarShellStyle }}
       onMouseEnter={markSidebarInteraction}
       onMouseDown={markSidebarInteraction}
       onClick={markSidebarInteraction}
@@ -4918,11 +4918,9 @@ I've successfully executed the following real tasks:
               disabled={isLoading || (!inputMessage.trim() && attachments.length === 0)}
               className={`group flex items-center justify-center w-12 h-12 rounded-[1.5rem] transition-all hover:scale-105 active:scale-95 disabled:opacity-10 disabled:grayscale`}
               style={{
-                background: props.theme === 'custom' ? 'var(--custom-btn-bg)' : 'var(--accent)',
-                color: props.theme === 'custom' ? 'var(--custom-btn-text)' : 'white',
-                boxShadow: isLightTheme
-                  ? '0 4px 12px var(--shadow-color)'
-                  : '0 4px 15px var(--shadow-color)'
+                background: 'var(--accent)',
+                color: 'white',
+                boxShadow: '0 4px 12px var(--shadow-color)'
               }}
             >
               <Send size={20} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
