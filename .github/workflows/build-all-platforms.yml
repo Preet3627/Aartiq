@@ -202,15 +202,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        target: [windows, macos, linux]
+        target: [windows, macos-x64, macos-arm64, linux]
         include:
           - target: windows
             os: windows-latest
             build_cmd: npm run dist:win
             artifact_path: comet-browser/release/*.exe
-          - target: macos
+          - target: macos-x64
             os: macos-latest
-            build_cmd: npm run dist:mac
+            build_cmd: npm run dist:mac:x64
+            artifact_path: comet-browser/release/*.dmg
+          - target: macos-arm64
+            os: macos-14
+            build_cmd: npm run dist:mac:arm64
             artifact_path: comet-browser/release/*.dmg
           - target: linux
             os: ubuntu-latest
