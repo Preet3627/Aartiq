@@ -191,7 +191,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        target: [windows, macos, linux]
+        target: [windows, macos-arm64, macos-x64, linux]
         include:
           - target: windows
             os: windows-latest
@@ -200,11 +200,16 @@ jobs:
               comet-browser/release/*.exe
               comet-browser/release/*.msix
             artifact_name: comet-ai-windows
-          - target: macos
+          - target: macos-arm64
             os: macos-latest
-            build_cmd: npm run dist:mac
+            build_cmd: npm run dist:mac:arm64
             artifact_glob: "comet-browser/release/*.dmg"
-            artifact_name: comet-ai-macos
+            artifact_name: comet-ai-macos-arm64
+          - target: macos-x64
+            os: macos-latest
+            build_cmd: npm run dist:mac:x64
+            artifact_glob: "comet-browser/release/*.dmg"
+            artifact_name: comet-ai-macos-x64
           - target: linux
             os: ubuntu-latest
             build_cmd: npm run build && npx electron-builder --linux AppImage --x64
@@ -280,7 +285,8 @@ jobs:
             
             ### Desktop
             - 🪟 **Windows**: `Comet.Browser.Setup.*.exe` or `.msix`
-            - 🍎 **macOS**: `Comet.Browser-*.dmg`
+            - 🍎 **macOS Apple Silicon**: `*-arm64.dmg`
+            - 🍎 **macOS Intel**: `*-x64.dmg`
             - 🐧 **Linux**: `Comet.Browser-*.AppImage`
             
             ### Mobile
@@ -333,19 +339,32 @@ jobs:
         run: npm install -g firebase-tools
 
       - name: Update Firebase Downloads Config
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.get-version.outputs.tag }}"
-          API_URL="https://api.github.com/repos/Preet3627/Comet-AI/releases/latest"
-          
-          # Get download URLs
-          WINDOWS_URL="https://github.com/Preet3627/Comet-AI/releases/download/${TAG}/$(ls release-artifacts/*.exe 2>/dev/null | head -1 | xargs basename)"
-          MAC_URL="https://github.com/Preet3627/Comet-AI/releases/download/${TAG}/$(ls release-artifacts/*.dmg 2>/dev/null | head -1 | xargs basename)"
-          LINUX_URL="https://github.com/Preet3627/Comet-AI/releases/download/${TAG}/$(ls release-artifacts/*.AppImage 2>/dev/null | head -1 | xargs basename)"
-          ANDROID_URL="https://github.com/Preet3627/Comet-AI/releases/download/${TAG}/app-release.apk"
-          IOS_URL="https://github.com/Preet3627/Comet-AI/releases/download/${TAG}/Comet-AI.ipa"
-          
+
+          RELEASE_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
+
+          asset_url() {
+            echo "$RELEASE_JSON" | jq -r --arg regex "$1" '.assets[] | select(.name | test($regex; "i")) | .browser_download_url' | head -1
+          }
+
+          WINDOWS_URL=$(asset_url "\\.exe$")
+          MAC_ARM64_URL=$(asset_url "(arm64|aarch64|apple[-_. ]silicon).*\\.dmg$")
+          MAC_X64_URL=$(asset_url "(x64|x86_64|intel).*\\.dmg$")
+          MAC_UNIVERSAL_URL=$(asset_url "universal.*\\.dmg$")
+          MAC_FALLBACK_URL=$(asset_url "\\.dmg$")
+          LINUX_URL=$(asset_url "\\.AppImage$")
+          ANDROID_URL=$(asset_url "\\.apk$")
+          IOS_URL=$(asset_url "\\.ipa$")
+
+          if [ -z "$MAC_ARM64_URL" ]; then MAC_ARM64_URL="${MAC_UNIVERSAL_URL:-$MAC_FALLBACK_URL}"; fi
+          if [ -z "$MAC_X64_URL" ]; then MAC_X64_URL="${MAC_UNIVERSAL_URL:-$MAC_FALLBACK_URL}"; fi
+
           echo "::notice::Windows: $WINDOWS_URL"
-          echo "::notice::macOS: $MAC_URL"
+          echo "::notice::macOS ARM64: $MAC_ARM64_URL"
+          echo "::notice::macOS x64: $MAC_X64_URL"
           echo "::notice::Linux: $LINUX_URL"
           echo "::notice::Android: $ANDROID_URL"
           echo "::notice::iOS: $IOS_URL"
@@ -360,7 +379,9 @@ jobs:
           console.log('Config values for Firebase:');
           console.log(JSON.stringify({
             windows: process.env.WINDOWS_URL,
-            mac: process.env.MAC_URL,
+            mac: process.env.MAC_ARM64_URL,
+            mac_arm64: process.env.MAC_ARM64_URL,
+            mac_x64: process.env.MAC_X64_URL,
             linux: process.env.LINUX_URL,
             android: process.env.ANDROID_URL,
             ios: process.env.IOS_URL
@@ -368,7 +389,8 @@ jobs:
           EOF
           
           echo "WINDOWS_URL=$WINDOWS_URL" >> $GITHUB_ENV
-          echo "MAC_URL=$MAC_URL" >> $GITHUB_ENV
+          echo "MAC_ARM64_URL=$MAC_ARM64_URL" >> $GITHUB_ENV
+          echo "MAC_X64_URL=$MAC_X64_URL" >> $GITHUB_ENV
           echo "LINUX_URL=$LINUX_URL" >> $GITHUB_ENV
           echo "ANDROID_URL=$ANDROID_URL" >> $GITHUB_ENV
           echo "IOS_URL=$IOS_URL" >> $GITHUB_ENV
@@ -381,7 +403,7 @@ jobs:
           curl -X PATCH \
             "https://${{ secrets.FIREBASE_PROJECT_ID }}-default-rtdb.firebaseio.com/config/downloads.json?auth=${{ secrets.FIREBASE_ADMIN_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d "{\"windows\":\"${{ env.WINDOWS_URL }}\",\"mac\":\"${{ env.MAC_URL }}\",\"linux\":\"${{ env.LINUX_URL }}\",\"android\":\"${{ env.ANDROID_URL }}\",\"ios\":\"${{ env.IOS_URL }}\"}"
+            -d "{\"windows\":\"${{ env.WINDOWS_URL }}\",\"mac\":\"${{ env.MAC_ARM64_URL }}\",\"mac_arm64\":\"${{ env.MAC_ARM64_URL }}\",\"mac_x64\":\"${{ env.MAC_X64_URL }}\",\"linux\":\"${{ env.LINUX_URL }}\",\"android\":\"${{ env.ANDROID_URL }}\",\"ios\":\"${{ env.IOS_URL }}\"}"
         continue-on-error: true
 
   # ============================================================================

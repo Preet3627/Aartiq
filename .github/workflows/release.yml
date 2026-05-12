@@ -293,7 +293,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        target: [windows, macos, linux]
+        target: [windows, macos-arm64, macos-x64, linux]
         include:
           - target: windows
             os: windows-latest
@@ -301,11 +301,16 @@ jobs:
             artifact_glob: |
               comet-browser/release/*.exe
             artifact_name: comet-ai-windows
-          - target: macos
+          - target: macos-arm64
             os: macos-latest
-            build_cmd: "npm run build && npx electron-builder --mac --x64 --publish never"
+            build_cmd: npm run dist:mac:arm64
             artifact_glob: "comet-browser/release/*.dmg"
-            artifact_name: comet-ai-macos
+            artifact_name: comet-ai-macos-arm64
+          - target: macos-x64
+            os: macos-latest
+            build_cmd: npm run dist:mac:x64
+            artifact_glob: "comet-browser/release/*.dmg"
+            artifact_name: comet-ai-macos-x64
           - target: linux
             os: ubuntu-latest
             build_cmd: npm run build && npx electron-builder --linux AppImage --x64
@@ -350,7 +355,7 @@ jobs:
           key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
 
       - name: Build App
-        if: matrix.target != 'macos'
+        if: ${{ !startsWith(matrix.target, 'macos') }}
         working-directory: comet-browser
         env:
           NEXT_PUBLIC_APP_NAME: Comet
@@ -366,7 +371,7 @@ jobs:
         run: ${{ matrix.build_cmd }}
 
       - name: Build App (macOS)
-        if: matrix.target == 'macos'
+        if: ${{ startsWith(matrix.target, 'macos') }}
         working-directory: comet-browser
         env:
           NEXT_PUBLIC_APP_NAME: Comet
@@ -403,6 +408,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.get-version.outputs.tag }}
+          name: Comet AI Browser v${{ needs.get-version.outputs.version }}
           body: |
             ${{ needs.changelog.outputs.changelog }}
             
@@ -414,7 +421,8 @@ jobs:
             | Platform | File |
             |----------|------|
             | 🪟 Windows | `Comet.Browser.Setup.*.exe` or `.msix` |
-            | 🍎 macOS | `Comet.Browser-*.dmg` |
+            | 🍎 macOS Apple Silicon | `*-arm64.dmg` |
+            | 🍎 macOS Intel | `*-x64.dmg` |
             | 🐧 Linux | `Comet.Browser-*.AppImage` |
             
             ### Mobile
@@ -451,20 +459,44 @@ jobs:
     if: inputs.update_firebase == true || github.event.inputs.update_firebase == true
     environment: Production
     steps:
-      - name: Update Firebase Downloads
+      - name: Resolve release asset URLs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.get-version.outputs.tag }}"
-          
+          RELEASE_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
+
+          asset_url() {
+            echo "$RELEASE_JSON" | jq -r --arg regex "$1" '.assets[] | select(.name | test($regex; "i")) | .browser_download_url' | head -1
+          }
+
+          WINDOWS_URL=$(asset_url "\\.exe$")
+          MAC_ARM64_URL=$(asset_url "(arm64|aarch64|apple[-_. ]silicon).*\\.dmg$")
+          MAC_X64_URL=$(asset_url "(x64|x86_64|intel).*\\.dmg$")
+          MAC_UNIVERSAL_URL=$(asset_url "universal.*\\.dmg$")
+          MAC_FALLBACK_URL=$(asset_url "\\.dmg$")
+          LINUX_URL=$(asset_url "\\.AppImage$")
+          ANDROID_URL=$(asset_url "\\.apk$")
+          IOS_URL=$(asset_url "\\.ipa$")
+
+          if [ -z "$MAC_ARM64_URL" ]; then MAC_ARM64_URL="${MAC_UNIVERSAL_URL:-$MAC_FALLBACK_URL}"; fi
+          if [ -z "$MAC_X64_URL" ]; then MAC_X64_URL="${MAC_UNIVERSAL_URL:-$MAC_FALLBACK_URL}"; fi
+
+          {
+            echo "WINDOWS_URL=$WINDOWS_URL"
+            echo "MAC_ARM64_URL=$MAC_ARM64_URL"
+            echo "MAC_X64_URL=$MAC_X64_URL"
+            echo "LINUX_URL=$LINUX_URL"
+            echo "ANDROID_URL=$ANDROID_URL"
+            echo "IOS_URL=$IOS_URL"
+          } >> "$GITHUB_ENV"
+
+      - name: Update Firebase Downloads
+        run: |
           curl -X PUT \
             "https://${{ secrets.FIREBASE_PROJECT_ID }}-default-rtdb.firebaseio.com/config/downloads.json?auth=${{ secrets.FIREBASE_ADMIN_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "windows": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/Comet.Browser.Setup.exe",
-              "mac": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/Comet.Browser.dmg",
-              "linux": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/Comet.Browser.AppImage",
-              "android": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/app-release.apk",
-              "ios": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/Comet-AI.ipa"
-            }'
+            -d "{\"windows\":\"${WINDOWS_URL}\",\"mac\":\"${MAC_ARM64_URL}\",\"mac_arm64\":\"${MAC_ARM64_URL}\",\"mac_x64\":\"${MAC_X64_URL}\",\"linux\":\"${LINUX_URL}\",\"android\":\"${ANDROID_URL}\",\"ios\":\"${IOS_URL}\"}"
         continue-on-error: true
 
   # ============================================================================

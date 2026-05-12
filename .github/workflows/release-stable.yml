@@ -242,8 +242,8 @@ jobs:
   # ============================================================================
   # DESKTOP BUILD - MACOS
   # ============================================================================
-  build-desktop-macos:
-    name: Build Desktop (macOS)
+  build-desktop-macos-arm64:
+    name: Build Desktop (macOS ARM64)
     needs: get-version
     runs-on: macos-latest
     environment: Production
@@ -278,18 +278,71 @@ jobs:
           path: comet-browser/.next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
 
-      - name: Build macOS
+      - name: Build macOS ARM64
         working-directory: comet-browser
         env:
           NEXT_PUBLIC_APP_NAME: Comet
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
           ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
-        run: npm run dist:mac
+        run: npm run dist:mac:arm64
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-macos
+          name: comet-ai-macos-arm64
+          path: comet-browser/release/*.dmg
+
+  # ============================================================================
+  # DESKTOP BUILD - MACOS X64
+  # ============================================================================
+  build-desktop-macos-x64:
+    name: Build Desktop (macOS x64)
+    needs: get-version
+    runs-on: macos-latest
+    environment: Production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: comet-browser/package-lock.json
+
+      - name: Cache Electron
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ELECTRON_CACHE_DIR }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('comet-browser/package-lock.json') }}
+
+      - name: Install Dependencies (npm ci - deterministic)
+        working-directory: comet-browser
+        run: npm ci --legacy-peer-deps
+
+      - name: Rebuild Native Modules
+        working-directory: comet-browser
+        run: |
+          npx electron-rebuild -f -w robotjs || npx electron-rebuild -f -w sharp || echo "Native rebuild completed"
+
+      - name: Cache Next.js
+        uses: actions/cache@v4
+        with:
+          path: comet-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+
+      - name: Build macOS x64
+        working-directory: comet-browser
+        env:
+          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
+          ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
+        run: npm run dist:mac:x64
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: comet-ai-macos-x64
           path: comet-browser/release/*.dmg
 
   # ============================================================================
@@ -359,7 +412,7 @@ jobs:
   # ============================================================================
   create-release:
     name: Create Release
-    needs: [get-version, build-android, build-ios, build-desktop-windows, build-desktop-macos, build-desktop-linux]
+    needs: [get-version, build-android, build-ios, build-desktop-windows, build-desktop-macos-arm64, build-desktop-macos-x64, build-desktop-linux]
     runs-on: ubuntu-latest
     environment: Production
     if: always() && needs.get-version.outputs.tag != ''
@@ -386,7 +439,8 @@ jobs:
             | Platform | File |
             |----------|------|
             | Windows | `Comet.Browser.Setup.*.exe` |
-            | macOS | `Comet.Browser-*.dmg` |
+            | macOS Apple Silicon | `*-arm64.dmg` |
+            | macOS Intel | `*-x64.dmg` |
             | Linux | `Comet.Browser-*.AppImage` |
             | Android | `app-release.apk` |
             | iOS | `Comet-AI.ipa` |
@@ -417,18 +471,42 @@ jobs:
     if: needs.create-release.result == 'success' && (inputs.update_firebase == true || github.event.inputs.update_firebase == true)
     environment: Production
     steps:
-      - name: Update Firebase Downloads
+      - name: Resolve release asset URLs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ needs.get-version.outputs.tag }}"
-          
+          RELEASE_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")
+
+          asset_url() {
+            echo "$RELEASE_JSON" | jq -r --arg regex "$1" '.assets[] | select(.name | test($regex; "i")) | .browser_download_url' | head -1
+          }
+
+          WINDOWS_URL=$(asset_url "\\.exe$")
+          MAC_ARM64_URL=$(asset_url "(arm64|aarch64|apple[-_. ]silicon).*\\.dmg$")
+          MAC_X64_URL=$(asset_url "(x64|x86_64|intel).*\\.dmg$")
+          MAC_UNIVERSAL_URL=$(asset_url "universal.*\\.dmg$")
+          MAC_FALLBACK_URL=$(asset_url "\\.dmg$")
+          LINUX_URL=$(asset_url "\\.AppImage$")
+          ANDROID_URL=$(asset_url "\\.apk$")
+          IOS_URL=$(asset_url "\\.ipa$")
+
+          if [ -z "$MAC_ARM64_URL" ]; then MAC_ARM64_URL="${MAC_UNIVERSAL_URL:-$MAC_FALLBACK_URL}"; fi
+          if [ -z "$MAC_X64_URL" ]; then MAC_X64_URL="${MAC_UNIVERSAL_URL:-$MAC_FALLBACK_URL}"; fi
+
+          {
+            echo "WINDOWS_URL=$WINDOWS_URL"
+            echo "MAC_ARM64_URL=$MAC_ARM64_URL"
+            echo "MAC_X64_URL=$MAC_X64_URL"
+            echo "LINUX_URL=$LINUX_URL"
+            echo "ANDROID_URL=$ANDROID_URL"
+            echo "IOS_URL=$IOS_URL"
+          } >> "$GITHUB_ENV"
+
+      - name: Update Firebase Downloads
+        run: |
           curl -X PUT \
             "https://${{ secrets.FIREBASE_PROJECT_ID }}-default-rtdb.firebaseio.com/config/downloads.json?auth=${{ secrets.FIREBASE_ADMIN_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "windows": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/Comet.Browser.Setup.exe",
-              "mac": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/Comet.Browser.dmg",
-              "linux": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/Comet.Browser.AppImage",
-              "android": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/app-release.apk",
-              "ios": "https://github.com/Preet3627/Comet-AI/releases/download/'"$TAG"'/Comet-AI.ipa"
-            }'
+            -d "{\"windows\":\"${WINDOWS_URL}\",\"mac\":\"${MAC_ARM64_URL}\",\"mac_arm64\":\"${MAC_ARM64_URL}\",\"mac_x64\":\"${MAC_X64_URL}\",\"linux\":\"${LINUX_URL}\",\"android\":\"${ANDROID_URL}\",\"ios\":\"${IOS_URL}\"}"
         continue-on-error: true
