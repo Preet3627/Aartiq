@@ -11,6 +11,7 @@ const util = require('util');
 const execPromise = util.promisify(execAsync);
 
 const COMET_URL_SCHEME = 'comet-ai';
+let windowsIpcHandlersRegistered = false;
 
 const WindowsIntegration = {
   platform: process.platform,
@@ -312,6 +313,12 @@ function getMainWindow() {
 }
 
 function setupWindowsIPCHandlers() {
+  if (windowsIpcHandlersRegistered) {
+    return;
+  }
+
+  windowsIpcHandlersRegistered = true;
+
   ipcMain.handle('windows:register-protocol', async () => {
     return await registerWindowsProtocol();
   });
