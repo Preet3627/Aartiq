@@ -516,7 +516,8 @@ struct GetClipboardIntent: AppIntent {
             let data = try await bridge.get("/native-mac-ui/clipboard")
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let content = json["content"] as? String {
-                return .result(value: content, dialog: "Clipboard contains: \(content.prefix(100))")
+                let preview = String(content.prefix(100))
+                 return .result(value: content, dialog: "Clipboard contains: \(preview)")
             }
             return .result(value: "Clipboard is empty", dialog: "The clipboard appears to be empty.")
         } catch {
