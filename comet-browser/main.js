@@ -2,13 +2,40 @@
 const electron = require('electron');
 const { app, BrowserWindow, ipcMain, BrowserView, session, shell, clipboard, dialog, globalShortcut, Menu, protocol, desktopCapturer, screen, nativeImage, net, safeStorage, nativeTheme } = electron;
 
-// Enable GPU immediately
-if (app.isPackaged) {
-  app.commandLine.appendSwitch('--enable-gpu');
-  app.commandLine.appendSwitch('--enable-accelerated-2d-canvas');
-  app.commandLine.appendSwitch('--use-gl', 'metal');
-  app.commandLine.appendSwitch('--ignore-gpu-blacklist');
-}
+const appendStartupSwitch = (name, value) => {
+  const normalizedName = name.startsWith('--') ? name.slice(2) : name;
+  if (typeof value === 'undefined') {
+    app.commandLine.appendSwitch(normalizedName);
+    return;
+  }
+  app.commandLine.appendSwitch(normalizedName, value);
+};
+
+const configureStartupSwitches = () => {
+  // Keep startup tuning minimal. The previous flag set forced an unstable GPU path
+  // and disabled renderer throttling, which drove high idle CPU and power usage.
+  appendStartupSwitch('disable-default-apps');
+  appendStartupSwitch('disable-sync');
+  appendStartupSwitch('disable-translate');
+  appendStartupSwitch('metrics-recording-only');
+  appendStartupSwitch('no-first-run');
+  appendStartupSwitch('safebrowsing-disable-auto-update');
+  appendStartupSwitch('log-missing-plugins');
+
+  if (process.platform === 'darwin') {
+    // Prefer the native Metal-backed compositor on Apple Silicon.
+    appendStartupSwitch('use-angle', 'metal');
+    return;
+  }
+
+  if (process.platform === 'win32') {
+    appendStartupSwitch('enable-gpu-rasterization');
+    appendStartupSwitch('enable-zero-copy');
+    appendStartupSwitch('enable-hardware-overlays');
+  }
+};
+
+configureStartupSwitches();
 const { mcpManager } = require('./src/lib/mcp-server-registry.js');
 const QRCode = require('qrcode');
 const contextMenuRaw = require('electron-context-menu');
@@ -168,7 +195,7 @@ let robot = null;
 try {
   robot = require('robotjs');
 } catch (e) {
-  console.warn('[Main] robotjs not available (Find & Click disabled):', e.message);
+  console.warn('[Main] robotjs not available (Find & Click disabled). Run `npm run rebuild:native` after Electron upgrades:', e.message);
 }
 
 let tesseractWorker; // Declare tesseractWorker here
@@ -511,32 +538,6 @@ setupWindowsIPCHandlers();
   registerWindowsProtocol();
   console.log('[Main] Registered Windows integration');
 }
-
-ipcMain.handle('windows:copilot:open', async () => {
-  if (process.platform !== 'win32') return { error: 'Not Windows' };
-  const { shell } = require('electron');
-  try {
-    await shell.openPath('com.microsoft.copilot:');
-    return { success: true };
-  } catch {
-    await shell.openExternal('https://copilot.microsoft.com');
-    return { success: true, message: 'Opened web Copilot' };
-  }
-});
-
-ipcMain.handle('windows:create-shortcut', async (event, name, action, params) => {
-  if (process.platform !== 'win32') return { error: 'Not Windows' };
-  return await createWindowsShortcut(name, action, params);
-});
-
-ipcMain.handle('windows:generate-url', async (event, action, params) => {
-  return generateWinURL(action, params);
-});
-
-ipcMain.handle('windows:register-protocol', async () => {
-  if (process.platform !== 'win32') return { error: 'Not Windows' };
-  return await registerWindowsProtocol();
-});
 
 // ============================================================================
 // LINUX INTEGRATION
@@ -2844,52 +2845,7 @@ function showWebview() {
 
 
 async function createWindow() {
-  // GPU compositing optimizations for transparent overlays
-  app.commandLine.appendSwitch('--enable-gpu-rasterization');
-  app.commandLine.appendSwitch('--enable-zero-copy');
-  app.commandLine.appendSwitch('--enable-hardware-overlays');
-  app.commandLine.appendSwitch('--enable-features', 'VaapiVideoDecoder,CanvasOopRasterization,TranslationAPI');
-  app.commandLine.appendSwitch('--disable-background-timer-throttling');
-  app.commandLine.appendSwitch('--disable-renderer-backgrounding');
-  app.commandLine.appendSwitch('--disable-features', 'TranslateUI,BlinkGenPropertyTrees');
-
-  // Force GPU acceleration and compositing
-  app.commandLine.appendSwitch('--ignore-gpu-blacklist');
-  app.commandLine.appendSwitch('--disable-gpu-driver-bug-workarounds');
-  app.commandLine.appendSwitch('--enable-native-gpu-memory-buffers');
-  app.commandLine.appendSwitch('--enable-gpu-memory-buffer-compositor-resources');
-  
-  // GPU offload and acceleration enhancements
-  app.commandLine.appendSwitch('--enable-accelerated-2d-canvas');
-  app.commandLine.appendSwitch('--enable-accelerated-video-decode');
-  app.commandLine.appendSwitch('--enable-gpu-scheduling');
-  app.commandLine.appendSwitch('--enable-video-codecs', 'video/webm;video/mp4;video/avc;video/hevc;video/vp9');
-  app.commandLine.appendSwitch('--enable-vp9-temporal-layers');
-  app.commandLine.appendSwitch('--use-gl', process.platform === 'darwin' ? 'metal' : 'egl');
-  app.commandLine.appendSwitch('--enable-features', 'UseSkiaRenderer,VaapiVideoDecoder,UseMultiPlaneFormatForAndroid');
-  
-  // Memory management and optimization
-  app.commandLine.appendSwitch('--js-flags', '--max-old-space-size=4096');
-  app.commandLine.appendSwitch('--disable-background-networking');
-  app.commandLine.appendSwitch('--disable-default-apps');
-  app.commandLine.appendSwitch('--disable-extensions');
-  app.commandLine.appendSwitch('--disable-sync');
-  app.commandLine.appendSwitch('--disable-translate');
-  app.commandLine.appendSwitch('--metrics-recording-only');
-  app.commandLine.appendSwitch('--no-first-run');
-  app.commandLine.appendSwitch('--safebrowsing-disable-auto-update');
-  app.commandLine.appendSwitch('--memory-pressure-off');
-  app.commandLine.appendSwitch('--enable-features', 'IncognitoPasswordSuggestions,OfflinePagesPrefetching');
-  app.commandLine.appendSwitch('--disable-features', 'ClangCoverage,OppiaEngagement,Survey,NativeNotifications');
-  
-  // Optimize renderer process
-  app.commandLine.appendSwitch('--renderer-process-limit', '8');
-  app.commandLine.appendSwitch('--disable-low-res-tiling');
-  app.commandLine.appendSwitch('--log-missing-plugins');
-  app.commandLine.appendSwitch('--disable-plugin-power-saver');
-  
-  // Aggressive garbage collection
-  app.commandLine.appendSwitch('--js-flags', '--expose-gc,--max-old-space-size=4096,--optimize-for-size,--memory-reducer,--gc-interval=100');
+  // Command-line switches are configured during module load, before app readiness.
 
   if (isDev) {
     // Clear cache and service workers in development to avoid 404s on stale chunks
@@ -2943,6 +2899,11 @@ mainWindow = new BrowserWindow({
     backgroundColor: '#0D0E1C',
     show: true,
     paintWhenInitiallyHidden: true
+  });
+
+  // Limit CPU when window loses focus
+  mainWindow.webContents.on('did-finish-loading', () => {
+    mainWindow.webContents.setBackgroundThrottling(true);
   });
 
   console.log('[Main] Window created with show=true');
@@ -6412,58 +6373,65 @@ app.whenReady().then(async () => {
 
   // Auto-update setup (only in production)
   if (app.isPackaged) {
-    const { autoUpdater } = require('electron-updater');
+    const updaterConfigPath = path.join(process.resourcesPath, 'app-update.yml');
 
-    // Check for updates at startup
-    autoUpdater.checkForUpdatesAndNotify();
+    if (fs.existsSync(updaterConfigPath)) {
+      const { autoUpdater } = require('electron-updater');
+      const logUpdaterError = (err) => console.error('[Updater] Error:', err);
 
-    // Auto check for updates every hour
-    setInterval(() => {
-      autoUpdater.checkForUpdates();
-    }, 1000 * 60 * 60); // 1 hour
+      // Check for updates at startup
+      autoUpdater.checkForUpdatesAndNotify().catch(logUpdaterError);
 
-    // Handle auto updater events
-    autoUpdater.on('checking-for-update', () => {
-      logMain('Checking for update...');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-status', { checking: true });
-      }
-    });
+      // Auto check for updates every hour
+      setInterval(() => {
+        autoUpdater.checkForUpdates().catch(logUpdaterError);
+      }, 1000 * 60 * 60); // 1 hour
 
-    autoUpdater.on('update-available', (info) => {
-      logMain('Update available:', info);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-available', info);
-      }
-    });
+      // Handle auto updater events
+      autoUpdater.on('checking-for-update', () => {
+        logMain('Checking for update...');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-status', { checking: true });
+        }
+      });
 
-    autoUpdater.on('update-not-available', (info) => {
-      logMain('Update not available:', info);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-not-available', info);
-      }
-    });
+      autoUpdater.on('update-available', (info) => {
+        logMain('Update available:', info);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-available', info);
+        }
+      });
 
-    autoUpdater.on('error', (err) => {
-      logErr('Error in auto-updater:', err);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-error', err.toString());
-      }
-    });
+      autoUpdater.on('update-not-available', (info) => {
+        logMain('Update not available:', info);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-not-available', info);
+        }
+      });
 
-    autoUpdater.on('download-progress', (progressObj) => {
-      logMain(`Download progress: ${progressObj.percent}%`);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('download-progress', progressObj);
-      }
-    });
+      autoUpdater.on('error', (err) => {
+        logUpdaterError(err);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-error', err.toString());
+        }
+      });
 
-    autoUpdater.on('update-downloaded', (info) => {
-      logMain('Update downloaded:', info);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-downloaded', info);
-      }
-    });
+      autoUpdater.on('download-progress', (progressObj) => {
+        logMain(`Download progress: ${progressObj.percent}%`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('download-progress', progressObj);
+        }
+      });
+
+      autoUpdater.on('update-downloaded', (info) => {
+        logMain('Update downloaded:', info);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('update-downloaded', info);
+        }
+      });
+    } else {
+      console.warn('[Updater] Skipping auto-updater: app-update.yml not found.');
+    }
   }
   protocol.handle('comet', (request) => {
     const url = new URL(request.url);
