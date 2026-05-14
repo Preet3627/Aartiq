@@ -36,6 +36,13 @@ const configureStartupSwitches = () => {
 };
 
 configureStartupSwitches();
+
+const isPackaged = app.isPackaged;
+if (isPackaged && process.platform === 'darwin') {
+  appendStartupSwitch('disable-gpu');
+  appendStartupSwitch('disable-software-rasterizer');
+}
+
 const { mcpManager } = require('./src/lib/mcp-server-registry.js');
 const QRCode = require('qrcode');
 const contextMenuRaw = require('electron-context-menu');
@@ -298,6 +305,15 @@ ipcMain.handle('apple-intelligence-genmoji', async (event, { prompt } = {}) => {
 const { setupSiriShortcutsHandlers, registerURLScheme, handleURLSchemeEvent, executeShortcutAction, speakWithSiri } = require('./src/lib/SiriShortcutsIntegration.js');
 const { setupVoiceInputHandler, speakText: voiceSpeak, listenForVoiceInput: voiceListen, getVoiceList: voiceGetVoices, parseVoiceCommand: voiceParseCommand } = require('./src/lib/voice-input-handler.js');
 const { executeAppleScriptCommand: runAppleScript, speakText: scriptSpeak, listenForSpeech: scriptListen, getAvailableVoices: scriptGetVoices } = require('./src/lib/apple-script-bridge.js');
+const { raycastIntegration, RAYCAST_SCHEMA } = require('./src/lib/raycast-integration.js');
+
+ipcMain.handle('raycast:protocol', async (event, url) => {
+  return await raycastIntegration.handleProtocol(url);
+});
+
+ipcMain.handle('raycast:get-manifest', async () => {
+  return raycastIntegration.getManifest();
+});
 
 const COMET_URL_SCHEME = 'comet-ai';
 
