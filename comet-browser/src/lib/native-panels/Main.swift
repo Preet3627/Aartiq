@@ -102,7 +102,13 @@ struct RootPanelView: View {
 #endif
             case .appleAI:
 #if COMPILE_APPLE_AI || COMPILE_ALL
-                AppleIntelligencePanelView(viewModel: viewModel)
+                if #available(macOS 15.0, *) {
+                    AppleIntelligencePanelView(viewModel: viewModel)
+                } else {
+                    Text("Apple Intelligence requires macOS 15.0+")
+                        .foregroundColor(.secondary)
+                        .padding()
+                }
 #endif
             }
         }
