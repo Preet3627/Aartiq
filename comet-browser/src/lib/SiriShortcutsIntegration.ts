@@ -89,7 +89,41 @@ export const APP_SHORTCUTS: SiriIntent[] = [
     parameters: ['prompt'],
     url: 'comet-ai://ask-ai?prompt={prompt}&speak=true',
   },
+  {
+    name: 'What Can You Do',
+    description: 'Learn about Comet AI features',
+    parameters: [],
+    url: 'comet-ai://capabilities',
+  },
 ];
+
+export const SIRI_CAPABILITIES = `Comet AI can help you with many tasks:
+
+🤖 AI Conversations - Ask questions, get help with coding, writing, or any topic
+
+🔍 Smart Search - Search the web with AI-powered results
+
+📄 Create Documents - Generate PDFs, Excel, and PowerPoint files
+
+💻 Run Commands - Execute terminal commands safely
+
+📸 Screenshot - Capture screenshots of your current page
+
+📧 Read & Write Email - Manage your Gmail through voice
+
+🎯 Automate Tasks - Schedule recurring AI tasks
+
+🔊 Control Volume - Adjust system audio
+
+📱 Open Apps - Launch applications by name
+
+💬 Voice Chat - Talk to AI hands-free
+
+📖 Summarize Pages - Get quick summaries of any webpage
+
+💬 Chat Management - Start new chats, view past conversations
+
+Just say "Ask Comet [your question]" to get started!`;
 
 export function generateShortcutURL(action: string, params: Record<string, string> = {}): string {
   const paramString = Object.entries(params)
@@ -234,6 +268,13 @@ export async function executeShortcutAction(
     } catch (error) {
       return { success: false, message: String(error) };
     }
+  }
+
+  if (normalizedAction === 'capabilities' || normalizedAction === 'help' || normalizedAction === 'what-can-you-do') {
+    return { 
+      success: true, 
+      message: SIRI_CAPABILITIES 
+    };
   }
 
   return { success: false, message: `Unknown or unsupported action: ${normalizedAction}` };

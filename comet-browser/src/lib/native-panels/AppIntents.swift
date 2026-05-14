@@ -390,6 +390,141 @@ struct RunCometCommandIntent: AppIntent {
     }
 }
 
+// MARK: - What Can You Do Intent
+
+@available(macOS 13.0, *)
+struct WhatCanCometDoIntent: AppIntent {
+    static var title: LocalizedStringResource = "What Can Comet AI Do"
+    static var description = IntentDescription("Learn about all the things Comet AI can help you with.")
+    
+    func perform() async throws -> some IntentResult & ReturnsValue<String> {
+        let capabilities = """
+        Comet AI can help you with many tasks:
+
+        🤖 AI Conversations - Ask questions, get help with coding, writing, or any topic
+
+        🔍 Smart Search - Search the web with AI-powered results
+
+        📄 Create Documents - Generate PDFs, Excel, and PowerPoint files
+
+        💻 Run Commands - Execute terminal commands safely
+
+        📸 Screenshot - Capture screenshots of your current page
+
+        📧 Read & Write Email - Manage your Gmail through voice
+
+        🎯 Automate Tasks - Schedule recurring AI tasks
+
+        🔊 Control Volume - Adjust system audio
+
+        📱 Open Apps - Launch applications by name
+
+        💬 Voice Chat - Talk to AI hands-free
+
+        📖 Summarize Pages - Get quick summaries of any webpage
+
+        💬 Chat Management - Start new chats, view past conversations
+
+        Just say "Ask Comet [your question]" to get started!
+        """
+        
+        return .result(value: capabilities, dialog: "Comet AI is your AI-powered browser assistant. You can ask questions, create documents, search the web, run commands, and much more using voice or the Shortcuts app.")
+    }
+}
+
+// MARK: - Volume Control Intent
+
+@available(macOS 13.0, *)
+struct SetVolumeIntent: AppIntent {
+    static var title: LocalizedStringResource = "Set Comet Volume"
+    static var description = IntentDescription("Adjust system volume through Comet AI.")
+    
+    @Parameter(title: "Volume Level", description: "0-100")
+    var level: Int
+    
+    static var parameterSummary: some ParameterSummary {
+        Summary("Set volume to \(\.$level) percent")
+    }
+    
+    func perform() async throws -> some IntentResult {
+        let config = LaunchConfiguration.parse()
+        let bridge = CometBridgeClient(config: config)
+        _ = try await bridge.post("/native-mac-ui/volume", body: ["level": level])
+        return .result(dialog: "Volume set to \(level) percent.")
+    }
+}
+
+// MARK: - Open App Intent
+
+@available(macOS 13.0, *)
+struct OpenApplicationIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open App with Comet"
+    static var description = IntentDescription("Open an application using Comet AI.")
+    
+    @Parameter(title: "Application Name", description: "e.g., Safari, Notes, VS Code")
+    var appName: String
+    
+    static var parameterSummary: some ParameterSummary {
+        Summary("Open \(\.$appName) with Comet")
+    }
+    
+    func perform() async throws -> some IntentResult {
+        let config = LaunchConfiguration.parse()
+        let bridge = CometBridgeClient(config: config)
+        _ = try await bridge.openApp(appName)
+        return .result(dialog: "Opening \(appName).")
+    }
+}
+
+// MARK: - Schedule Task Intent
+
+@available(macOS 13.0, *)
+struct ScheduleCometTaskIntent: AppIntent {
+    static var title: LocalizedStringResource = "Schedule Comet Task"
+    static var description = IntentDescription("Schedule an AI task to run automatically.")
+    
+    @Parameter(title: "Task", description: "What should the AI do?")
+    var task: String
+    
+    @Parameter(title: "Schedule", description: "e.g., daily, hourly, at 8am")
+    var schedule: String
+    
+    static var parameterSummary: some ParameterSummary {
+        Summary("Schedule \(\.$task) \(\.$schedule)")
+    }
+    
+    func perform() async throws -> some IntentResult {
+        let config = LaunchConfiguration.parse()
+        let bridge = CometBridgeClient(config: config)
+        _ = try await bridge.sendPrompt("Schedule this task: \(task). Run it: \(schedule)")
+        return .result(dialog: "Your task has been scheduled for \(schedule).")
+    }
+}
+
+// MARK: - Get Clipboard Intent
+
+@available(macOS 13.0, *)
+struct GetClipboardIntent: AppIntent {
+    static var title: LocalizedStringResource = "Read Comet Clipboard"
+    static var description = IntentDescription("Read the current clipboard content from Comet.")
+    
+    func perform() async throws -> some IntentResult & ReturnsValue<String> {
+        let config = LaunchConfiguration.parse()
+        let bridge = CometBridgeClient(config: config)
+        
+        do {
+            let data = try await bridge.get("/native-mac-ui/clipboard")
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let content = json["content"] as? String {
+                return .result(value: content, dialog: "Clipboard contains: \(content.prefix(100))")
+            }
+            return .result(value: "Clipboard is empty", dialog: "The clipboard appears to be empty.")
+        } catch {
+            return .result(value: "Error reading clipboard", dialog: "Couldn't read the clipboard.")
+        }
+    }
+}
+
 // MARK: - Shortcuts Provider
 
 @available(macOS 13.0, *)
@@ -512,6 +647,85 @@ struct CometShortcutsProvider: AppShortcutsProvider {
             shortTitle: "New Chat",
             systemImageName: "plus.bubble"
         )
+        
+        AppShortcut(
+            intent: WhatCanCometDoIntent(),
+            phrases: [
+                "What can you do with \(.applicationName)",
+                "What can \(.applicationName) do",
+                "Tell me about \(.applicationName)",
+                "How does \(.applicationName) work",
+                "Show me \(.applicationName) features"
+            ],
+            shortTitle: "What Can It Do",
+            systemImageName: "questionmark.circle"
+        )
+        
+        AppShortcut(
+            intent: SetVolumeIntent(),
+            phrases: [
+                "Set volume to \(\.$level) in \(.applicationName)",
+                "Volume \(\.$level) in \(.applicationName)",
+                "Change \(.applicationName) volume to \(\.$level)"
+            ],
+            shortTitle: "Set Volume",
+            systemImageName: "speaker.wave.3"
+        )
+        
+        AppShortcut(
+            intent: OpenApplicationIntent(),
+            phrases: [
+                "Open \(\.$appName) with \(.applicationName)",
+                "Launch \(\.$appName) via \(.applicationName)",
+                "Start \(\.$appName) in \(.applicationName)"
+            ],
+            shortTitle: "Open App",
+            systemImageName: "app.badge"
+        )
+        
+        AppShortcut(
+            intent: ScheduleCometTaskIntent(),
+            phrases: [
+                "Schedule \(\.$task) \(\.$schedule) in \(.applicationName)",
+                "Set up \(\.$task) \(\.$schedule) with \(.applicationName)",
+                "Remind me to \(\.$task) \(\.$schedule) using \(.applicationName)"
+            ],
+            shortTitle: "Schedule Task",
+            systemImageName: "calendar.badge.clock"
+        )
+        
+        AppShortcut(
+            intent: GetClipboardIntent(),
+            phrases: [
+                "Read clipboard in \(.applicationName)",
+                "What's on my clipboard in \(.applicationName)",
+                "Show clipboard from \(.applicationName)"
+            ],
+            shortTitle: "Read Clipboard",
+            systemImageName: "doc.on.clipboard"
+        )
+        
+        AppShortcut(
+            intent: CaptureScreenshotIntent(),
+            phrases: [
+                "Take screenshot with \(.applicationName)",
+                "Screenshot in \(.applicationName)",
+                "Capture screen in \(.applicationName)"
+            ],
+            shortTitle: "Screenshot",
+            systemImageName: "camera.viewfinder"
+        )
+        
+        AppShortcut(
+            intent: ResetCometChatIntent(),
+            phrases: [
+                "Reset \(.applicationName) chat",
+                "Clear \(.applicationName) conversation",
+                "New chat in \(.applicationName)"
+            ],
+            shortTitle: "Reset Chat",
+            systemImageName: "trash"
+        )
     }
 }
 
@@ -565,6 +779,12 @@ class CometBridgeClient {
         var body: [String: Any] = ["action": action]
         if let id { body["id"] = id }
         _ = try await post("/native-mac-ui/conversations/action", body: body)
+        return true
+    }
+    
+    func openApp(_ appName: String) async throws -> Bool {
+        let body: [String: Any] = ["appName": appName]
+        _ = try await post("/native-mac-ui/open-app", body: body)
         return true
     }
     

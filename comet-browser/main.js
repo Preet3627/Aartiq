@@ -8140,6 +8140,33 @@ app.whenReady().then(async () => {
       res.json({ success: false, error: 'No active Comet window found.' });
     });
 
+    nativeMacUiApp.post('/native-mac-ui/volume', async (req, res) => {
+      const { level } = req.body;
+      const volumeLevel = Math.max(0, Math.min(100, parseInt(level) || 50));
+      try {
+        const { execSync } = require('child_process');
+        execSync(`osascript -e "set volume output volume ${volumeLevel}"`, { encoding: 'utf8' });
+        res.json({ success: true, level: volumeLevel });
+      } catch (error) {
+        res.json({ success: false, error: error.message });
+      }
+    });
+
+    nativeMacUiApp.post('/native-mac-ui/open-app', async (req, res) => {
+      const { appName } = req.body;
+      if (!appName) {
+        res.json({ success: false, error: 'No app name provided' });
+        return;
+      }
+      try {
+        const { execSync } = require('child_process');
+        execSync(`open -a "${appName}"`, { encoding: 'utf8' });
+        res.json({ success: true, appName });
+      } catch (error) {
+        res.json({ success: false, error: error.message });
+      }
+    });
+
     nativeMacUiServer = nativeMacUiApp.listen(nativeMacUiPort, '127.0.0.1', () => {
       console.log(`[MacNativeUI] Bridge listening at http://127.0.0.1:${nativeMacUiPort}`);
     });

@@ -30,7 +30,7 @@ module.exports = function registerExtensionHandlers(ipcMain, handlers) {
     const { pluginManager } = handlers;
     if (!pluginManager) return { success: false };
     return await pluginManager.update(pluginId);
-  });
+  });don
 
   ipcMain.handle('plugins:enable', async (event, pluginId) => {
     const { pluginManager } = handlers;
