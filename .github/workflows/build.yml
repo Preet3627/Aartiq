@@ -82,7 +82,7 @@ jobs:
         working-directory: comet-browser
         env:
           NEXT_PUBLIC_APP_NAME: Comet
-          NEXT_PUBLIC_APP_VERSION: 0.2.9
+          APPLE_SIGNING_IDENTITY: "-"
         run: npm run dist:mac:arm64
 
       - name: Upload macOS ARM64 DMG
@@ -113,7 +113,7 @@ jobs:
         working-directory: comet-browser
         env:
           NEXT_PUBLIC_APP_NAME: Comet
-          NEXT_PUBLIC_APP_VERSION: 0.2.9
+          APPLE_SIGNING_IDENTITY: "-"
         run: npm run dist:mac:x64
 
       - name: Upload macOS x64 DMG
@@ -144,7 +144,7 @@ jobs:
         working-directory: comet-browser
         env:
           NEXT_PUBLIC_APP_NAME: Comet
-          NEXT_PUBLIC_APP_VERSION: 0.2.9
+          APPLE_SIGNING_IDENTITY: "-"
         run: npm run dist:mac:universal
 
       - name: Upload macOS Universal DMG

@@ -269,6 +269,7 @@ jobs:
         env:
           NEXT_PUBLIC_APP_NAME: Comet
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
+          APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.target, 'macos') && '-' || '' }}
         run: ${{ matrix.build_cmd }}
 
       - name: Upload Artifact
