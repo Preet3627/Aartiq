@@ -288,7 +288,7 @@ struct ApprovalCard: View {
         }
     }
 
-    private func handleApproval(isHighRisk: Bool) {
+    @MainActor private func handleApproval(isHighRisk: Bool) {
         if isHighRisk {
             isProcessing = true
             Task {
