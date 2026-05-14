@@ -249,6 +249,7 @@ jobs:
           NEXT_PUBLIC_APP_NAME: Comet
           NEXT_PUBLIC_APP_VERSION: ${{ github.ref_name }}
           ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
+          APPLE_SIGNING_IDENTITY: "-"
         run: npm run dist:mac
 
       - name: Upload Artifact
