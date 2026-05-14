@@ -660,6 +660,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createShortcut: (name, params) => ipcRenderer.invoke('applescript:create-shortcut', name, params),
   },
 
+  // Raycast Integration
+  raycast: {
+    execute: (url) => ipcRenderer.invoke('raycast:protocol', url),
+    getManifest: () => ipcRenderer.invoke('raycast:get-manifest'),
+  },
+
   // Windows Integration
   windows: {
     executeAction: (action, params) => ipcRenderer.invoke('windows:execute-action', action, params),
