@@ -3,7 +3,6 @@ import 'package:flutter_browser/models/browser_model.dart';
 import 'package:flutter_browser/models/webview_model.dart';
 import 'package:flutter_browser/util.dart';
 import 'package:flutter_browser/webview_tab.dart';
-import 'package:flutter_font_icons/flutter_font_icons.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 
@@ -58,7 +57,7 @@ class _ProjectInfoPopupState extends State<ProjectInfoPopup> {
       const SizedBox(height: 10),
       ElevatedButton.icon(
         icon: const Icon(
-          MaterialCommunityIcons.github,
+          Icons.code,
           size: 30.0,
           color: Colors.white,
         ),

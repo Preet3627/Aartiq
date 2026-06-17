@@ -13,7 +13,7 @@ subprojects { subproject ->
     subproject.configurations.all {
         resolutionStrategy.eachDependency { details ->
             if (details.requested.group == 'com.android.tools.build' && details.requested.name == 'gradle') {
-                details.useVersion '8.6.0'
+                details.useVersion '8.11.1'
             }
         }
     }

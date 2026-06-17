@@ -12,7 +12,6 @@ import '../../models/window_model.dart';
 import '../../webview_tab.dart';
 import '../../sync_service.dart';
 import '../../auth_service.dart';
-import 'package:flutter_font_icons/flutter_font_icons.dart';
 
 class CrossPlatformSettings extends StatefulWidget {
   const CrossPlatformSettings({super.key});
@@ -639,7 +638,7 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
           width: 35,
           margin: const EdgeInsets.only(top: 6.0, left: 6.0),
           child: const Icon(
-            MaterialCommunityIcons.github,
+            Icons.code,
             size: 30,
             color: Colors.white,
           ),
