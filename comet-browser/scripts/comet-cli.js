@@ -15,12 +15,13 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const readline = require('readline');
 
 const PORT = 3004;
 const HOST = '127.0.0.1';
 
-const CONFIG_DIR = path.join(process.env.HOME || process.env.USERPROFILE, '.comet-ai');
+const CONFIG_DIR = path.join(os.homedir(), '.comet-ai');
 const SESSIONS_DIR = path.join(CONFIG_DIR, 'sessions');
 const HISTORY_FILE = path.join(CONFIG_DIR, 'history.json');
 const CLI_CONFIG_FILE = path.join(CONFIG_DIR, 'cli-config.json');
@@ -49,7 +50,15 @@ function saveCliConfig(config) {
 // Fetch available models from browser config
 function getAvailableModels() {
     try {
-        const configPath = path.join(process.env.HOME || process.env.USERPROFILE, 'Library/Application Support/comet-ai/config.json');
+        let appDataDir;
+        if (process.platform === 'darwin') {
+            appDataDir = path.join(os.homedir(), 'Library', 'Application Support', 'comet-ai');
+        } else if (process.env.APPDATA) {
+            appDataDir = path.join(process.env.APPDATA, 'comet-ai');
+        } else {
+            appDataDir = path.join(os.homedir(), '.config', 'comet-ai');
+        }
+        const configPath = path.join(appDataDir, 'config.json');
         if (fs.existsSync(configPath)) {
             const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             const models = [];
@@ -151,7 +160,7 @@ const payload = positional.slice(1).join(' ').trim();
 // Get native token
 function getNativeToken() {
     try {
-        const tokenPath = path.join(process.env.HOME || process.env.USERPROFILE, '.comet-ai-token');
+        const tokenPath = path.join(os.homedir(), '.comet-ai-token');
         if (fs.existsSync(tokenPath)) {
             return fs.readFileSync(tokenPath, 'utf8').trim();
         }
@@ -573,6 +582,16 @@ function handleHistory() {
         if (i < session.messages.length - 1) console.log('');
     });
 }
+
+// Handle Ctrl+C gracefully on all platforms
+if (process.platform === 'win32') {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.on('SIGINT', () => process.emit('SIGINT'));
+}
+process.on('SIGINT', () => {
+  console.log('\n👋 Goodbye!');
+  process.exit(0);
+});
 
 // Main
 async function main() {
