@@ -17,7 +17,6 @@ import 'package:flutter_browser/pages/developers/main.dart';
 import 'package:flutter_browser/pages/settings/main.dart';
 import 'package:flutter_browser/tab_popup_menu_actions.dart';
 import 'package:flutter_browser/util.dart';
-import 'package:flutter_font_icons/flutter_font_icons.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
@@ -571,7 +570,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                         iconData = Icons.add;
                         break;
                       case TabPopupMenuActions.NEW_INCOGNITO_TAB:
-                        iconData = MaterialCommunityIcons.incognito;
+                        iconData = Icons.lock_outline;
                         break;
                     }
 
@@ -867,7 +866,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                       child: IconButton(
                         padding: const EdgeInsets.all(0.0),
                         icon: const Icon(
-                          MaterialCommunityIcons.cellphone_screenshot,
+                          Icons.screenshot,
                           color: Colors.black,
                         ),
                         onPressed: () async {
@@ -967,7 +966,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                       children: [
                         Text(choice),
                         const Icon(
-                          MaterialCommunityIcons.incognito,
+                          Icons.lock_outline,
                           color: Colors.black,
                         ),
                       ],
@@ -1040,7 +1039,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(choice),
-                        const Icon(Ionicons.logo_whatsapp, color: Colors.green),
+                        const Icon(Icons.chat, color: Colors.green),
                       ],
                     ),
                   );
