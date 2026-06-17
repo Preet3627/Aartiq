@@ -1,9 +1,8 @@
-let robot = null;
 let nutJs = null;
 let xa11y = null;
 
 async function initialize() {
-  if (robot !== null || nutJs !== null || xa11y !== null) return robot !== null || nutJs !== null || xa11y !== null;
+  if (nutJs !== null || xa11y !== null) return nutJs !== null || xa11y !== null;
   
   const nutAttempts = [
     'nut.js',
@@ -36,40 +35,20 @@ async function initialize() {
     }
   }
   
-  const robotAttempts = [
-    'robotjs',
-    '@jitsi/robotjs',
-    'robotjs-simulate'
-  ];
-  
-  for (const pkg of robotAttempts) {
-    try {
-      robot = require(pkg);
-      robot.setMouseDelay(2);
-      robot.setKeyboardDelay(2);
-      console.log('[Automation/Fallback] robotjs loaded successfully');
-      return true;
-    } catch (e) {
-      continue;
-    }
-  }
-  
   console.warn('[Automation/Fallback] No automation backend available');
   return false;
 }
 
 function moveMouse(x, y) {
   if (nutJs) {
-    const { mouse } = nutJs;
-    await mouseMove(nutJs, x, y);
+    mouseMove(nutJs, x, y);
     return;
   }
   if (xa11y) {
     xa11y.mouse.move(x, y);
     return;
   }
-  if (!robot) throw new Error('Automation not available');
-  robot.moveMouse(x, y);
+  throw new Error('Automation not available');
 }
 
 async function mouseMove(nut, x, y) {
@@ -88,18 +67,7 @@ function click(x, y, button = 'left', double = false) {
     xa11y.mouse.click(x, y, button, double ? 2 : 1);
     return;
   }
-  if (!robot) throw new Error('Automation not available');
-  
-  const currentPos = robot.getMousePos();
-  if (currentPos.x !== x || currentPos.y !== y) {
-    robot.moveMouse(x, y);
-  }
-  
-  if (double) {
-    robot.doubleClick(button);
-  } else {
-    robot.mouseClick(button);
-  }
+  throw new Error('Automation not available');
 }
 
 function typeText(text) {
@@ -111,8 +79,7 @@ function typeText(text) {
     xa11y.keyboard.type(text);
     return;
   }
-  if (!robot) throw new Error('Automation not available');
-  robot.typeString(text);
+  throw new Error('Automation not available');
 }
 
 function keyTap(key, modifiers = []) {
@@ -124,8 +91,7 @@ function keyTap(key, modifiers = []) {
     xa11y.keyboard.press(key);
     return;
   }
-  if (!robot) throw new Error('Automation not available');
-  robot.keyTap(key, modifiers);
+  throw new Error('Automation not available');
 }
 
 function scroll(x, y, direction, amount = 3) {
@@ -141,10 +107,7 @@ function scroll(x, y, direction, amount = 3) {
     xa11y.mouse.scroll(x, y, direction, amount);
     return;
   }
-  if (!robot) throw new Error('Automation not available');
-  
-  robot.moveMouse(x, y);
-  robot.scrollMouse(amount, direction);
+  throw new Error('Automation not available');
 }
 
 function getMousePos() {
@@ -154,8 +117,7 @@ function getMousePos() {
   if (xa11y) {
     return xa11y.mouse.position;
   }
-  if (!robot) return { x: 0, y: 0 };
-  return robot.getMousePos();
+  throw new Error('Automation not available');
 }
 
 module.exports = {
@@ -166,5 +128,5 @@ module.exports = {
   keyTap,
   scroll,
   getMousePos,
-  isAvailable() { return robot !== null; }
+  isAvailable() { return nutJs !== null || xa11y !== null; }
 };

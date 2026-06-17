@@ -38,7 +38,7 @@
     "dist:mac:x64": "npm run build-macos-helper && npm run build-macos-apple-intelligence-helper && npm run build-macos-native-panels && npm run build && electron-builder --mac --x64 --publish never",
     "dist:linux": "npm run build && electron-builder --linux",
     "rebuild": "electron-rebuild",
-    "rebuild:native": "electron-rebuild -f -w robotjs && electron-rebuild -f -w sharp",
+    "rebuild:native": "electron-rebuild -f -w sharp",
     "postinstall": "electron-builder install-app-deps",
     "check-dups": "node check_dups.js",
     "service": "electron src/service/service-main.js",
@@ -86,7 +86,6 @@
     "pptxgenjs": "^3.12.0",
     "qrcode": "^1.5.4",
     "qs": "^6.13.1",
-    "robotjs": "^0.6.0",
     "screenshot-desktop": "^1.15.3",
     "sharp": "^0.34.5",
     "side-channel": "^1.1.0",
@@ -99,9 +98,9 @@
   "optionalDependencies": {
     "@cherrystudio/mac-system-ocr": "^0.2.7",
     "@nut-tree/nut-js": "^4.2.0",
-    "xa11y": "^1.0.0",
     "uniocr": "^0.1.0",
-    "rusto": "^0.1.0"
+    "rusto": "^0.1.0",
+    "xa11y": "^1.0.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.1",
@@ -148,7 +147,6 @@
     "copyright": "Copyright © 2026 Latestinssan",
     "asar": true,
     "asarUnpack": [
-      "**/node_modules/robotjs/**/*",
       "**/node_modules/sharp/**/*",
       "scripts/**/*"
     ],

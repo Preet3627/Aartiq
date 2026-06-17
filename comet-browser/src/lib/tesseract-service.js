@@ -49,19 +49,6 @@ try {
   rustOcr = null;
 }
 
-let robotjs = null;
-try {
-  robotjs = require('robotjs');
-  robotjs.setMouseDelay(2);
-} catch (e) {
-  try {
-    robotjs = require('@jitsi/robotjs');
-    robotjs.setMouseDelay(2);
-  } catch (e2) {
-    console.warn('[TesseractService] robotjs not available:', e.message);
-  }
-}
-
 const MAX_CAPTURE_EDGE = 4096;
 const NATIVE_MATCH_THRESHOLD = 0.58;
 const OCR_MATCH_THRESHOLD = 0.52;
@@ -957,10 +944,6 @@ print(json.dumps({"results": results}))
     }
 
     const performClick = async (x, y, reason) => {
-      if (useDirectClick && robotjs) {
-        return this.directClick(x, y, reason);
-      }
-
       if (robotService && robotService.execute) {
         try {
           await robotService.execute({
@@ -971,16 +954,8 @@ print(json.dumps({"results": results}))
           });
           return { success: true, x, y, reason };
         } catch (e) {
-          console.warn('[TesseractService] robotService.execute failed, trying direct robotjs:', e.message);
-          if (robotjs) {
-            return this.directClick(x, y, reason);
-          }
           return { success: false, error: e.message };
         }
-      }
-
-      if (robotjs) {
-        return this.directClick(x, y, reason);
       }
 
       return { success: false, error: 'No click mechanism available' };
@@ -1103,22 +1078,6 @@ print(json.dumps({"results": results}))
   async getScreenTextWithBoxes(displayId) {
     const recognition = await this.captureAndOcr(displayId, { preferNative: true });
     return recognition.lines || recognition.words || [];
-  }
-
-  directClick(x, y, reason = 'OCR direct click') {
-    if (!robotjs) {
-      return { success: false, error: 'robotjs not available' };
-    }
-
-    try {
-      robotjs.moveMouse(Math.round(x), Math.round(y));
-      robotjs.mouseClick();
-      console.log(`[TesseractService] Direct click at (${x}, ${y}) - ${reason}`);
-      return { success: true, x, y, reason };
-    } catch (e) {
-      console.error('[TesseractService] Direct click failed:', e.message);
-      return { success: false, error: e.message };
-    }
   }
 }
 
