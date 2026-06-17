@@ -68,7 +68,7 @@ class CrossPlatformAutomation {
     return new Promise((resolve) => {
       exec(`osascript -e '${script}'`, (err) => {
         if (err) {
-          // Fallback to robotjs if cliclick not available
+          // Fallback if cliclick not available
           resolve({ success: true, note: 'clicked at fallback' });
         } else {
           resolve({ success: true });
@@ -253,7 +253,7 @@ except Exception as e:
   }
 
   // ============================================================================
-  // Universal: Cross-platform click by coordinates (uses robotjs if available)
+  // Universal: Cross-platform click by coordinates
   // ============================================================================
   async clickAt(x, y, options = {}) {
     const { button = 'left', double = false } = options;

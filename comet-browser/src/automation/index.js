@@ -34,13 +34,13 @@ class AutomationLayer {
       if (available) {
         this.automation = fallback;
         this.fallback = fallback;
-        this.source = 'robotjs';
-        console.log('[Automation] Initialized with robotjs fallback');
+        this.source = 'fallback';
+        console.log('[Automation] Initialized with fallback automation');
         this.initialized = true;
         return true;
       }
     } catch (err) {
-      console.warn('[Automation] robotjs fallback failed:', err.message);
+      console.warn('[Automation] fallback failed:', err.message);
     }
 
     console.error('[Automation] No automation backend available!');
