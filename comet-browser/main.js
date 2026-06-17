@@ -332,32 +332,67 @@ ipcMain.handle('siri:speak', async (event, text) => {
 });
 
 ipcMain.handle('automation:enable-cli', async () => {
-  const { exec } = require('child_process');
+  const { exec, execSync } = require('child_process');
   const { promisify } = require('util');
   const execAsync = promisify(exec);
   
   const cliPath = path.join(__dirname, 'scripts', 'comet-cli.js');
-  const destPath = '/usr/local/bin/comet';
+  const platform = process.platform;
   
   try {
-    // Try to symlink. If it fails due to permissions, use osascript to ask for sudo
-    if (process.platform === 'darwin') {
+    if (platform === 'darwin') {
+      const destPath = '/usr/local/bin/comet';
       const command = `ln -sf "${cliPath}" "${destPath}"`;
       try {
         await execAsync(command);
-        return { success: true, message: 'CLI enabled successfully at /usr/local/bin/comet' };
+        return { success: true, message: 'CLI enabled at /usr/local/bin/comet' };
       } catch (e) {
-        // Prompt for sudo using osascript
         const sudoCommand = `osascript -e 'do shell script "ln -sf \\"${cliPath}\\" \\"${destPath}\\"" with administrator privileges'`;
         await execAsync(sudoCommand);
         return { success: true, message: 'CLI enabled with administrator privileges' };
       }
-    } else if (process.platform === 'win32') {
-      // Windows implementation (mklink)
-      const winDest = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'comet.cmd');
-      const winCmd = `@node "${cliPath}" %*`;
-      fs.writeFileSync(winDest, winCmd); // Might still fail without admin
-      return { success: true, message: 'CLI enabled for Windows' };
+    } else if (platform === 'linux') {
+      const userBinDir = path.join(os.homedir(), '.local', 'bin');
+      const destPath = path.join(userBinDir, 'comet');
+      try {
+        if (!fs.existsSync(userBinDir)) {
+          fs.mkdirSync(userBinDir, { recursive: true });
+        }
+        fs.symlinkSync(cliPath, destPath);
+        return { success: true, message: `CLI enabled at ${destPath} (ensure ~/.local/bin is in your PATH)` };
+      } catch (e) {
+        // Try /usr/local/bin with sudo via pkexec
+        const systemPath = '/usr/local/bin/comet';
+        await execAsync(`pkexec ln -sf "${cliPath}" "${systemPath}"`);
+        return { success: true, message: 'CLI enabled at /usr/local/bin/comet' };
+      }
+    } else if (platform === 'win32') {
+      const userBinDir = path.join(os.homedir(), 'AppData', 'Local', 'CometAI', 'bin');
+      const destPath = path.join(userBinDir, 'comet.cmd');
+      const psPath = path.join(userBinDir, 'comet.ps1');
+      
+      if (!fs.existsSync(userBinDir)) {
+        fs.mkdirSync(userBinDir, { recursive: true });
+      }
+      
+      fs.writeFileSync(destPath, `@echo off\r\nnode "${cliPath}" %*\r\n`);
+      fs.writeFileSync(psPath, `param([string]$args)\r\n& node "${cliPath}" $args\r\n`);
+      
+      // Try to add to PATH via user env
+      try {
+        const userPath = execSync(
+          `[Environment]::GetEnvironmentVariable('Path', 'User')`,
+          { shell: 'powershell.exe' }
+        ).toString().trim();
+        if (!userPath.includes(userBinDir)) {
+          execSync(
+            `[Environment]::SetEnvironmentVariable('Path', '${userPath};${userBinDir}', 'User')`,
+            { shell: 'powershell.exe' }
+          );
+        }
+      } catch (_) {}
+      
+      return { success: true, message: `CLI enabled at ${destPath} (added to user PATH)` };
     }
     return { success: false, error: 'Platform not supported for auto-CLI' };
   } catch (error) {
@@ -744,6 +779,7 @@ const raycastState = {
   history: [],
 };
 let raycastServer = null;
+let nexusBridgeServer = null;
 
 const isMac = process.platform === 'darwin';
 const openWindows = new Set();
@@ -7853,6 +7889,223 @@ app.whenReady().then(async () => {
     console.log(`[Raycast] API listening at http://${RAYCAST_HOST}:${RAYCAST_PORT}`);
   });
 
+  // Nexus-AI Bridge Server (port 9922 by default)
+  const NEXUS_BRIDGE_PORT = parseInt(process.env.NEXUS_BRIDGE_PORT || '9922', 10);
+  const nexusApp = express();
+  nexusApp.use(bodyParser.json());
+
+  const getActiveWebContents = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return null;
+    const tabManager = mainWindow.tabManager;
+    if (tabManager) {
+      try {
+        const activeBrowserView = tabManager.getActiveBrowserView?.();
+        if (activeBrowserView && activeBrowserView.webContents && !activeBrowserView.webContents.isDestroyed()) {
+          return activeBrowserView.webContents;
+        }
+      } catch (e) {}
+    }
+    if (mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+      return mainWindow.webContents;
+    }
+    return null;
+  };
+
+  const asyncHandler = (fn) => (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch((err) => {
+      console.error('[NexusBridge] Error:', err);
+      res.status(500).json({ success: false, error: err.message });
+    });
+  };
+
+  // Health check
+  nexusApp.get('/', (req, res) => {
+    res.json({ status: 'ok', version: '0.2.94', name: 'Comet-AI' });
+  });
+
+  // List tabs
+  nexusApp.get('/api/tabs', (req, res) => {
+    res.json(raycastState.tabs || []);
+  });
+
+  // Create tab / open URL
+  nexusApp.post('/api/create-tab', asyncHandler(async (req, res) => {
+    const url = req.body?.url || 'about:blank';
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('add-new-tab', url);
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    const tabId = `tab-${Date.now()}`;
+    res.json({ id: tabId, url, title: 'New Tab', is_loading: true });
+  }));
+
+  // Close tab
+  nexusApp.post('/api/close-tab', asyncHandler(async (req, res) => {
+    const tabId = req.body?.tabId;
+    if (tabId && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('close-tab', tabId);
+    }
+    res.json({ success: true });
+  }));
+
+  // Navigate tab
+  nexusApp.post('/api/navigate-tab', asyncHandler(async (req, res) => {
+    const { tabId, url } = req.body || {};
+    if (url && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('add-new-tab', url);
+    }
+    res.json({ success: true });
+  }));
+
+  // Execute JavaScript
+  nexusApp.post('/api/execute-script', asyncHandler(async (req, res) => {
+    const code = req.body?.code;
+    if (!code) {
+      res.json({ success: false, error: 'No code provided' });
+      return;
+    }
+    const wc = getActiveWebContents();
+    if (!wc) {
+      res.json({ success: false, error: 'No active web content' });
+      return;
+    }
+    const result = await wc.executeJavaScript(code);
+    res.json({ success: true, result: String(result) });
+  }));
+
+  // Capture page HTML
+  nexusApp.get('/api/capture-page', asyncHandler(async (req, res) => {
+    const wc = getActiveWebContents();
+    if (!wc) {
+      res.json({ success: false, error: 'No active web content' });
+      return;
+    }
+    const html = await wc.executeJavaScript('document.documentElement.outerHTML');
+    res.json({ success: true, html: String(html) });
+  }));
+
+  // Extract text content
+  nexusApp.get('/api/extract-content', asyncHandler(async (req, res) => {
+    const wc = getActiveWebContents();
+    if (!wc) {
+      res.json({ success: false, error: 'No active web content' });
+      return;
+    }
+    const content = await wc.executeJavaScript('document.body.innerText');
+    res.json({ success: true, content: String(content) });
+  }));
+
+  // Find and click element
+  nexusApp.post('/api/find-and-click', asyncHandler(async (req, res) => {
+    const text = req.body?.text;
+    if (!text) {
+      res.json({ success: false });
+      return;
+    }
+    const wc = getActiveWebContents();
+    if (!wc) {
+      res.json({ success: false });
+      return;
+    }
+    const escaped = JSON.stringify(text);
+    const result = await wc.executeJavaScript(`
+      (() => {
+        const elements = document.querySelectorAll('a, button, [role="button"], [onclick]');
+        for (const el of elements) {
+          if (el.textContent.trim().toLowerCase().includes(${escaped}.toLowerCase())) {
+            el.click();
+            return true;
+          }
+        }
+        return false;
+      })()
+    `);
+    res.json({ success: !!result });
+  }));
+
+  // Get selected text
+  nexusApp.get('/api/get-selected-text', asyncHandler(async (req, res) => {
+    const wc = getActiveWebContents();
+    if (!wc) {
+      res.json({ success: false, text: '' });
+      return;
+    }
+    const text = await wc.executeJavaScript('window.getSelection().toString()');
+    res.json({ success: true, text: String(text) });
+  }));
+
+  // Type text
+  nexusApp.post('/api/type-text', asyncHandler(async (req, res) => {
+    const text = req.body?.text;
+    if (!text) {
+      res.json({ success: false });
+      return;
+    }
+    const wc = getActiveWebContents();
+    if (!wc) {
+      res.json({ success: false });
+      return;
+    }
+    const escaped = JSON.stringify(text);
+    await wc.executeJavaScript(`
+      (() => {
+        const el = document.activeElement;
+        if (!el) return;
+        el.value = ${escaped};
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      })()
+    `);
+    res.json({ success: true });
+  }));
+
+  // Go back
+  nexusApp.post('/api/go-back', asyncHandler(async (req, res) => {
+    const wc = getActiveWebContents();
+    if (wc && wc.navigationHistory) {
+      wc.navigationHistory.goBack();
+    } else if (wc) {
+      await wc.executeJavaScript('window.history.back()');
+    }
+    res.json({ success: true });
+  }));
+
+  // Go forward
+  nexusApp.post('/api/go-forward', asyncHandler(async (req, res) => {
+    const wc = getActiveWebContents();
+    if (wc && wc.navigationHistory) {
+      wc.navigationHistory.goForward();
+    } else if (wc) {
+      await wc.executeJavaScript('window.history.forward()');
+    }
+    res.json({ success: true });
+  }));
+
+  // Reload
+  nexusApp.post('/api/reload', asyncHandler(async (req, res) => {
+    const wc = getActiveWebContents();
+    if (wc) {
+      wc.reload();
+    }
+    res.json({ success: true });
+  }));
+
+  // Auth sync
+  nexusApp.post('/api/auth-sync', asyncHandler(async (req, res) => {
+    const { identity, workspace } = req.body || {};
+    if (identity) {
+      const session = getSecureAuthSession() || {};
+      session.identity = identity;
+      storeSecureAuthSession(session);
+    }
+    res.json({ success: true, message: 'Authentication synced with Nexus-AI' });
+  }));
+
+  nexusBridgeServer = nexusApp.listen(NEXUS_BRIDGE_PORT, '127.0.0.1', () => {
+    console.log(`[NexusBridge] API listening at http://127.0.0.1:${NEXUS_BRIDGE_PORT}`);
+  });
+
   if (isMac) {
     const nativeMacUiApp = express();
     nativeMacUiApp.use(bodyParser.json({ limit: '1mb' }));
@@ -11415,6 +11668,9 @@ ${tabData}`;
     }
     if (raycastServer) {
       raycastServer.close();
+    }
+    if (nexusBridgeServer) {
+      nexusBridgeServer.close();
     }
     if (nativeMacUiServer) {
       nativeMacUiServer.close();

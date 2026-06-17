@@ -1,6 +1,6 @@
 {
   "name": "Comet-AI",
-  "version": "0.2.94",
+  "version": "0.2.96",
   "private": true,
   "description": "Comet-AI Browser - A high-performance, intelligence-driven browsing workspace with local LLM support and advanced productivity features.",
   "author": "Latestinssan",
@@ -191,7 +191,9 @@
       "applicationId": "CometAI",
       "displayName": "Comet-AI",
       "backgroundColor": "#1a1a2e",
-      "languages": ["en-US"],
+      "languages": [
+        "en-US"
+      ],
       "showNameOnTiles": true
     },
     "mac": {

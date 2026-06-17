@@ -154,7 +154,7 @@ export class CloudSyncService extends EventEmitter {
         
         this.autoCleanupInterval = setInterval(async () => {
             await this._cleanupOldData();
-        }, 60000);
+        }, 15 * 60000); // Increased to 15 minutes
     }
 
     private async _cleanupOldData(): Promise<void> {

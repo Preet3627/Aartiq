@@ -1,5 +1,32 @@
 # Comet Browser - Recent Changes
 
+## Version 0.2.96 - Nexus-AI Bridge & Native Panels Update (2026-06-17)
+
+### Overview
+Added the Nexus Bridge API server (port 9922) for full browser automation from Nexus-AI. Updated native macOS panels with improved stability.
+
+### Changes
+
+#### Nexus Bridge API (Port 9922)
+- **New HTTP Server**: Express server on port 9922 with 15 endpoints for Nexus-AI integration.
+- **Browser Automation**: `GET /api/tabs`, `POST /api/create-tab`, `POST /api/close-tab`, `POST /api/navigate-tab`.
+- **JavaScript Execution**: `POST /api/execute-script` for running arbitrary JS in the active tab.
+- **Page Capture**: `GET /api/capture-page` (full HTML), `GET /api/extract-content` (plain text).
+- **UI Automation**: `POST /api/find-and-click`, `POST /api/type-text`, `GET /api/get-selected-text`.
+- **Navigation**: `POST /api/go-back`, `POST /api/go-forward`, `POST /api/reload`.
+- **Auth Sync**: `POST /api/auth-sync` shares authentication state with Nexus-AI.
+- **Configurable Port**: Set via `NEXUS_BRIDGE_PORT` env var (default: 9922).
+
+#### Native Panels
+- Updated NativePanels binaries (clipboard, downloads, permissions, menu, settings, sidebar, action-chain, apple-ai).
+
+#### Technical
+- CLI auto-installer now uses `execSync` for macOS symlink creation.
+- CloudSync service reliability improvements.
+- BrowserViewContainer UI fixes.
+
+---
+
 ## Version 0.2.9.4 - Terminal Control & AI Reliability (2026-04-23)
 
 ### Overview

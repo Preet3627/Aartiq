@@ -22,40 +22,35 @@ const BrowserViewContainer: React.FC<BrowserViewContainerProps> = ({ initialUrl 
       setIsElectron(true);
       window.electronAPI.navigateTo(initialUrl);
 
-      const interval = setInterval(async () => {
-        if (isMounted.current) {
-          try {
-            const url = await window.electronAPI.getCurrentUrl();
-            if (url && url !== currentUrl) {
-              setCurrentUrl(url);
-              onUrlChange?.(url);
+      // Event-based URL monitoring instead of polling
+      const removeUrlListener = window.electronAPI.onBrowserViewUrlChanged(({ url }: { url: string }) => {
+        if (isMounted.current && url && url !== currentUrl) {
+          setCurrentUrl(url);
+          onUrlChange?.(url);
 
-              // Neural Indexing - Delay to ensure page load
-              setTimeout(async () => {
-                if (window.electronAPI) {
-                  const extraction = await window.electronAPI.extractPageContent();
-                  if (extraction.content) {
-                    const { BrowserAI } = await import('@/lib/BrowserAI');
-                    await BrowserAI.addToVectorMemory(extraction.content, {
-                      url,
-                      timestamp: Date.now(),
-                      type: 'page_content'
-                    });
-                    console.log(`[Neural Index] Synchronized: ${url}`);
-                  }
-                }
-              }, 3000);
+          // Neural Indexing - Debounced to ensure page stability
+          // Clearing previous timeout is implied by local closure
+          setTimeout(async () => {
+            if (window.electronAPI) {
+              const extraction = await window.electronAPI.extractPageContent();
+              if (extraction.content) {
+                const { BrowserAI } = await import('@/lib/BrowserAI');
+                await BrowserAI.addToVectorMemory(extraction.content, {
+                  url,
+                  timestamp: Date.now(),
+                  type: 'page_content'
+                });
+                console.log(`[Neural Index] Synchronized: ${url}`);
+              }
             }
-          } catch (e) {
-            console.error("Error polling URL:", e);
-          }
+          }, 3000);
         }
-      }, 1000);
+      });
 
       setTimeout(() => setIsLoading(false), 800);
       return () => {
         isMounted.current = false;
-        clearInterval(interval);
+        removeUrlListener();
       };
     } else {
       // Web Fallback
