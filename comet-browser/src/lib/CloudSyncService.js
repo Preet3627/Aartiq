@@ -245,7 +245,7 @@ var CloudSyncService = /** @class */ (function (_super) {
                         return [2 /*return*/];
                 }
             });
-        }); }, 60000);
+        }); }, 15 * 60000); // Increased to 15 minutes
     };
     CloudSyncService.prototype._cleanupOldData = function () {
         return __awaiter(this, void 0, void 0, function () {

@@ -71,7 +71,7 @@ const {
 } = require('docx');
 const path = require('path');
 const os = require('os');
-const { spawn, exec, spawnSync } = require('child_process');
+const { spawn, exec, execSync, spawnSync } = require('child_process');
 const { randomBytes } = require('crypto');
 const Store = require('electron-store');
 const store = new Store();
@@ -7893,6 +7893,35 @@ app.whenReady().then(async () => {
   const NEXUS_BRIDGE_PORT = parseInt(process.env.NEXUS_BRIDGE_PORT || '9922', 10);
   const nexusApp = express();
   nexusApp.use(bodyParser.json());
+
+  // Bridge authentication: shared secret via macOS Keychain
+  const BRIDGE_TOKEN_SERVICE = 'in.ponsri.shared.bridge.token';
+  const BRIDGE_TOKEN_ACCOUNT = 'default';
+  let BRIDGE_SECRET = null;
+  try {
+    const result = execSync(
+      `security find-generic-password -s "${BRIDGE_TOKEN_SERVICE}" -a "${BRIDGE_TOKEN_ACCOUNT}" -w`,
+      { encoding: 'utf-8', timeout: 5000 }
+    );
+    BRIDGE_SECRET = result.trim();
+  } catch (_) {
+    BRIDGE_SECRET = randomBytes(32).toString('base64');
+    try {
+      execSync(
+        `security add-generic-password -s "${BRIDGE_TOKEN_SERVICE}" -a "${BRIDGE_TOKEN_ACCOUNT}" -w "${BRIDGE_SECRET}" -U`,
+        { encoding: 'utf-8', timeout: 5000 }
+      );
+    } catch (ke) {
+      console.warn('[NexusBridge] Could not persist bridge token to Keychain:', ke.message);
+    }
+  }
+  nexusApp.use('/api', (req, res, next) => {
+    const token = req.headers['x-bridge-token'];
+    if (!token || token !== BRIDGE_SECRET) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    next();
+  });
 
   const getActiveWebContents = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return null;
