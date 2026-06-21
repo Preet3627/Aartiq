@@ -131,7 +131,7 @@ The landing page at [browser.ponsrischool.in](https://browser.ponsrischool.in) p
 | `notifications.js` | Desktop notifications |
 | `mobile-notifier.js` | Mobile push notifications |
 | `sleep-handler.js` | Sleep/wake recovery |
-| `ipc-service.js` | Browser ↔ Service IPC |
+| `ipc-service.js` | Browser to Service IPC |
 | `pdf-sync.js` | PDF sync server |
 
 ---

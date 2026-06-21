@@ -51,6 +51,10 @@ jobs:
         working-directory: flutter_browser_app
         run: flutter pub get
 
+      - name: Run Flutter tests
+        working-directory: flutter_browser_app
+        run: flutter test
+
       - name: Create google-services.json
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -116,6 +120,10 @@ jobs:
         working-directory: flutter_browser_app
         run: flutter pub get
 
+      - name: Run Flutter tests
+        working-directory: flutter_browser_app
+        run: flutter test
+
       - name: Create GoogleService-Info.plist
         env:
           GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
@@ -171,6 +179,10 @@ jobs:
         working-directory: comet-browser
         run: |
           npm ci --legacy-peer-deps
+
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
 
       - name: Rebuild Native Modules
         working-directory: comet-browser
@@ -229,6 +241,10 @@ jobs:
         working-directory: comet-browser
         run: |
           npm ci --legacy-peer-deps
+
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
 
       - name: Rebuild Native Modules
         working-directory: comet-browser
@@ -297,6 +313,10 @@ jobs:
         working-directory: comet-browser
         run: |
           npm ci --legacy-peer-deps
+
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
 
       - name: Rebuild Native Modules
         working-directory: comet-browser

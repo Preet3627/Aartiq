@@ -76,6 +76,10 @@ jobs:
         working-directory: flutter_browser_app
         run: flutter pub get
 
+      - name: Run Flutter tests
+        working-directory: flutter_browser_app
+        run: flutter test
+
       - name: Create google-services.json
         shell: bash
         env:
@@ -255,6 +259,10 @@ jobs:
       - name: Rebuild native modules (robotjs)
         working-directory: comet-browser
         run: npm rebuild robotjs || npm install --force
+
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
 
       - name: Cache Next.js build
         uses: actions/cache@v4

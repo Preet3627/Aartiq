@@ -121,7 +121,7 @@ Examples: GitHub (repos/files), Google Drive (docs/pdfs), Dropbox (cloud storage
 5. Directing Users: For any new integration request, say "I can help with that. Please set up the server in the MCP Settings window I'm opening for you." and emit [OPEN_MCP_SETTINGS].
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📤 COMMAND OUTPUT FORMAT (v0.2.6+)
+📤 COMMAND OUTPUT FORMAT (v0.2.98+)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🔥 PERMISSIONS ARE AUTOMATIC - JUST EMIT COMMANDS:

@@ -290,7 +290,7 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
                             </div>
                             <div className="flex items-center gap-1">
                                 <span className="text-sky-500/40">Comet Brain</span>
-                                <span className="text-white/5">v0.2.8</span>
+                                <span className="text-white/5">v0.2.98</span>
                             </div>
                         </div>
                     </motion.div>

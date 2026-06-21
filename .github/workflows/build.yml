@@ -38,6 +38,10 @@ jobs:
           flutter precache --ios
           flutter pub get
 
+      - name: Run Flutter tests
+        working-directory: flutter_browser_app
+        run: flutter test
+
       - name: Build Android APK
         if: matrix.target == 'android'
         working-directory: flutter_browser_app
@@ -78,6 +82,10 @@ jobs:
         working-directory: comet-browser
         run: npm install --legacy-peer-deps
 
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
+
       - name: Build macOS ARM64 DMG
         working-directory: comet-browser
         env:
@@ -109,6 +117,10 @@ jobs:
         working-directory: comet-browser
         run: npm install --legacy-peer-deps
 
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
+
       - name: Build macOS x64 DMG
         working-directory: comet-browser
         env:
@@ -139,6 +151,10 @@ jobs:
       - name: Install dependencies
         working-directory: comet-browser
         run: npm install --legacy-peer-deps
+
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
 
       - name: Build macOS Universal DMG
         working-directory: comet-browser
@@ -174,6 +190,10 @@ jobs:
         working-directory: comet-browser
         run: npm install --legacy-peer-deps
 
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
+
       - name: Build Windows x64 EXE
         working-directory: comet-browser
         env:
@@ -204,6 +224,10 @@ jobs:
       - name: Install dependencies
         working-directory: comet-browser
         run: npm install --legacy-peer-deps
+
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
 
       - name: Build Windows ARM64 EXE
         working-directory: comet-browser
@@ -243,6 +267,10 @@ jobs:
       - name: Install dependencies
         working-directory: comet-browser
         run: npm install --legacy-peer-deps
+
+      - name: Run Jest tests
+        working-directory: comet-browser
+        run: npm test
 
       - name: Build Linux AppImage
         working-directory: comet-browser
