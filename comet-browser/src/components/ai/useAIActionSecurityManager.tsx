@@ -105,8 +105,8 @@ export function useAIActionSecurityManager() {
         },
         mobileApproved: false,
         context: {
-          actionType: 'SHELL_COMMAND',
-          action: 'Shell Command Approval',
+          actionType: payload.actionType || 'SHELL_COMMAND',
+          action: payload.action || 'Shell Command Approval',
           target: payload.command,
           what: payload.command,
           reason: payload.reason || 'An automated task needs to execute this shell command.',

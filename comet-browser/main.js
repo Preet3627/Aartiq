@@ -5558,6 +5558,8 @@ async function requestShellApproval(command, riskLevel, reason, options = {}) {
     reason: reason || 'A scheduled automation needs your approval.',
     highRiskQr: JSON.stringify(qrPayload),
     requiresDeviceUnlock: !!options.requiresDeviceUnlock,
+    actionType: options.actionType,
+    action: options.action,
   };
   const useNativePermissionPanel =
     isMac &&
@@ -7940,6 +7942,37 @@ app.whenReady().then(async () => {
     return null;
   };
 
+  const verifyBridgeActionApproval = async (actionType, action, target, reason, res) => {
+    const settings = permissionStore.getSettings();
+    const requiresDeviceUnlock =
+      settings.requireDeviceUnlockForManualApproval !== false &&
+      hasNativeDeviceUnlockSupport();
+
+    const approvalResult = await requestShellApproval(
+      target,
+      'medium',
+      reason,
+      { requiresDeviceUnlock, actionType, action }
+    );
+
+    if (!approvalResult.allowed) {
+      res.json({ success: false, error: 'Action denied by user' });
+      return false;
+    }
+
+    if (requiresDeviceUnlock && !approvalResult.deviceUnlockValidated) {
+      const nativeVerification = await verifyNativeCommandApproval({
+        command: target,
+        riskLevel: 'medium',
+      });
+      if (nativeVerification.supported && !nativeVerification.approved) {
+        res.json({ success: false, error: 'Biometric verification failed: ' + (nativeVerification.error || 'User denied verification') });
+        return false;
+      }
+    }
+    return true;
+  };
+
   const asyncHandler = (fn) => (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch((err) => {
       console.error('[NexusBridge] Error:', err);
@@ -7999,6 +8032,16 @@ app.whenReady().then(async () => {
       res.json({ success: false, error: 'No active web content' });
       return;
     }
+    const snippet = code.length > 120 ? code.slice(0, 120) + '...' : code;
+    const approved = await verifyBridgeActionApproval(
+      'EXECUTE_SCRIPT',
+      'Execute JavaScript',
+      snippet,
+      'Nexus-AI requested to run JavaScript code in the active browser tab.',
+      res
+    );
+    if (!approved) return;
+
     const result = await wc.executeJavaScript(code);
     res.json({ success: true, result: String(result) });
   }));
@@ -8037,6 +8080,15 @@ app.whenReady().then(async () => {
       res.json({ success: false });
       return;
     }
+    const approved = await verifyBridgeActionApproval(
+      'FIND_AND_CLICK',
+      'Find and Click Text',
+      `Find and click: "${text}"`,
+      'Nexus-AI requested to locate and click an element containing specific text.',
+      res
+    );
+    if (!approved) return;
+
     const escaped = JSON.stringify(text);
     const result = await wc.executeJavaScript(`
       (() => {
@@ -8076,6 +8128,15 @@ app.whenReady().then(async () => {
       res.json({ success: false });
       return;
     }
+    const approved = await verifyBridgeActionApproval(
+      'FILL_FORM',
+      'Type Text',
+      `Type text: "${text}"`,
+      'Nexus-AI requested to type text into the active page element.',
+      res
+    );
+    if (!approved) return;
+
     const escaped = JSON.stringify(text);
     await wc.executeJavaScript(`
       (() => {

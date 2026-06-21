@@ -320,7 +320,7 @@ declare global {
             onAiChatInputText: (callback: (text: string) => void) => () => void;
             translateWebsite: (args: { targetLanguage: string; method?: 'google' | 'chrome-ai' }) => Promise<{ success?: boolean; error?: string }>;
             onTriggerTranslationDialog: (callback: () => void) => () => void;
-            onAutomationShellApproval: (callback: (payload: { requestId: string; command: string; risk: string; reason?: string; highRiskQr?: string; requiresDeviceUnlock?: boolean }) => void) => () => void;
+            onAutomationShellApproval: (callback: (payload: { requestId: string; command: string; risk: string; reason?: string; highRiskQr?: string; requiresDeviceUnlock?: boolean; actionType?: string; action?: string }) => void) => () => void;
             respondAutomationShellApproval: (response: { requestId: string; allowed: boolean; deviceUnlockValidated?: boolean }) => void;
             toggleAdblocker: (enable: boolean) => void;
             translateText: (args: { text: string; to: string; from?: string }) => Promise<{ success: boolean; translated?: string; error?: string }>;
@@ -526,7 +526,7 @@ declare global {
             getServiceStatus: () => Promise<{ running: boolean; health?: any; platform: string; error?: string }>;
             installService: (options: { userMode?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
             uninstallService: (options: { userMode?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
-            onAutomationShellApproval: (callback: (payload: { requestId: string, command: string, risk: string, reason: string, highRiskQr?: string, requiresDeviceUnlock?: boolean }) => void) => () => void;
+            onAutomationShellApproval: (callback: (payload: { requestId: string, command: string, risk: string, reason: string, highRiskQr?: string, requiresDeviceUnlock?: boolean, actionType?: string, action?: string }) => void) => () => void;
             submitShellApprovalResponse: (requestId: string, allowed: boolean, deviceUnlockValidated?: boolean) => void;
 
             // Auto-update APIs
