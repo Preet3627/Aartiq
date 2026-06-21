@@ -7942,35 +7942,53 @@ app.whenReady().then(async () => {
     return null;
   };
 
-  const verifyBridgeActionApproval = async (actionType, action, target, reason, res) => {
-    const settings = permissionStore.getSettings();
-    const requiresDeviceUnlock =
-      settings.requireDeviceUnlockForManualApproval !== false &&
-      hasNativeDeviceUnlockSupport();
-
-    const approvalResult = await requestShellApproval(
-      target,
-      'medium',
-      reason,
-      { requiresDeviceUnlock, actionType, action }
-    );
-
-    if (!approvalResult.allowed) {
-      res.json({ success: false, error: 'Action denied by user' });
-      return false;
+  const formatCodeSnippet = (code) => {
+    if (code.length <= 160) {
+      return code;
     }
+    const prefix = code.slice(0, 80);
+    const suffix = code.slice(-80);
+    const hiddenCount = code.length - 160;
+    return `${prefix}\n\n/* ... [WARNING: Truncated. ${hiddenCount} characters omitted from middle] ... */\n\n${suffix}`;
+  };
 
-    if (requiresDeviceUnlock && !approvalResult.deviceUnlockValidated) {
-      const nativeVerification = await verifyNativeCommandApproval({
-        command: target,
-        riskLevel: 'medium',
-      });
-      if (nativeVerification.supported && !nativeVerification.approved) {
-        res.json({ success: false, error: 'Biometric verification failed: ' + (nativeVerification.error || 'User denied verification') });
+  const verifyBridgeActionApproval = async (actionType, action, target, reason, res) => {
+    try {
+      const settings = permissionStore.getSettings();
+      const requiresDeviceUnlock =
+        settings.requireDeviceUnlockForManualApproval !== false &&
+        hasNativeDeviceUnlockSupport();
+
+      const approvalResult = await requestShellApproval(
+        target,
+        'medium',
+        reason,
+        { requiresDeviceUnlock, actionType, action }
+      );
+
+      if (!approvalResult || !approvalResult.allowed) {
+        res.json({ success: false, error: 'Action denied by user' });
         return false;
       }
+
+      if (requiresDeviceUnlock && !approvalResult.deviceUnlockValidated) {
+        const nativeVerification = await verifyNativeCommandApproval({
+          command: target,
+          riskLevel: 'medium',
+        });
+        if (nativeVerification.supported && !nativeVerification.approved) {
+          res.json({ success: false, error: 'Biometric verification failed: ' + (nativeVerification.error || 'User denied verification') });
+          return false;
+        }
+      }
+      return true;
+    } catch (error) {
+      console.error('[verifyBridgeActionApproval] Error during approval:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: 'Internal approval service error: ' + error.message });
+      }
+      return false;
     }
-    return true;
   };
 
   const asyncHandler = (fn) => (req, res, next) => {
@@ -8032,12 +8050,15 @@ app.whenReady().then(async () => {
       res.json({ success: false, error: 'No active web content' });
       return;
     }
-    const snippet = code.length > 120 ? code.slice(0, 120) + '...' : code;
+    const url = wc.getURL();
+    const title = wc.getTitle();
+    const pageContext = `Page: "${title}" (${url})`;
+    const snippet = formatCodeSnippet(code);
     const approved = await verifyBridgeActionApproval(
       'EXECUTE_SCRIPT',
       'Execute JavaScript',
       snippet,
-      'Nexus-AI requested to run JavaScript code in the active browser tab.',
+      `Nexus-AI requested to run JavaScript code on ${pageContext}.`,
       res
     );
     if (!approved) return;
@@ -8080,11 +8101,14 @@ app.whenReady().then(async () => {
       res.json({ success: false });
       return;
     }
+    const url = wc.getURL();
+    const title = wc.getTitle();
+    const pageContext = `Page: "${title}" (${url})`;
     const approved = await verifyBridgeActionApproval(
       'FIND_AND_CLICK',
       'Find and Click Text',
       `Find and click: "${text}"`,
-      'Nexus-AI requested to locate and click an element containing specific text.',
+      `Nexus-AI requested to locate and click an element containing "${text}" on ${pageContext}.`,
       res
     );
     if (!approved) return;
@@ -8128,11 +8152,14 @@ app.whenReady().then(async () => {
       res.json({ success: false });
       return;
     }
+    const url = wc.getURL();
+    const title = wc.getTitle();
+    const pageContext = `Page: "${title}" (${url})`;
     const approved = await verifyBridgeActionApproval(
       'FILL_FORM',
       'Type Text',
       `Type text: "${text}"`,
-      'Nexus-AI requested to type text into the active page element.',
+      `Nexus-AI requested to type text into the active page element on ${pageContext}.`,
       res
     );
     if (!approved) return;
