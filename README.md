@@ -4,7 +4,7 @@ An open-source, AI-native browser with permission-gated OS automation.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blue)]()
-[![Version](https://img.shields.io/badge/Version-0.2.98-blue)]()
+[![Version](https://img.shields.io/badge/Version-0.2.97-blue)]()
 
 ## Features
 
