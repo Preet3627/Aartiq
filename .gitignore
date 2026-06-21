@@ -137,6 +137,10 @@ dist
 .DS_Store
 Thumbs.db
 
+# Test directories
+tests/
+__tests__/
+
 # Backup files
 *.backup
 *.bak
@@ -145,4 +149,3 @@ Thumbs.db
 # Project specific
 Comet-AI_/
 /Landing_Page
-.DS_Store
