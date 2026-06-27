@@ -17,6 +17,34 @@ export interface ReleaseEntry {
 
 export const releases: ReleaseEntry[] = [
   {
+    version: '0.2.98',
+    date: '2026-06-27',
+    codename: 'Nebula',
+    channel: 'alpha',
+    changes: {
+      change: [
+        'Replaced regex HTML sanitization with DOMPurify — eliminates two decades of known bypass techniques',
+        'Replaced base64 "encryption" fallback with real AES-256-GCM + PBKDF2 (600K iterations) — no silent downgrades',
+        'Refactored URL validation to protocol allowlist (http:, https:, mailto:) instead of denylist',
+      ],
+      security: [
+        'Encryption now requires a passphrase (min 8 chars) and throws typed errors on failure — no silent base64 fallback',
+        'Decryption uses AES-GCM authenticated encryption — wrong passphrase or tampered data throws DecryptionError',
+        'Added encodeLocalOnly() as an explicit, honesty-named escape hatch for non-sensitive local data',
+        'Added crypto-utils.ts: standalone AES-256-GCM module with PBKDF2 key derivation and random per-operation salt/IV',
+        'Added html-sanitizer.ts: DOMPurify-based sanitizer with tag/attr allowlist',
+        'Added url-validator.ts: protocol allowlist validation (http:, https:, mailto:) with IP-address phishing detection',
+        'Added AllowedAction capability model and createCapabilityController() — capability-scoped execution instead of regex threat detection',
+        'Refactored SecureDOMParser.analyze() to monitoring-only (matchedKnownPatterns) — no longer a blocking security gate',
+        'Upgraded Firestore sync to skip encryption when no passphrase is set, instead of silently base64-encoding data',
+        'Removed checkCSSAttacks() — CSS safety is handled by DOMPurify or style stripping',
+      ],
+      docs: [
+        'Updated security docs with new encryption details, PBKDF2 parameters, and capability-scoped execution model',
+      ],
+    }
+  },
+  {
     version: '0.2.9.4.3',
     date: '2026-04-23',
     codename: 'Nebula',

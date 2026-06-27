@@ -122,9 +122,11 @@ class FirebaseSyncService {
 
         // Double-check guest mode and sync consent before syncing
         if (store.isGuestMode || !store.cloudSyncConsent) return;
+        const { syncPassphrase } = store;
+        if (!syncPassphrase) return;
 
         const decrypted = await Promise.all(
-          data.map(item => Security.decrypt(item, store.syncPassphrase || undefined))
+          data.map(item => Security.decrypt(item, syncPassphrase))
         );
         useAppStore.setState({ clipboard: decrypted });
       }
@@ -139,11 +141,13 @@ class FirebaseSyncService {
     const useAppStore = await this.getStore();
     const store = useAppStore.getState();
 
-    // Skip sync if guest mode is enabled
+    // Skip sync if guest mode is enabled or no passphrase for encryption
     if (store.isGuestMode || !store.cloudSyncConsent) return;
+    const { syncPassphrase } = store;
+    if (!syncPassphrase) return;
 
     const encrypted = await Promise.all(
-      clipboard.map(item => Security.encrypt(String(item), store.syncPassphrase || undefined))
+      clipboard.map(item => Security.encrypt(String(item), syncPassphrase))
     );
 
     const clipboardRef = ref(db, "clipboard/" + this.userId);
@@ -185,11 +189,13 @@ class FirebaseSyncService {
     const useAppStore = await this.getStore();
     const store = useAppStore.getState();
 
-    // Skip sync if guest mode is enabled
+    // Skip sync if guest mode is enabled or no passphrase for encryption
     if (store.isGuestMode || !store.cloudSyncConsent) return;
+    const { syncPassphrase } = store;
+    if (!syncPassphrase) return;
 
     const encrypted = await Promise.all(
-      history.map(item => Security.encrypt(item, store.syncPassphrase || undefined))
+      history.map(item => Security.encrypt(item, syncPassphrase))
     );
 
     const historyRef = ref(db, "history/" + this.userId);
@@ -216,8 +222,10 @@ class FirebaseSyncService {
 
         // Double-check guest mode and sync consent before syncing
         if (store.isGuestMode || !store.cloudSyncConsent) return;
+        const { syncPassphrase } = store;
+        if (!syncPassphrase) return;
 
-        const decrypted = await Security.decrypt(data, store.syncPassphrase || undefined);
+        const decrypted = await Security.decrypt(data, syncPassphrase);
         const parsedKeys = JSON.parse(decrypted);
         store.setOpenaiApiKey(parsedKeys.openai);
         store.setGeminiApiKey(parsedKeys.gemini);
@@ -233,10 +241,12 @@ class FirebaseSyncService {
     const useAppStore = await this.getStore();
     const store = useAppStore.getState();
 
-    // Skip sync if guest mode is enabled
+    // Skip sync if guest mode is enabled or no passphrase for encryption
     if (store.isGuestMode || !store.cloudSyncConsent) return;
+    const { syncPassphrase } = store;
+    if (!syncPassphrase) return;
 
-    const encryptedKeys = await Security.encrypt(JSON.stringify(apiKeys), store.syncPassphrase || undefined);
+    const encryptedKeys = await Security.encrypt(JSON.stringify(apiKeys), syncPassphrase);
     const apiKeysRef = ref(db, "apiKeys/" + this.userId);
     set(apiKeysRef, encryptedKeys);
   }
