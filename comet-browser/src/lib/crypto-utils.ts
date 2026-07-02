@@ -130,3 +130,59 @@ export function migrateLegacyBlob(encoded: string): { prefix: string; data: stri
     }
     return null;
 }
+
+export async function decryptLegacyBlob(encoded: string, passphrase: string): Promise<string> {
+    const blob = migrateLegacyBlob(encoded);
+    if (!blob) {
+        throw new DecryptionError('Not a legacy-format blob.');
+    }
+
+    if (blob.prefix === 'LCL:') {
+        try {
+            const decoded = base64Decode(blob.data);
+            return new TextDecoder().decode(decoded);
+        } catch {
+            throw new DecryptionError('Failed to decode LCL: blob.');
+        }
+    }
+
+    if (blob.prefix === 'E2EE:') {
+        if (!passphrase) {
+            throw new DecryptionError('Passphrase required to decrypt E2EE: blob.');
+        }
+        try {
+            const raw = base64Decode(blob.data);
+            const iv = raw.slice(0, 12);
+            const ciphertext = raw.slice(12);
+
+            const keyData = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(passphrase));
+            const key = await crypto.subtle.importKey('raw', keyData, { name: 'AES-GCM' }, false, ['decrypt']);
+
+            const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
+            return new TextDecoder().decode(plaintext);
+        } catch (e) {
+            throw new DecryptionError(`Legacy decryption failed: ${(e as Error).message}`);
+        }
+    }
+
+    throw new DecryptionError('Unknown legacy blob format.');
+}
+
+export async function migrateToNewFormat(encoded: string, newPassphrase: string, oldPassphrase?: string): Promise<string> {
+    const blob = migrateLegacyBlob(encoded);
+    if (!blob) {
+        return encoded;
+    }
+
+    let plaintext: string;
+    if (blob.prefix === 'LCL:') {
+        plaintext = await decryptLegacyBlob(encoded, '');
+    } else {
+        if (!oldPassphrase) {
+            throw new DecryptionError('Old passphrase required to migrate E2EE: blob.');
+        }
+        plaintext = await decryptLegacyBlob(encoded, oldPassphrase);
+    }
+
+    return encrypt(plaintext, newPassphrase);
+}

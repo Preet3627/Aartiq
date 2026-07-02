@@ -218,6 +218,13 @@ const { getP2PSync } = require('./src/lib/P2PFileSyncService.js'); // Import the
 // ERROR-PROOFING: Global error handlers for uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('[MAIN] Uncaught Exception:', error.message, error.stack);
+  // Attempt graceful shutdown before exiting
+  try {
+    app.quit();
+  } catch (e) {
+    // app.quit() may fail if app isn't fully initialized
+  }
+  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -244,6 +251,8 @@ const { PopSearchService, popSearchService } = require('./src/lib/pop-search-ser
 const { WebSearchProvider } = require('./src/lib/web-search-service.js');
 const { MacNativePanelManager } = require('./src/lib/macos-native-panels.js');
 const { PluginManager, pluginManager } = require('./src/lib/plugin-manager.js');
+const { resolveAndClickWithAi } = require('./src/lib/browser-navigation-service.js');
+const { getMacOSPermissionHealth, resetMacOSPermissions } = require('./src/lib/macos-permission-health.js');
 const {
   generateAppleIntelligenceImage,
   generateGenmoji,
@@ -264,6 +273,7 @@ const webSearchProvider = new WebSearchProvider();
 const { NetworkSecurityManager } = require('./src/core/network-security.js');
 const { WindowManager, windowManager } = require('./src/core/window-manager.js');
 const { CommandExecutor } = require('./src/core/command-executor.js');
+const { CapabilityController } = require('./src/core/capability-controller.js');
 
 // ✅ NEW: Relocate essential system IPC handlers to the top to prevent "no handler registered" errors
 ipcMain.handle('get-app-version', () => {
@@ -675,6 +685,37 @@ const commandExecutor = new CommandExecutor({
   permissionStore,
   store,
 });
+
+const capabilityController = new CapabilityController({ permissionStore });
+capabilityController.registerAction({
+  name: 'shell-execute-command',
+  handler: async (params) => params,
+  requiresApproval: 'first-time-per-session',
+  riskLevel: 'high',
+  description: 'Execute arbitrary shell commands',
+});
+capabilityController.registerAction({
+  name: 'execute-shell-command',
+  handler: async (params) => params,
+  requiresApproval: 'never',
+  riskLevel: 'high',
+  description: 'Execute shell command (with permission dialog)',
+});
+capabilityController.registerAction({
+  name: 'shell-read-file',
+  handler: async (params) => params,
+  requiresApproval: 'first-time-per-session',
+  riskLevel: 'medium',
+  description: 'Read file contents',
+});
+capabilityController.registerAction({
+  name: 'shell-write-file',
+  handler: async (params) => params,
+  requiresApproval: 'first-time-per-session',
+  riskLevel: 'medium',
+  description: 'Write file contents',
+});
+commandExecutor.setCapabilityController(capabilityController);
 
 // Network Security - Now managed by NetworkSecurityManager (src/core/network-security.js)
 // Keeping backwards compatibility aliases for existing code references
@@ -4758,6 +4799,22 @@ ipcMain.handle('find-and-click-text', async (event, targetText) => {
   }
 
   try {
+    const view = tabViews.get(activeTabId);
+    if (view && !view.webContents.isDestroyed()) {
+      try {
+        const domResult = await resolveAndClickWithAi(view.webContents, targetText.trim(), cometAiEngine);
+        if (domResult?.success) {
+          console.log(`[Main] Find-and-click resolved "${targetText}" via ${domResult.method}`);
+          return {
+            ...domResult,
+            provider: 'browser-dom',
+          };
+        }
+      } catch (domError) {
+        console.warn('[Main] DOM find-and-click fallback to OCR:', domError.message);
+      }
+    }
+
     if (!tesseractOcrService) {
       return { success: false, error: 'OCR service not initialized.' };
     }
@@ -5669,8 +5726,8 @@ async function checkShellPermission(command, reason, riskLevel) {
   });
 
   if (!nativeVerification.supported) {
-    console.warn('[Shell] Native device unlock requested but unavailable:', nativeVerification.error);
-    return true;
+    console.warn('[Shell] Native device unlock unavailable — denying by default:', nativeVerification.error);
+    return false;
   }
 
   if (!nativeVerification.approved) {
@@ -5740,8 +5797,11 @@ function validateCommand(command) {
 }
 
 ipcMain.handle('execute-shell-command', async (event, { rawCommand, preApproved, reason, riskLevel }) => {
-  // Check if already granted permission (skip the blocking dialog - let user configure in Settings)
-  // Permission dialog removed - user can configure in Settings panel
+  // Capability-scoped execution pre-check
+  const capResult = await capabilityController.executeAction('execute-shell-command', { rawCommand, reason, riskLevel });
+  if (!capResult.approved) {
+    return { success: false, error: capResult.reason };
+  }
 
   let command;
   try {
@@ -7976,7 +8036,11 @@ app.whenReady().then(async () => {
           command: target,
           riskLevel: 'medium',
         });
-        if (nativeVerification.supported && !nativeVerification.approved) {
+        if (!nativeVerification.supported) {
+          res.json({ success: false, error: 'Device verification unavailable — request denied.' });
+          return false;
+        }
+        if (!nativeVerification.approved) {
           res.json({ success: false, error: 'Biometric verification failed: ' + (nativeVerification.error || 'User denied verification') });
           return false;
         }
@@ -10339,17 +10403,10 @@ app.whenReady().then(async () => {
       return { success: false, error: permission.error };
     }
     try {
-      const result = await view.webContents.executeJavaScript(`
-      (() => {
-        const el = document.querySelector('${selector}');
-        if (el) {
-          el.click();
-          return true;
-        }
-        return false;
-      })()
-    `);
-      return { success: result };
+      const result = await resolveAndClickWithAi(view.webContents, selector, cometAiEngine);
+      return result?.success
+        ? { ...result, success: true }
+        : { success: false, error: `No clickable DOM target found for "${selector}"`, candidates: result?.candidates || [] };
     } catch (error) {
       return { success: false, error: error.message };
     }

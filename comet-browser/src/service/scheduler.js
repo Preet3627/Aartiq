@@ -206,22 +206,26 @@ class TaskScheduler extends EventEmitter {
     }
 
     checkMissedTasks() {
-        if (this.isPaused || !this.isRunning) return;
+        try {
+            if (this.isPaused || !this.isRunning) return;
 
-        const now = Date.now();
-        const tasks = this.storage.getAllTasks();
+            const now = Date.now();
+            const tasks = this.storage.getAllTasks();
 
-        for (const task of tasks) {
-            if (!task.enabled) continue;
+            for (const task of tasks) {
+                if (!task.enabled) continue;
 
-            if (task.nextRun && new Date(task.nextRun).getTime() < now - 60000) {
-                // Task is more than 1 minute overdue
-                console.log(`[Scheduler] Detected missed task: ${task.name}`);
-                this.emit('task:missed', task);
+                if (task.nextRun && new Date(task.nextRun).getTime() < now - 60000) {
+                    // Task is more than 1 minute overdue
+                    console.log(`[Scheduler] Detected missed task: ${task.name}`);
+                    this.emit('task:missed', task);
+                }
             }
-        }
 
-        this.lastCheckTime = now;
+            this.lastCheckTime = now;
+        } catch (e) {
+            console.error('[Scheduler] checkMissedTasks error:', e);
+        }
     }
 
     async onSuspend() {

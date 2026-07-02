@@ -73,13 +73,35 @@ export class P2PFileSyncService extends EventEmitter {
     private storage: FirebaseStorage | null = null; // Add storage property
     private userId: string | null = null;
     private remoteDeviceId: string | null = null; // Track the device we are trying to connect to
+    private _passphrase: string;
 
+    private static generatePassphrase(): string {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return crypto.randomUUID() + crypto.randomUUID();
+        }
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        const array = new Uint8Array(64);
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            crypto.getRandomValues(array);
+        } else {
+            for (let i = 0; i < 64; i++) array[i] = Math.floor(Math.random() * 256);
+        }
+        for (let i = 0; i < 64; i++) result += chars[array[i] % chars.length];
+        return result;
+    }
 
-
-    constructor(deviceId: string) {
+    constructor(deviceId: string, passphrase?: string) {
         super();
         this.deviceId = deviceId;
+        this._passphrase = passphrase || P2PFileSyncService.generatePassphrase();
         this.initializeFirebase();
+    }
+
+    setPassphrase(passphrase: string): void {
+        if (passphrase && passphrase.length >= 8) {
+            this._passphrase = passphrase;
+        }
     }
 
     private initializeFirebase() {
@@ -363,11 +385,9 @@ export class P2PFileSyncService extends EventEmitter {
         try {
             const localFiles = await this.scanFolder(folder.localPath, folder.syncTypes);
             let filesQueued = 0;
-            const passphrase = 'temp-key'; // TODO: Get actual passphrase from useAppStore
-
             for (const file of localFiles) {
                 const fileData = await this.readFileData(file.path);
-                const encryptResult: EncryptResult = await this.encryptData(fileData, passphrase);
+                const encryptResult: EncryptResult = await this.encryptData(fileData, this._passphrase);
 
                 if (isErrorResult(encryptResult)) {
                     console.error('[Relay] Encryption failed:', encryptResult.error);
@@ -424,10 +444,9 @@ export class P2PFileSyncService extends EventEmitter {
                     const fileRef = storageRef(this.storage!, fileMetadata.storagePath!);
                     const arrayBuffer = await (await fetch(fileMetadata.downloadURL!)).arrayBuffer();
 
-                    const passphrase = 'temp-key'; // TODO: Get actual passphrase from useAppStore
                     const decryptResult: DecryptResult = await this.decryptData(
                         arrayBuffer,
-                        passphrase,
+                        this._passphrase,
                         Buffer.from(fileMetadata.iv!, 'base64').buffer,
                         Buffer.from(fileMetadata.authTag!, 'base64').buffer,
                         Buffer.from(fileMetadata.salt!, 'base64').buffer

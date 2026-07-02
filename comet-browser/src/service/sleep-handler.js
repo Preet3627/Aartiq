@@ -17,8 +17,8 @@ class SleepHandler {
 
     initialize() {
         // System power events
-        powerMonitor.on('suspend', () => this.handleSuspend());
-        powerMonitor.on('resume', () => this.handleResume());
+        powerMonitor.on('suspend', () => { try { this.handleSuspend(); } catch (e) { console.error('[SleepHandler] suspend error:', e); } });
+        powerMonitor.on('resume', () => { this.handleResume().catch(e => console.error('[SleepHandler] resume error:', e)); });
         powerMonitor.on('on-ac', () => this.handlePowerChange(true));
         powerMonitor.on('on-battery', () => this.handlePowerChange(false));
         powerMonitor.on('lock-screen', () => this.handleScreenLock());

@@ -1,15 +1,15 @@
 {
-  "generated": "2026-04-23T15:45:25.422Z",
-  "version": "0.2.9",
+  "generated": "2026-06-27T16:18:40.691Z",
+  "version": "0.2.98",
   "desktop": {
-    "total": 137,
-    "totalLines": 40633,
+    "total": 140,
+    "totalLines": 40709,
     "byCategory": {
       "components": 81,
       "core": 0,
       "automation": 0,
       "service": 0,
-      "lib": 56
+      "lib": 59
     },
     "components": [
       {
@@ -50,7 +50,7 @@
       {
         "name": "AIChatSidebar.tsx",
         "path": "AIChatSidebar.tsx",
-        "lines": 4981,
+        "lines": 4979,
         "description": "Chat Sidebar",
         "tags": [
           "React",
@@ -67,7 +67,7 @@
           "Windows",
           "Linux"
         ],
-        "lastModified": "2026-04-23"
+        "lastModified": "2026-05-11"
       },
       {
         "name": "AICommandQueue.tsx",
@@ -177,14 +177,14 @@
       {
         "name": "BrowserViewContainer.tsx",
         "path": "BrowserViewContainer.tsx",
-        "lines": 133,
+        "lines": 128,
         "description": "Browser View Container",
         "tags": [
           "React",
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-03-08"
+        "lastModified": "2026-05-19"
       },
       {
         "name": "CapabilitiesPanel.tsx",
@@ -624,7 +624,7 @@
           "Node.js",
           "macOS"
         ],
-        "lastModified": "2026-04-03"
+        "lastModified": "2026-06-21"
       },
       {
         "name": "StartupSetupUI.tsx",
@@ -838,7 +838,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-04-23"
+        "lastModified": "2026-06-21"
       },
       {
         "name": "AISetupGuide.tsx",
@@ -1058,7 +1058,7 @@
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-04-09"
+        "lastModified": "2026-06-21"
       },
       {
         "name": "AICommandOutput.ts",
@@ -1176,7 +1176,7 @@
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-03-30"
+        "lastModified": "2026-05-19"
       },
       {
         "name": "ContactSyncService.ts",
@@ -1237,13 +1237,13 @@
       {
         "name": "FirebaseSyncService.ts",
         "path": "FirebaseSyncService.ts",
-        "lines": 245,
+        "lines": 255,
         "description": "Firebase Sync Service",
         "tags": [
           "Security",
           "macOS"
         ],
-        "lastModified": "2026-04-06"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "GmailService.ts",
@@ -1369,7 +1369,7 @@
       {
         "name": "Security.ts",
         "path": "Security.ts",
-        "lines": 671,
+        "lines": 527,
         "description": "Security",
         "tags": [
           "Node.js",
@@ -1377,11 +1377,10 @@
           "AI",
           "Sync",
           "PDF",
-          "OCR",
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-04-06"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "ShellCommandParser.ts",
@@ -1401,7 +1400,7 @@
       {
         "name": "SiriShortcutsIntegration.ts",
         "path": "SiriShortcutsIntegration.ts",
-        "lines": 338,
+        "lines": 379,
         "description": "Siri Shortcuts Integration",
         "tags": [
           "Node.js",
@@ -1411,7 +1410,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-04-21"
+        "lastModified": "2026-05-14"
       },
       {
         "name": "SkillLoader.ts",
@@ -1541,6 +1540,17 @@
         "lastModified": "2026-04-11"
       },
       {
+        "name": "crypto-utils.ts",
+        "path": "crypto-utils.ts",
+        "lines": 133,
+        "description": "Crypto Utils",
+        "tags": [
+          "Node.js",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
         "name": "ExtensionManager.ts",
         "path": "extensions/ExtensionManager.ts",
         "lines": 66,
@@ -1580,6 +1590,17 @@
           "macOS"
         ],
         "lastModified": "2026-03-08"
+      },
+      {
+        "name": "html-sanitizer.ts",
+        "path": "html-sanitizer.ts",
+        "lines": 25,
+        "description": "Html Sanitizer",
+        "tags": [
+          "Security",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
       },
       {
         "name": "LLMOrchestrator.ts",
@@ -1725,6 +1746,17 @@
         "lastModified": "2026-03-08"
       },
       {
+        "name": "url-validator.ts",
+        "path": "url-validator.ts",
+        "lines": 18,
+        "description": "Url Validator",
+        "tags": [
+          "Security",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
         "name": "useAppVersion.ts",
         "path": "useAppVersion.ts",
         "lines": 31,
@@ -1750,7 +1782,7 @@
     "components": []
   },
   "summary": {
-    "total": 137,
-    "totalLines": 40633
+    "total": 140,
+    "totalLines": 40709
   }
 }

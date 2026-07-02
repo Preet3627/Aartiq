@@ -10,6 +10,32 @@ const https = require('https');
 const http = require('http');
 const { exec } = require('child_process');
 
+function applyComparison(a, op, b) {
+    switch (op) {
+        case '==': return a == b;
+        case '!=': return a != b;
+        case '>': return a > b;
+        case '>=': return a >= b;
+        case '<': return a < b;
+        case '<=': return a <= b;
+        default: return false;
+    }
+}
+
+function parseValue(str) {
+    str = str.trim();
+    if (str === 'true') return true;
+    if (str === 'false') return false;
+    if (str === 'null') return null;
+    if (str === 'undefined') return undefined;
+    const num = Number(str);
+    if (!isNaN(num) && str !== '') return num;
+    if ((str.startsWith("'") && str.endsWith("'")) || (str.startsWith('"') && str.endsWith('"'))) {
+        return str.slice(1, -1);
+    }
+    return str;
+}
+
 class TaskQueue extends EventEmitter {
     constructor(storageManager) {
         super();
@@ -402,13 +428,35 @@ class TaskQueue extends EventEmitter {
     }
 
     evaluateCondition(config, results) {
-        // Simple condition evaluation
         if (!config.expression) return true;
-        
-        // This would be more sophisticated in production
+
         try {
-            const context = { results, lastResult: results[results.length - 1] };
-            return new Function(`return ${config.expression}`).call(context);
+            const lastResult = results[results.length - 1];
+            const expr = config.expression.trim();
+
+            const safeOperators = [
+                { re: /^results\.length\s*(>=?|<=?|==|!=)\s*(\d+)$/, fn: (m) => {
+                    const op = m[1]; const val = parseInt(m[2]);
+                    return applyComparison(results.length, op, val);
+                }},
+                { re: /^lastResult\.(\w+)\s*(>=?|<=?|==|!=)\s*(.+)$/, fn: (m) => {
+                    const prop = m[1]; const op = m[2]; const val = parseValue(m[3]);
+                    return applyComparison(lastResult?.[prop], op, val);
+                }},
+                { re: /^results\.length\s*(>=?|<=?|==|!=)\s*(\d+)\s*(&&|\|\|)\s*results\.length\s*(>=?|<=?|==|!=)\s*(\d+)$/, fn: (m) => {
+                    const left = applyComparison(results.length, m[1], parseInt(m[2]));
+                    const right = applyComparison(results.length, m[4], parseInt(m[5]));
+                    return m[3] === '&&' ? (left && right) : (left || right);
+                }},
+            ];
+
+            for (const { re, fn } of safeOperators) {
+                const match = expr.match(re);
+                if (match) return fn(match);
+            }
+
+            console.warn(`[TaskQueue] Unsafe condition expression blocked: "${expr}"`);
+            return true;
         } catch {
             return true;
         }

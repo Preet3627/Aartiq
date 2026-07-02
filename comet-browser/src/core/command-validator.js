@@ -104,7 +104,10 @@ function checkShellPermission(command, reason, riskLevel = 'medium') {
   if (permissionStore.get(cmdKey)) {
     return true;
   }
-  return true;
+  if (permissionStore.get('shell_all')) {
+    return true;
+  }
+  return false;
 }
 
 module.exports = {

@@ -6,11 +6,13 @@ import {
     DecryptionError,
     isCiphertext,
     migrateLegacyBlob,
+    decryptLegacyBlob,
+    migrateToNewFormat,
 } from './crypto-utils';
 import { sanitizeHTML as purifyHTML } from './html-sanitizer';
 import { validateURL as allowlistValidateURL } from './url-validator';
 
-export { EncryptionError, DecryptionError, isCiphertext, migrateLegacyBlob };
+export { EncryptionError, DecryptionError, isCiphertext, migrateLegacyBlob, decryptLegacyBlob, migrateToNewFormat };
 export { localOnly as encodeLocalOnly };
 export { sanitizeHTML } from './html-sanitizer';
 export { validateURL } from './url-validator';

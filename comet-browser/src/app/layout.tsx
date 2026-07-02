@@ -6,6 +6,7 @@ import "./globals.css";
 import { useEffect } from 'react';
 
 import TitleBar from "@/components/TitleBar";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 
 // Metadata cannot be exported from a client component directly.
@@ -63,7 +64,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={store.theme === 'system' ? '' : store.theme}>
       <body className={`font-sans antialiased bg-deep-space-bg ${isLandingPage ? 'overflow-auto' : 'overflow-hidden'} h-screen`}>
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </body>
     </html>
   );

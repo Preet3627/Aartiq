@@ -1,4 +1,13 @@
-import DOMPurify from 'dompurify';
+let purify: typeof import('dompurify').default | null = null;
+
+try {
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+        const dompurify = require('dompurify');
+        purify = dompurify.default || dompurify;
+    }
+} catch {
+    // DOMPurify uses window/document — not available in main process
+}
 
 export interface SanitizeOptions {
     ALLOWED_TAGS?: string[];
@@ -17,8 +26,12 @@ const DEFAULT_OPTIONS: SanitizeOptions = {
 };
 
 export function sanitizeHTML(html: string, options?: SanitizeOptions): string {
-    return DOMPurify.sanitize(html, {
+    if (!purify) {
+        console.warn('[html-sanitizer] DOMPurify not available (non-browser context). HTML not sanitized.');
+        return html;
+    }
+    return purify.sanitize(html, {
         ...DEFAULT_OPTIONS,
         ...options,
-    } as Parameters<typeof DOMPurify.sanitize>[1]);
+    } as Parameters<typeof purify.sanitize>[1]);
 }

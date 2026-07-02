@@ -11,6 +11,7 @@ class CommandExecutor {
     this.robotService = options.robotService;
     this.cometAiEngine = options.cometAiEngine;
     this.store = options.store;
+    this.capabilityController = options.capabilityController || null;
     this.registerHandlers = this.registerHandlers.bind(this);
   }
 
@@ -32,6 +33,10 @@ class CommandExecutor {
 
   setCometAiEngine(engine) {
     this.cometAiEngine = engine;
+  }
+
+  setCapabilityController(cc) {
+    this.capabilityController = cc;
   }
 
   registerHandlers() {
@@ -172,6 +177,12 @@ class CommandExecutor {
       }
     });
     registerHandler('shell-read-file', async (event, filePath) => {
+      if (this.capabilityController) {
+        const result = await this.capabilityController.executeAction('shell-read-file', { filePath });
+        if (!result.approved) {
+          return { success: false, error: result.reason || 'File read blocked by capability controller.' };
+        }
+      }
       try {
         const content = fs.readFileSync(filePath, 'utf8');
         return { success: true, content };
@@ -180,6 +191,12 @@ class CommandExecutor {
       }
     });
     registerHandler('shell-write-file', async (event, filePath, content) => {
+      if (this.capabilityController) {
+        const result = await this.capabilityController.executeAction('shell-write-file', { filePath });
+        if (!result.approved) {
+          return { success: false, error: result.reason || 'File write blocked by capability controller.' };
+        }
+      }
       try {
         fs.writeFileSync(filePath, content, 'utf8');
         return { success: true };
@@ -188,6 +205,12 @@ class CommandExecutor {
       }
     });
     registerHandler('shell-execute-command', async (event, command, args = []) => {
+      if (this.capabilityController) {
+        const result = await this.capabilityController.executeAction('shell-execute-command', { command, args });
+        if (!result.approved) {
+          return { success: false, error: result.reason || 'Shell execution blocked by capability controller.' };
+        }
+      }
       return new Promise((resolve) => {
         try {
           const child = spawn(command, args, { shell: true });

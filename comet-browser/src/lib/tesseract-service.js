@@ -1,4 +1,4 @@
-const { desktopCapturer, screen } = require('electron');
+const { desktopCapturer, screen, systemPreferences } = require('electron');
 const { createWorker } = require('tesseract.js');
 const fs = require('fs');
 const path = require('path');
@@ -271,10 +271,25 @@ class TesseractOcrService {
   constructor() {
     this.worker = null;
     this.initialized = false;
+    this.initPromise = null;
   }
 
   async init() {
     if (this.initialized && this.worker) return;
+    if (this.initPromise) {
+      await this.initPromise;
+      return;
+    }
+
+    this.initPromise = this._initWorker();
+    try {
+      await this.initPromise;
+    } finally {
+      this.initPromise = null;
+    }
+  }
+
+  async _initWorker() {
     try {
       this.worker = await createWorker('eng');
       this.initialized = true;
@@ -923,15 +938,46 @@ print(json.dumps({"results": results}))
 
   async captureAndOcr(displayId, options = {}) {
     const { preferNative = true } = options;
+    const errors = [];
 
     if (preferNative) {
-      const nativeResult = await this.captureAndRecognizeNative(displayId);
-      if (nativeResult?.words?.length || nativeResult?.lines?.length) {
-        return nativeResult;
+      try {
+        const nativeResult = await this.captureAndRecognizeNative(displayId);
+        if (nativeResult?.words?.length || nativeResult?.lines?.length) {
+          return nativeResult;
+        }
+      } catch (error) {
+        errors.push(`native: ${error.message}`);
       }
     }
 
-    return this.captureAndRecognizeWithTesseract(displayId);
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        return await this.captureAndRecognizeWithTesseract(displayId);
+      } catch (error) {
+        errors.push(`tesseract attempt ${attempt}: ${error.message}`);
+        await this.terminate();
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+    }
+
+    let screenStatus = 'unknown';
+    if (process.platform === 'darwin') {
+      try {
+        screenStatus = systemPreferences.getMediaAccessStatus('screen');
+      } catch (_) {
+        screenStatus = 'unknown';
+      }
+    }
+
+    const detail = errors.length ? errors.join(' | ') : 'no OCR provider returned text';
+    const permissionHint = process.platform === 'darwin' && screenStatus !== 'granted'
+      ? ` Screen Recording status is "${screenStatus}".`
+      : '';
+
+    throw new Error(`OCR failed after native and Tesseract fallback attempts.${permissionHint} ${detail}`);
   }
 
   async ocrClick(targetDescription, aiEngine, robotService, permissionStore, useDirectClick = false) {

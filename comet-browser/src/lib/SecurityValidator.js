@@ -1,6 +1,7 @@
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const DANGEROUS_PATTERNS = [
   /rm\s+-rf\s+\//i,
@@ -305,8 +306,6 @@ class SecurityValidator {
     return canAutoExecute(commandType);
   }
 }
-
-const os = require('os');
 
 const globalValidator = new SecurityValidator();
 

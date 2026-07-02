@@ -6,10 +6,12 @@
  */
 
 const { Tray, Menu, nativeImage, app } = require('electron');
+const { EventEmitter } = require('events');
 const path = require('path');
 
-class TrayManager {
+class TrayManager extends EventEmitter {
     constructor(options = {}) {
+        super();
         this.tray = null;
         this.options = {
             iconPath: options.iconPath || this.getDefaultIconPath(),
@@ -238,9 +240,5 @@ class TrayManager {
         }
     }
 }
-
-// Mix in EventEmitter functionality
-const { EventEmitter } = require('events');
-TrayManager.prototype.__proto__ = EventEmitter.prototype;
 
 module.exports = { TrayManager };
