@@ -4788,7 +4788,7 @@ function mapOcrCoordsToScreenCoords(ocrResult, captureRegion) {
  * Uses the shared OCR service, which now prefers native OS providers first
  * and falls back to Tesseract only when native extraction is unavailable.
  */
-ipcMain.handle('find-and-click-text', async (event, targetText) => {
+async function findAndClickTextInternal(targetText) {
   if (!targetText || typeof targetText !== 'string' || targetText.trim().length === 0) {
     return { success: false, error: 'Target text is required.' };
   }
@@ -4836,6 +4836,10 @@ ipcMain.handle('find-and-click-text', async (event, targetText) => {
     console.error('[Main] find-and-click-text failed:', error);
     return { success: false, error: error.message };
   }
+}
+
+ipcMain.handle('find-and-click-text', async (_event, targetText) => {
+  return findAndClickTextInternal(targetText);
 });
 
 ipcMain.handle('save-offline-page', async (event, { url, title, html }) => {
@@ -8770,8 +8774,7 @@ app.whenReady().then(async () => {
         }
       } else if (command === 'find-and-click') {
         const targetText = args.text;
-        // Reuse the find-and-click-text logic
-        ipcMain.emit('find-and-click-text', { sender: { send: () => { } } }, targetText).then(result => {
+        findAndClickTextInternal(targetText).then(result => {
           sendResponse(result);
         }).catch(err => {
           sendResponse({ success: false, error: err.message });
@@ -9739,6 +9742,43 @@ app.whenReady().then(async () => {
   });
 
   // IPC handler for decryption
+  // Web Search v2 API
+  ipcMain.handle('web-search', async (_event, query, provider, count) => {
+    try {
+      const results = await webSearchProvider.search(query, provider || 'duckduckgo', count || 5);
+      return { success: true, results };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('web-search-context', async (_event, query, provider) => {
+    try {
+      const context = await webSearchProvider.searchForContext(query, provider || 'duckduckgo');
+      return { success: true, context };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('web-search-providers', async () => {
+    try {
+      const providers = webSearchProvider.getAvailableProviders();
+      return { success: true, providers };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('web-search-configure', async (_event, keys) => {
+    try {
+      webSearchProvider.configure(keys);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
   // Web Search RAG Helper with Caching
   ipcMain.handle('web-search-rag', async (event, query) => {
     try {

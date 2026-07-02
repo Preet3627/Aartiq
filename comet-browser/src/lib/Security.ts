@@ -316,11 +316,21 @@ export const Security = {
                 }
             }
 
+            let sanitizedContent = content;
+            for (const finding of findings) {
+                if (finding.severity === 'critical') {
+                    sanitizedContent = sanitizedContent.replace(
+                        new RegExp(Security.SecureDOMParser.escapeRegex(finding.match), 'g'),
+                        `[BLOCKED: ${finding.layer.toUpperCase()}]`
+                    );
+                }
+            }
+
             return {
                 matchedKnownPatterns: threatLevel !== 'none',
                 threatLevel,
                 findings,
-                sanitizedContent: content,
+                sanitizedContent,
                 recommendations
             };
         },
@@ -407,7 +417,8 @@ export const Security = {
 
         let filtered = content;
 
-        Security.SecureDOMParser.analyze(filtered);
+        const analysis = Security.SecureDOMParser.analyze(filtered);
+        filtered = analysis.sanitizedContent;
 
         const fortressResult = Security.fortress(filtered);
         if (fortressResult.wasProtected) {
