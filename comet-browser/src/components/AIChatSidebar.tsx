@@ -513,6 +513,26 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
       return trimmed;
     }
 
+    try {
+      const urlObj = new URL(trimmed);
+      if (urlObj.hostname.includes('google.com') && urlObj.pathname === '/url') {
+        const qParam = urlObj.searchParams.get('q') || urlObj.searchParams.get('url');
+        if (qParam) return qParam;
+      }
+      if (urlObj.hostname === 'duckduckgo.com' && urlObj.pathname === '/l/') {
+        const uddg = urlObj.searchParams.get('uddg');
+        if (uddg) return decodeURIComponent(uddg);
+      }
+      if (urlObj.hostname === 'www.google.com' && urlObj.pathname === '/search' && !urlObj.searchParams.has('q')) {
+        const q = urlObj.searchParams.get('q');
+        if (q && q.match(/^https?:\/\//)) return q;
+      }
+      if (urlObj.protocol === 'http:' || urlObj.protocol === 'https:') {
+        return trimmed;
+      }
+    } catch {
+    }
+
     if (/^(https?:|file:|about:|data:|mailto:|tel:)/i.test(trimmed)) {
       return trimmed;
     }
@@ -3635,7 +3655,10 @@ I've successfully executed the following real tasks:
         if (last && last.role === 'model') {
           const updated = [...prev];
           const actionLogs = last.actionLogs || [];
-          updated[prev.length - 1] = { ...last, actionLogs: [...actionLogs, { type: command.type, output, success: !commandResult.error }] };
+          const logEntry = { type: command.type, output, success: !commandResult.error };
+          const contentAppend = output && !commandResult.error ? `\n\n[${command.type}]\n${output.substring(0, 4000)}` : '';
+          const newContent = last.content + contentAppend;
+          updated[prev.length - 1] = { ...last, content: newContent, actionLogs: [...actionLogs, logEntry] };
           return updated;
         }
         return prev;

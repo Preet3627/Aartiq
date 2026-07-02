@@ -139,41 +139,92 @@ class WebSearchProvider {
 
   async _searchDuckDuckGo(query, count) {
     try {
-      const res = await fetch(
-        `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1&t=comet-ai`
+      const htmlRes = await fetch(
+        `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+        }
       );
 
-      if (!res.ok) {
-        throw new Error(`DuckDuckGo error ${res.status}`);
+      if (!htmlRes.ok) {
+        throw new Error(`DuckDuckGo HTML search error ${htmlRes.status}`);
       }
 
-      const data = await res.json();
+      const html = await htmlRes.text();
       const results = [];
-      
-      if (data.RelatedTopics) {
-        for (const topic of data.RelatedTopics.slice(0, count)) {
-          if (topic.Text && topic.FirstURL) {
-            results.push({
-              title: topic.Text.split(' - ')[0] || 'Related Topic',
-              url: topic.FirstURL,
-              snippet: topic.Text,
-            });
-          }
-        }
+      const linkRegex = /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
+      const snippetRegex = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+      let linkMatch;
+      const snippets = [];
+      let sMatch;
+      while ((sMatch = snippetRegex.exec(html)) !== null) {
+        snippets.push(sMatch[1].replace(/<[^>]*>/g, '').trim());
       }
-
-      if (data.Answer) {
-        results.unshift({
-          title: 'Direct Answer',
-          url: data.AbstractURL || '',
-          snippet: data.Answer,
-        });
+      while ((linkMatch = linkRegex.exec(html)) !== null && results.length < count) {
+        let rawUrl = linkMatch[1].trim();
+        const title = linkMatch[2].replace(/<[^>]*>/g, '').trim();
+        if (!title) continue;
+        const cleanUrl = this._cleanDdgUrl(rawUrl);
+        if (!cleanUrl) continue;
+        const snippet = snippets[results.length] || '';
+        results.push({ title, url: cleanUrl, snippet });
       }
 
       return results;
     } catch (e) {
-      console.warn(`[WebSearch] DuckDuckGo search failed: ${e.message}`);
-      return [];
+      console.warn(`[WebSearch] DuckDuckGo HTML search failed: ${e.message}`);
+      try {
+        const res = await fetch(
+          `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&t=comet-ai`
+        );
+        if (!res.ok) return [];
+        const data = await res.json();
+        const fallback = [];
+        if (data.RelatedTopics) {
+          for (const topic of data.RelatedTopics.slice(0, count)) {
+            if (topic.Text && topic.FirstURL) {
+              fallback.push({
+                title: topic.Text.split(' - ')[0] || 'Related Topic',
+                url: topic.FirstURL,
+                snippet: topic.Text,
+              });
+            }
+          }
+        }
+        if (data.Abstract) {
+          fallback.unshift({
+            title: data.Headline || data.Heading || 'Summary',
+            url: data.AbstractURL || '',
+            snippet: data.Abstract,
+          });
+        }
+        return fallback;
+      } catch (e2) {
+        console.warn(`[WebSearch] DuckDuckGo API fallback also failed: ${e2.message}`);
+        return [];
+      }
+    }
+  }
+
+  _cleanDdgUrl(rawUrl) {
+    try {
+      const decoded = rawUrl.replace(/&amp;/g, '&');
+      const urlObj = new URL(decoded, 'https://duckduckgo.com');
+      if (urlObj.hostname === 'duckduckgo.com' && urlObj.pathname === '/l/') {
+        const uddg = urlObj.searchParams.get('uddg');
+        if (uddg) return decodeURIComponent(uddg);
+      }
+      if (urlObj.hostname === 'duckduckgo.com' && decoded.includes('uddg=')) {
+        const match = decoded.match(/uddg=([^&]+)/);
+        if (match) return decodeURIComponent(match[1]);
+      }
+      return decoded;
+    } catch {
+      return rawUrl;
     }
   }
 

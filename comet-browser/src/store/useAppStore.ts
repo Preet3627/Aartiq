@@ -706,9 +706,17 @@ export const useAppStore = create<BrowserState>()(
             savePageOffline: (url: string, title: string, html: string) => {
                 console.log('Saving page offline:', url, title);
             },
-            addToUnifiedCart: (item: any) => {
-                console.log('Adding to unified cart:', item);
-            },
+            addToUnifiedCart: (item: any) => set((state: BrowserState) => {
+                const cartItem = {
+                    id: item.id || `cart-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    item: item.item || item.title || item.name || 'Unknown item',
+                    site: item.site || item.source || '',
+                    price: item.price || item.amount || '$??'
+                };
+                const exists = state.unifiedCart.some(existing => existing.id === cartItem.id);
+                if (exists) return state;
+                return { unifiedCart: [...state.unifiedCart, cartItem] };
+            }),
             addClipboardItem: (item: string) => set((state: BrowserState) => {
                 const newClipboard = [item, ...state.clipboard.filter(i => i !== item)].slice(0, 50);
                 return { clipboard: newClipboard };
