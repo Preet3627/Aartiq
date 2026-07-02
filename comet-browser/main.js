@@ -269,6 +269,9 @@ const {
 } = require('./src/lib/provider-model-discovery.js');
 const webSearchProvider = new WebSearchProvider();
 
+// Handler modules (src/main/handlers/) — modular IPC handler registration
+const { registerAllHandlers } = require('./src/main/handlers/index.js');
+
 // Core modules - Architecture refactoring (extracted from main.js)
 const { NetworkSecurityManager } = require('./src/core/network-security.js');
 const { WindowManager, windowManager } = require('./src/core/window-manager.js');
@@ -9622,76 +9625,6 @@ app.whenReady().then(async () => {
     p2pSyncService.sendSignal(signal, remoteDeviceId);
   });
 
-  // IPC handler to update global shortcuts
-  ipcMain.on('update-shortcuts', (event, shortcuts) => {
-    // Unregister all existing shortcuts to prevent conflicts
-    globalShortcut.unregisterAll();
-    store.set('shortcuts', shortcuts);
-    buildApplicationMenu();
-
-    // Only register these actions as GLOBAL shortcuts (intercepting in other apps)
-    const GLOBAL_SAFE_ACTIONS = [
-      'spotlight-search',
-      'pop-search',
-      'global-search',
-      'kill-switch',
-      'emergency-kill',
-      'toggle-spotlight'
-    ];
-
-    shortcuts.forEach(s => {
-      try {
-        if (s.accelerator) {
-          // Skip accelerators with non-ASCII characters (e.g. Alt+Ø) to prevent Electron crashes
-          if (/[^\x00-\x7F]/.test(s.accelerator)) {
-            console.warn(`[Hotkey] Skipping invalid shortcut signature: ${s.accelerator}`);
-            return;
-          }
-
-          // ONLY register globally if it's a "global-safe" action
-          if (!GLOBAL_SAFE_ACTIONS.includes(s.action)) {
-            // Standard shortcuts (like Cmd+W, Cmd+T) should NOT be registered as globalShortcut
-            // because they intercept keys when OTHER apps are active.
-            // We'll let the Menu handle them locally.
-            return;
-          }
-
-          globalShortcut.register(s.accelerator, () => {
-            console.log(`[Hotkey] GLOBAL Triggered: ${s.action} (${s.accelerator})`);
-            if (mainWindow) {
-              if (mainWindow.isMinimized()) mainWindow.restore();
-              if (!mainWindow.isVisible()) mainWindow.show();
-              mainWindow.focus();
-
-              // Handle specific actions
-              if (s.action === 'spotlight-search' || s.action === 'global-search' || s.action === 'toggle-spotlight') {
-                mainWindow.webContents.send('open-unified-search');
-              } else if (s.action === 'pop-search') {
-                if (popSearch) popSearch.showPopupWithText('');
-              } else if (s.action === 'kill-switch' || s.action === 'emergency-kill') {
-                if (robotService) robotService.kill();
-                mainWindow.webContents.send('robot-killed');
-              } else if (s.action === 'zoom-in' || s.action === 'zoom-in-plus') {
-                const view = tabViews.get(activeTabId);
-                if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() + 0.1);
-              } else if (s.action === 'zoom-out') {
-                const view = tabViews.get(activeTabId);
-                if (view) view.webContents.setZoomFactor(view.webContents.getZoomFactor() - 0.1);
-              } else if (s.action === 'zoom-reset') {
-                const view = tabViews.get(activeTabId);
-                if (view) view.webContents.setZoomFactor(1.0);
-              } else {
-                mainWindow.webContents.send('execute-shortcut', s.action);
-              }
-            }
-          });
-        }
-      } catch (e) {
-        console.error(`Failed to register shortcut ${s.accelerator}:`, e);
-      }
-    });
-  });
-
   ipcMain.handle('scan-folder', async (event, folderPath, types) => {
     return await _scanDirectoryRecursive(folderPath, types);
   });
@@ -11913,6 +11846,23 @@ ${tabData}`;
   app.on('quit', async () => {
     process.exit(0);
   });
+
+  // Wire modular IPC handlers from src/main/handlers/
+  const handlerDeps = {
+    mainWindow, store, getTopWindow, isDev, isOnline,
+    cometAiEngine, llmProviders, llmGenerateHandler, llmStreamHandler,
+    tabViews, activeTabId,
+    robotService, tesseractOcrService, screenVisionService, permissionStore, checkAiActionPermission,
+    wifiSyncService, cloudSyncService, p2pSyncService,
+    streamPromptToMobile, generateShellApprovalQR,
+    networkSecurityManager,
+    mcpManager, fileSystemMcp, nativeAppMcp,
+    extensionsPath, raycastState,
+    popupWindows, createPopupWindow, pluginManager,
+    ragService, voiceService, workflowRecorder, popSearch,
+    flutterBridge,
+  };
+  registerAllHandlers(ipcMain, handlerDeps);
 }).catch(err => {
   console.error('[Main] Fatal error during app startup:', err);
   // Emergency fallback to at least show the window

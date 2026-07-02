@@ -3,7 +3,7 @@ const QRCode = require('qrcode');
 const os = require('os');
 
 module.exports = function registerSyncHandlers(ipcMain, handlers) {
-  const { store, wifiSyncService, cloudSyncService, p2pSyncService } = handlers;
+  const { store, wifiSyncService, cloudSyncService, p2pSyncService, mainWindow } = handlers;
 
   ipcMain.handle('get-wifi-sync-uri', () => {
     return wifiSyncService ? wifiSyncService.getConnectUri() : null;
