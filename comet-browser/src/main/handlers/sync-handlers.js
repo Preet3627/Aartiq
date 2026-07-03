@@ -39,8 +39,9 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
 
   ipcMain.handle('generate-high-risk-qr', async (event, actionId) => {
     const deviceId = os.hostname();
-    const token = actionId || Math.random().toString(36).substring(2, 10);
-    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+    const { randomBytes } = require('crypto');
+    const token = actionId || randomBytes(5).toString('hex');
+    const pin = String(100000 + (randomBytes(4).readUInt32BE(0) % 900000));
     const deepLinkUrl = `comet-ai://approve?id=${token}&deviceId=${encodeURIComponent(deviceId)}&pin=${pin}`;
     try { return JSON.stringify({ qrImage: await QRCode.toDataURL(deepLinkUrl), pin, token }); }
     catch (err) { return null; }

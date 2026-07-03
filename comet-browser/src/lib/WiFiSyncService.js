@@ -124,7 +124,7 @@ var WiFiSyncService = /** @class */ (function (_super) {
         _this.port = port;
         _this.deviceId = "desktop-".concat(os.hostname().substring(0, 8));
         _this.deviceName = os.hostname();
-        _this.pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
+        _this.pairingCode = String(100000 + require('crypto').randomInt(900000));
         _this._loadKnownDevices();
         return _this;
     }

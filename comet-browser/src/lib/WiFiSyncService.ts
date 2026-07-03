@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import * as os from 'os';
 import * as dgram from 'dgram';
 import { clipboard } from 'electron';
+import { randomInt } from 'crypto';
 import Store from 'electron-store';
 
 type TrustLevel = 'trusted' | 'ask_once' | 'blocked';
@@ -42,7 +43,7 @@ export class WiFiSyncService extends EventEmitter {
         this.port = port;
         this.deviceId = `desktop-${os.hostname().substring(0, 8)}`;
         this.deviceName = os.hostname();
-        this.pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
+        this.pairingCode = String(100000 + randomInt(900000));
         this._loadKnownDevices();
     }
 

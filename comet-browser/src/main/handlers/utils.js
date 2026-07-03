@@ -185,8 +185,9 @@ exports.generateShellApprovalQR = async function(command) {
   const QRCode = require('qrcode');
   const os = require('os');
   const deviceId = os.hostname();
-  const token = Math.random().toString(36).substring(2, 10);
-  const pin = Math.floor(100000 + Math.random() * 900000).toString();
+  const { randomBytes } = require('crypto');
+  const token = randomBytes(5).toString('hex');
+  const pin = String(100000 + (randomBytes(4).readUInt32BE(0) % 900000));
   const deepLinkUrl = `comet-ai://approve?id=${token}&deviceId=${encodeURIComponent(deviceId)}&pin=${pin}&command=${encodeURIComponent(command)}`;
   
   const qrImage = await QRCode.toDataURL(deepLinkUrl);
