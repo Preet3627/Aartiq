@@ -85,7 +85,9 @@ export class P2PFileSyncService extends EventEmitter {
         if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
             crypto.getRandomValues(array);
         } else {
-            for (let i = 0; i < 64; i++) array[i] = Math.floor(Math.random() * 256);
+            const nodeCrypto = require('crypto');
+            const buf = nodeCrypto.randomBytes(64);
+            for (let i = 0; i < 64; i++) array[i] = buf[i];
         }
         for (let i = 0; i < 64; i++) result += chars[array[i] % chars.length];
         return result;
@@ -232,7 +234,7 @@ export class P2PFileSyncService extends EventEmitter {
      * Add folder to sync configuration
      */
     addSyncFolder(config: Omit<SyncFolder, 'id' | 'lastSync'>): string {
-        const id = `sync-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const id = `sync-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
         const folder: SyncFolder = {
             ...config,
             id,
@@ -295,7 +297,7 @@ export class P2PFileSyncService extends EventEmitter {
                     if (match) {
                         const stats = fs.statSync(fullPath);
                         results.push({
-                            id: `file-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                            id: `file-${Date.now()}-${crypto.randomUUID().slice(0, 6)}`,
                             name: entry.name,
                             path: fullPath,
                             size: stats.size,

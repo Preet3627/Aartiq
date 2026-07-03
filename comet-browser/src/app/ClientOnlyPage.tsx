@@ -70,6 +70,7 @@ interface AiOverviewState {
 import { fetchAiOverview } from '@/lib/aiManager';
 import type { AiOverviewResponse } from '@/lib/aiManager';
 import { getRecommendedGeminiModel } from '@/lib/modelRegistry';
+import { safeEval } from '@/lib/safe-eval';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THEME TYPES
@@ -1255,11 +1256,10 @@ export default function Home() {
       return;
     }
 
-    const mathChars = /^[0-9+\-*/().\s^%|&!~<>]+$/;
-    const mathFuncs = /(Math\.(abs|acos|asin|atan|atan2|ceil|cos|exp|floor|log|max|min|pow|random|round|sin|sqrt|tan|PI|E))/g;
-    if (mathChars.test(url) || mathFuncs.test(url)) {
+    const mathChars = /^[0-9+\-*/().\s^%]+$/;
+    if (mathChars.test(url)) {
       try {
-        const result = new Function(`return ${url.replace(/\^/g, '**')}`)();
+        const result = safeEval(url.replace(/\^/g, '**'));
         if (typeof result === 'number' && !isNaN(result)) {
           const searchUrl = `${searchEngines[store.selectedEngine as keyof typeof searchEngines].url}${encodeURIComponent(url + " = " + result)}`;
           if (window.electronAPI) {

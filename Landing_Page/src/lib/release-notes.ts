@@ -22,25 +22,28 @@ export const releases: ReleaseEntry[] = [
     codename: 'Nebula',
     channel: 'alpha',
     changes: {
+      security: [
+        'Wired capability controller into main.js and command-executor.js — shell execution now gated by registered actions',
+        'Added decryptLegacyBlob() for old-format E2EE: blobs (SHA-256 key derivation, no salt, 12-byte IV)',
+        'Added migrateToNewFormat() to transparently upgrade legacy blobs to PBKDF2-based E2EE2: format',
+        'Added runtime DOMPurify guard: gracefully degrades when window/document unavailable (main process safety)',
+        'Removed dead checkCSSAttacks() — CSS safety is handled by DOMPurify or style stripping',
+        'Identified Security.js as dead code (zero imports) — all callers resolve to Security.ts via extensionless imports',
+        'Audited 31 AI-action IPC channels: 22 gated, 9 monitoring-only — documented in docs-audit/action-inventory.md',
+      ],
       change: [
         'Replaced regex HTML sanitization with DOMPurify — eliminates two decades of known bypass techniques',
         'Replaced base64 "encryption" fallback with real AES-256-GCM + PBKDF2 (600K iterations) — no silent downgrades',
         'Refactored URL validation to protocol allowlist (http:, https:, mailto:) instead of denylist',
-      ],
-      security: [
         'Encryption now requires a passphrase (min 8 chars) and throws typed errors on failure — no silent base64 fallback',
         'Decryption uses AES-GCM authenticated encryption — wrong passphrase or tampered data throws DecryptionError',
         'Added encodeLocalOnly() as an explicit, honesty-named escape hatch for non-sensitive local data',
-        'Added crypto-utils.ts: standalone AES-256-GCM module with PBKDF2 key derivation and random per-operation salt/IV',
-        'Added html-sanitizer.ts: DOMPurify-based sanitizer with tag/attr allowlist',
-        'Added url-validator.ts: protocol allowlist validation (http:, https:, mailto:) with IP-address phishing detection',
-        'Added AllowedAction capability model and createCapabilityController() — capability-scoped execution instead of regex threat detection',
-        'Refactored SecureDOMParser.analyze() to monitoring-only (matchedKnownPatterns) — no longer a blocking security gate',
-        'Upgraded Firestore sync to skip encryption when no passphrase is set, instead of silently base64-encoding data',
-        'Removed checkCSSAttacks() — CSS safety is handled by DOMPurify or style stripping',
+        'Created main-process capability-controller.js (CommonJS) matching Security.ts TypeScript implementation',
+        'Security docs stats updated to reflect audit reality: 22 gated + 9 monitoring-only channels',
       ],
       docs: [
-        'Updated security docs with new encryption details, PBKDF2 parameters, and capability-scoped execution model',
+        'Created docs-audit/action-inventory.md — comprehensive inventory of all 31 AI-action IPC channels',
+        'Updated security docs with PBKDF2 parameters, capability-scoped execution model, and wiring details',
       ],
     }
   },

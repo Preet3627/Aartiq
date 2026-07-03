@@ -234,8 +234,9 @@ class PopSearchService {
             skipTaskbar: true,
             focusable: true,
             webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: true
             }
         });
 

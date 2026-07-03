@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, X, Search, ExternalLink, RefreshCw, ChevronRight, Zap, Target, Layers, Cpu } from 'lucide-react';
@@ -216,7 +217,7 @@ const AIAssistOverlay = ({
                                 <div className="prose prose-invert prose-sm text-white/90 leading-[1.8] font-medium text-sm">
                                     <div
                                         className="ai-response-content"
-                                        dangerouslySetInnerHTML={{ __html: result || "Processing semantic data..." }}
+                                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(result || "Processing semantic data...") }}
                                     />
                                 </div>
 

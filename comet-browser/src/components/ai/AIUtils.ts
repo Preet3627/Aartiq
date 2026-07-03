@@ -507,9 +507,9 @@ export function buildCleanPDFContent(
         });
       }
       document.querySelectorAll('.math-block').forEach(function(el) {
-        el.innerHTML = el.textContent;
+        const text = el.textContent || '';
         if (typeof katex !== 'undefined') {
-          try { katex.render(el.textContent, el, { throwOnError: false, displayMode: true }); } catch(e) {}
+          try { katex.render(text, el, { throwOnError: false, displayMode: true }); } catch(e) {}
         }
       });
     });

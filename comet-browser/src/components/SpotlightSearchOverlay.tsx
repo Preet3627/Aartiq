@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Search, X, Calculator, Bell, Globe, Command, ArrowRight } from 'lucide-react';
 import { BrowserAI } from '@/lib/BrowserAI';
+import { safeEval } from '@/lib/safe-eval';
 import { useAppStore } from '@/store/useAppStore';
 import { searchEngines } from './SearchEngineSettings';
 
@@ -92,7 +93,7 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
             // Calculation
             if (/^[\d\s+\-*/().]+$/.test(trimmed)) {
                 try {
-                    const result = eval(trimmed);
+                    const result = safeEval(trimmed);
                     setCalculationResult(`${trimmed} = ${result}`);
                 } catch {
                     setCalculationResult(null);

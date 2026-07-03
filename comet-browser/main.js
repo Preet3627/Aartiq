@@ -2984,8 +2984,8 @@ mainWindow = new BrowserWindow({
       contextIsolation: true,
       sandbox: false,
       offscreen: false,
-      webSecurity: false,
-      allowRunningInsecureContent: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
       experimentalFeatures: true,
       enableRemoteModule: false,
       contextIsolation: true,
@@ -2995,6 +2995,18 @@ mainWindow = new BrowserWindow({
     backgroundColor: '#0D0E1C',
     show: true,
     paintWhenInitiallyHidden: true
+  });
+
+  // Set strict CSP for main window
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws: wss: https:; frame-src 'self' https:; media-src 'self' https:; object-src 'none'"
+        ]
+      }
+    });
   });
 
   // Limit CPU when window loses focus

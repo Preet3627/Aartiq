@@ -6,6 +6,7 @@ import {
   GitBranch, Rocket, Tag, ExternalLink, CheckCircle2, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import DOMPurify from 'dompurify';
 
 interface Release {
   id: string;
@@ -454,16 +455,16 @@ const UpdatesSettings = () => {
                               <div 
                                 className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed"
                                 dangerouslySetInnerHTML={{ 
-                                  __html: release.body
-                                    .replace(/### /g, '<h3 class="text-xs font-bold text-cyan-400 mt-4 mb-2 uppercase tracking-wider">')
-                                    .replace(/## /g, '<h2 class="text-sm font-bold text-white mt-5 mb-2">')
-                                    .replace(/# /g, '<h1 class="text-base font-black text-white mt-5 mb-3">')
-                                    .replace(/\n- /g, '<div class="flex gap-2 mt-1"><span class="text-cyan-500">•</span><span>')
-                                    .replace(/\n\* /g, '<div class="flex gap-2 mt-1"><span class="text-cyan-500">•</span><span>')
-                                    .replace(/`([^`]+)`/g, '<code class="bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono text-cyan-300">$1</code>')
-                                    .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-white font-bold">$1</strong>')
-                                    .replace(/\*([^*]+)\*/g, '<em class="text-white/80">$1</em>')
-                                }}
+                                  __html: DOMPurify.sanitize(release.body
+                                      .replace(/### /g, '<h3 class="text-xs font-bold text-cyan-400 mt-4 mb-2 uppercase tracking-wider">')
+                                      .replace(/## /g, '<h2 class="text-sm font-bold text-white mt-5 mb-2">')
+                                      .replace(/# /g, '<h1 class="text-base font-black text-white mt-5 mb-3">')
+                                      .replace(/\n- /g, '<div class="flex gap-2 mt-1"><span class="text-cyan-500">•</span><span>')
+                                      .replace(/\n\* /g, '<div class="flex gap-2 mt-1"><span class="text-cyan-500">•</span><span>')
+                                      .replace(/`([^`]+)`/g, '<code class="bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono text-cyan-300">$1</code>')
+                                      .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-white font-bold">$1</strong>')
+                                      .replace(/\*([^*]+)\*/g, '<em class="text-white/80">$1</em>')
+                                  )}}
                               />
                             </div>
                           </div>
