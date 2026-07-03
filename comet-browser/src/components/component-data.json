@@ -1,15 +1,15 @@
 {
-  "generated": "2026-06-27T16:18:40.691Z",
+  "generated": "2026-07-03T13:25:35.573Z",
   "version": "0.2.98",
   "desktop": {
-    "total": 140,
-    "totalLines": 40709,
+    "total": 117,
+    "totalLines": 35182,
     "byCategory": {
-      "components": 81,
+      "components": 82,
       "core": 0,
       "automation": 0,
       "service": 0,
-      "lib": 59
+      "lib": 35
     },
     "components": [
       {
@@ -50,7 +50,7 @@
       {
         "name": "AIChatSidebar.tsx",
         "path": "AIChatSidebar.tsx",
-        "lines": 4979,
+        "lines": 5002,
         "description": "Chat Sidebar",
         "tags": [
           "React",
@@ -67,7 +67,7 @@
           "Windows",
           "Linux"
         ],
-        "lastModified": "2026-05-11"
+        "lastModified": "2026-07-02"
       },
       {
         "name": "AICommandQueue.tsx",
@@ -161,7 +161,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-04-23"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "BackendSettings.tsx",
@@ -184,7 +184,7 @@
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-05-19"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "CapabilitiesPanel.tsx",
@@ -275,6 +275,17 @@
         "lastModified": "2026-03-30"
       },
       {
+        "name": "ErrorBoundary.tsx",
+        "path": "ErrorBoundary.tsx",
+        "lines": 122,
+        "description": "Error Boundary",
+        "tags": [
+          "React",
+          "macOS"
+        ],
+        "lastModified": "2026-07-02"
+      },
+      {
         "name": "ExtensionManager.tsx",
         "path": "ExtensionManager.tsx",
         "lines": 162,
@@ -345,7 +356,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-04-15"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "LandingPage.tsx",
@@ -624,7 +635,7 @@
           "Node.js",
           "macOS"
         ],
-        "lastModified": "2026-06-21"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "StartupSetupUI.tsx",
@@ -655,7 +666,7 @@
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-04-23"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "TabManager.tsx",
@@ -701,7 +712,7 @@
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-04-21"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "TitleBar.tsx",
@@ -838,7 +849,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-06-21"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "AISetupGuide.tsx",
@@ -920,7 +931,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-04-23"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "ConversationHistoryPanel.tsx",
@@ -1058,7 +1069,7 @@
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-06-21"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "AICommandOutput.ts",
@@ -1089,7 +1100,7 @@
           "Plugin",
           "macOS"
         ],
-        "lastModified": "2026-04-23"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "ActionLogsStore.ts",
@@ -1106,34 +1117,6 @@
         "lastModified": "2026-03-24"
       },
       {
-        "name": "ActionTagParser.ts",
-        "path": "ActionTagParser.ts",
-        "lines": 318,
-        "description": "Action Tag Parser",
-        "tags": [
-          "Node.js",
-          "Security",
-          "AI",
-          "Automation",
-          "PDF",
-          "OCR",
-          "macOS"
-        ],
-        "lastModified": "2026-03-24"
-      },
-      {
-        "name": "AdvancedDocumentEngine.ts",
-        "path": "AdvancedDocumentEngine.ts",
-        "lines": 817,
-        "description": "Advanced Document Engine",
-        "tags": [
-          "Node.js",
-          "PDF",
-          "macOS"
-        ],
-        "lastModified": "2026-04-12"
-      },
-      {
         "name": "AdvancedTabManager.ts",
         "path": "AdvancedTabManager.ts",
         "lines": 644,
@@ -1142,16 +1125,6 @@
           "macOS"
         ],
         "lastModified": "2026-04-05"
-      },
-      {
-        "name": "BackendService.ts",
-        "path": "BackendService.ts",
-        "lines": 33,
-        "description": "Backend Service",
-        "tags": [
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
       },
       {
         "name": "BrowserAI.ts",
@@ -1176,53 +1149,7 @@
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-05-19"
-      },
-      {
-        "name": "ContactSyncService.ts",
-        "path": "ContactSyncService.ts",
-        "lines": 132,
-        "description": "Contact Sync Service",
-        "tags": [
-          "Core",
-          "Sync",
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
-      },
-      {
-        "name": "DatabaseManager.ts",
-        "path": "DatabaseManager.ts",
-        "lines": 226,
-        "description": "Database Manager",
-        "tags": [
-          "AI",
-          "Sync",
-          "macOS"
-        ],
-        "lastModified": "2026-03-26"
-      },
-      {
-        "name": "DeviceFamilyManager.ts",
-        "path": "DeviceFamilyManager.ts",
-        "lines": 322,
-        "description": "Device Family Manager",
-        "tags": [
-          "macOS"
-        ],
-        "lastModified": "2026-03-30"
-      },
-      {
-        "name": "FileUtils.ts",
-        "path": "FileUtils.ts",
-        "lines": 56,
-        "description": "File Utils",
-        "tags": [
-          "Node.js",
-          "PDF",
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
+        "lastModified": "2026-06-27"
       },
       {
         "name": "FirebaseService.ts",
@@ -1246,17 +1173,6 @@
         "lastModified": "2026-06-27"
       },
       {
-        "name": "GmailService.ts",
-        "path": "GmailService.ts",
-        "lines": 286,
-        "description": "Gmail Service",
-        "tags": [
-          "AI",
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
-      },
-      {
         "name": "IntegrationService.ts",
         "path": "IntegrationService.ts",
         "lines": 83,
@@ -1268,57 +1184,9 @@
         "lastModified": "2026-03-08"
       },
       {
-        "name": "KeyboardShortcutService.ts",
-        "path": "KeyboardShortcutService.ts",
-        "lines": 84,
-        "description": "Keyboard Shortcut Service",
-        "tags": [
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
-      },
-      {
-        "name": "MermaidToPDFConverter.ts",
-        "path": "MermaidToPDFConverter.ts",
-        "lines": 389,
-        "description": "Mermaid To",
-        "tags": [
-          "Node.js",
-          "AI",
-          "PDF",
-          "macOS"
-        ],
-        "lastModified": "2026-04-12"
-      },
-      {
-        "name": "OTPVerificationService.ts",
-        "path": "OTPVerificationService.ts",
-        "lines": 298,
-        "description": "Verification Service",
-        "tags": [
-          "Core",
-          "Sync",
-          "PDF",
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
-      },
-      {
-        "name": "OfflineChatbot.ts",
-        "path": "OfflineChatbot.ts",
-        "lines": 105,
-        "description": "Offline Chatbot",
-        "tags": [
-          "AI",
-          "macOS",
-          "Windows"
-        ],
-        "lastModified": "2026-03-18"
-      },
-      {
         "name": "P2PFileSyncService.ts",
         "path": "P2PFileSyncService.ts",
-        "lines": 670,
+        "lines": 689,
         "description": "File Sync Service",
         "tags": [
           "Node.js",
@@ -1328,32 +1196,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-03-30"
-      },
-      {
-        "name": "PDFCommandParser.ts",
-        "path": "PDFCommandParser.ts",
-        "lines": 231,
-        "description": "Command Parser",
-        "tags": [
-          "Security",
-          "AI",
-          "PDF",
-          "macOS"
-        ],
-        "lastModified": "2026-03-24"
-      },
-      {
-        "name": "PhoneCallControlService.ts",
-        "path": "PhoneCallControlService.ts",
-        "lines": 317,
-        "description": "Phone Call Control Service",
-        "tags": [
-          "Core",
-          "AI",
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
+        "lastModified": "2026-07-02"
       },
       {
         "name": "SearchContextStore.ts",
@@ -1369,7 +1212,7 @@
       {
         "name": "Security.ts",
         "path": "Security.ts",
-        "lines": 527,
+        "lines": 540,
         "description": "Security",
         "tags": [
           "Node.js",
@@ -1380,37 +1223,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-06-27"
-      },
-      {
-        "name": "ShellCommandParser.ts",
-        "path": "ShellCommandParser.ts",
-        "lines": 394,
-        "description": "Shell Command Parser",
-        "tags": [
-          "Node.js",
-          "Security",
-          "AI",
-          "macOS",
-          "Windows",
-          "Linux"
-        ],
-        "lastModified": "2026-03-24"
-      },
-      {
-        "name": "SiriShortcutsIntegration.ts",
-        "path": "SiriShortcutsIntegration.ts",
-        "lines": 379,
-        "description": "Siri Shortcuts Integration",
-        "tags": [
-          "Node.js",
-          "Core",
-          "AI",
-          "Automation",
-          "PDF",
-          "macOS"
-        ],
-        "lastModified": "2026-05-14"
+        "lastModified": "2026-07-02"
       },
       {
         "name": "SkillLoader.ts",
@@ -1446,37 +1259,17 @@
         "lastModified": "2026-03-08"
       },
       {
-        "name": "UnifiedCartService.ts",
-        "path": "UnifiedCartService.ts",
-        "lines": 418,
-        "description": "Unified Cart Service",
-        "tags": [
-          "AI",
-          "macOS"
-        ],
-        "lastModified": "2026-03-15"
-      },
-      {
-        "name": "WebSearchService.ts",
-        "path": "WebSearchService.ts",
-        "lines": 35,
-        "description": "Web Search Service",
-        "tags": [
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
-      },
-      {
         "name": "WiFiSyncService.ts",
         "path": "WiFiSyncService.ts",
-        "lines": 496,
+        "lines": 497,
         "description": "Wi Fi Sync Service",
         "tags": [
+          "Node.js",
           "AI",
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-04-23"
+        "lastModified": "2026-07-03"
       },
       {
         "name": "ai-action-security.ts",
@@ -1542,7 +1335,7 @@
       {
         "name": "crypto-utils.ts",
         "path": "crypto-utils.ts",
-        "lines": 133,
+        "lines": 189,
         "description": "Crypto Utils",
         "tags": [
           "Node.js",
@@ -1562,26 +1355,6 @@
         "lastModified": "2026-03-08"
       },
       {
-        "name": "firebase.config.ts",
-        "path": "firebase.config.ts",
-        "lines": 12,
-        "description": "Firebase.Config",
-        "tags": [
-          "macOS"
-        ],
-        "lastModified": "2026-03-29"
-      },
-      {
-        "name": "firebase.ts",
-        "path": "firebase.ts",
-        "lines": 41,
-        "description": "Firebase",
-        "tags": [
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
-      },
-      {
         "name": "firebaseConfigStorage.ts",
         "path": "firebaseConfigStorage.ts",
         "lines": 51,
@@ -1594,10 +1367,11 @@
       {
         "name": "html-sanitizer.ts",
         "path": "html-sanitizer.ts",
-        "lines": 25,
+        "lines": 38,
         "description": "Html Sanitizer",
         "tags": [
           "Security",
+          "PDF",
           "macOS"
         ],
         "lastModified": "2026-06-27"
@@ -1691,61 +1465,6 @@
         "lastModified": "2026-04-09"
       },
       {
-        "name": "LinuxIntegration.ts",
-        "path": "platform/LinuxIntegration.ts",
-        "lines": 318,
-        "description": "Linux Integration",
-        "tags": [
-          "Node.js",
-          "AI",
-          "PDF",
-          "macOS",
-          "Linux"
-        ],
-        "lastModified": "2026-03-26"
-      },
-      {
-        "name": "MacOSIntegration.ts",
-        "path": "platform/MacOSIntegration.ts",
-        "lines": 246,
-        "description": "MacOSIntegration",
-        "tags": [
-          "Core",
-          "AI",
-          "PDF",
-          "Plugin",
-          "macOS"
-        ],
-        "lastModified": "2026-03-08"
-      },
-      {
-        "name": "WindowsIntegration.ts",
-        "path": "platform/WindowsIntegration.ts",
-        "lines": 255,
-        "description": "Windows Integration",
-        "tags": [
-          "Node.js",
-          "AI",
-          "PDF",
-          "macOS",
-          "Windows"
-        ],
-        "lastModified": "2026-03-08"
-      },
-      {
-        "name": "detector.ts",
-        "path": "platform/detector.ts",
-        "lines": 62,
-        "description": "Detector",
-        "tags": [
-          "Node.js",
-          "macOS",
-          "Windows",
-          "Linux"
-        ],
-        "lastModified": "2026-03-08"
-      },
-      {
         "name": "url-validator.ts",
         "path": "url-validator.ts",
         "lines": 18,
@@ -1770,19 +1489,722 @@
     ]
   },
   "flutter": {
-    "total": 0,
-    "totalLines": 0,
+    "total": 56,
+    "totalLines": 24023,
     "byCategory": {
-      "pages": 0,
+      "pages": 21,
       "services": 0,
-      "models": 0,
+      "models": 6,
       "components": 0,
       "main": 0
     },
-    "components": []
+    "components": [
+      {
+        "name": "action_approval_page.dart",
+        "path": "action_approval_page.dart",
+        "lines": 382,
+        "description": "Action Approval Page",
+        "tags": [
+          "Flutter",
+          "Sync",
+          "macOS"
+        ],
+        "lastModified": "2026-04-12"
+      },
+      {
+        "name": "agent_chat_page.dart",
+        "path": "agent_chat_page.dart",
+        "lines": 1021,
+        "description": "Agent Chat Page",
+        "tags": [
+          "Flutter",
+          "AI",
+          "Plugin",
+          "macOS"
+        ],
+        "lastModified": "2026-02-21"
+      },
+      {
+        "name": "ai_chat_page.dart",
+        "path": "ai_chat_page.dart",
+        "lines": 262,
+        "description": "Ai Chat Page",
+        "tags": [
+          "Flutter",
+          "Security",
+          "AI",
+          "Sync",
+          "macOS"
+        ],
+        "lastModified": "2026-02-21"
+      },
+      {
+        "name": "auth_page.dart",
+        "path": "auth_page.dart",
+        "lines": 584,
+        "description": "Auth Page",
+        "tags": [
+          "Flutter",
+          "Security",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
+        "name": "automation_page.dart",
+        "path": "automation_page.dart",
+        "lines": 649,
+        "description": "Automation Page",
+        "tags": [
+          "Flutter",
+          "AI",
+          "Sync",
+          "Automation",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-03-26"
+      },
+      {
+        "name": "bookmarks_page.dart",
+        "path": "bookmarks_page.dart",
+        "lines": 124,
+        "description": "Bookmarks Page",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-18"
+      },
+      {
+        "name": "comet_agent_service.dart",
+        "path": "comet_agent_service.dart",
+        "lines": 889,
+        "description": "Comet Agent Service",
+        "tags": [
+          "Flutter",
+          "AI",
+          "PDF",
+          "OCR",
+          "macOS"
+        ],
+        "lastModified": "2026-02-21"
+      },
+      {
+        "name": "comet_home_page.dart",
+        "path": "comet_home_page.dart",
+        "lines": 577,
+        "description": "Comet Home Page",
+        "tags": [
+          "Flutter",
+          "AI",
+          "Sync",
+          "macOS"
+        ],
+        "lastModified": "2026-02-21"
+      },
+      {
+        "name": "connect_desktop_page.dart",
+        "path": "connect_desktop_page.dart",
+        "lines": 1101,
+        "description": "Connect Desktop Page",
+        "tags": [
+          "Flutter",
+          "Security",
+          "AI",
+          "Sync",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
+        "name": "desktop_control_page.dart",
+        "path": "desktop_control_page.dart",
+        "lines": 1257,
+        "description": "Desktop Control Page",
+        "tags": [
+          "Flutter",
+          "AI",
+          "Sync",
+          "Automation",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-04-12"
+      },
+      {
+        "name": "javascript_console.dart",
+        "path": "developers/javascript_console.dart",
+        "lines": 188,
+        "description": "Javascript Console",
+        "tags": [
+          "Flutter",
+          "AI",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "main.dart",
+        "path": "developers/main.dart",
+        "lines": 55,
+        "description": "Main",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "network_info.dart",
+        "path": "developers/network_info.dart",
+        "lines": 253,
+        "description": "Network Info",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "storage_manager.dart",
+        "path": "developers/storage_manager.dart",
+        "lines": 1053,
+        "description": "Storage Manager",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "Security",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "pdf_viewer_page.dart",
+        "path": "pdf_viewer_page.dart",
+        "lines": 512,
+        "description": "Pdf Viewer Page",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "Sync",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-03-26"
+      },
+      {
+        "name": "remote_settings_page.dart",
+        "path": "remote_settings_page.dart",
+        "lines": 731,
+        "description": "Remote Settings Page",
+        "tags": [
+          "Flutter",
+          "Security",
+          "AI",
+          "Sync",
+          "Automation",
+          "macOS"
+        ],
+        "lastModified": "2026-04-03"
+      },
+      {
+        "name": "android_settings.dart",
+        "path": "settings/android_settings.dart",
+        "lines": 1101,
+        "description": "Android Settings",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI",
+          "macOS",
+          "Windows"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "cross_platform_settings.dart",
+        "path": "settings/cross_platform_settings.dart",
+        "lines": 1149,
+        "description": "Cross Platform Settings",
+        "tags": [
+          "Flutter",
+          "Security",
+          "AI",
+          "Sync",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
+        "name": "ios_settings.dart",
+        "path": "settings/ios_settings.dart",
+        "lines": 591,
+        "description": "Ios Settings",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "main.dart",
+        "path": "settings/main.dart",
+        "lines": 724,
+        "description": "Main",
+        "tags": [
+          "Flutter",
+          "AI",
+          "Sync",
+          "macOS"
+        ],
+        "lastModified": "2026-02-21"
+      },
+      {
+        "name": "splash_screen.dart",
+        "path": "splash_screen.dart",
+        "lines": 188,
+        "description": "Splash Screen",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-18"
+      },
+      {
+        "name": "browser_app_bar.dart",
+        "path": "browser_app_bar.dart",
+        "lines": 70,
+        "description": "Browser App Bar",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-21"
+      },
+      {
+        "name": "certificates_info_popup.dart",
+        "path": "certificates_info_popup.dart",
+        "lines": 1546,
+        "description": "Certificates Info Popup",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "custom_app_bar_wrapper.dart",
+        "path": "custom_app_bar_wrapper.dart",
+        "lines": 51,
+        "description": "Custom App Bar Wrapper",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "desktop_app_bar.dart",
+        "path": "desktop_app_bar.dart",
+        "lines": 604,
+        "description": "Desktop App Bar",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-18"
+      },
+      {
+        "name": "find_on_page_app_bar.dart",
+        "path": "find_on_page_app_bar.dart",
+        "lines": 88,
+        "description": "Find On Page App Bar",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "tab_viewer_app_bar.dart",
+        "path": "tab_viewer_app_bar.dart",
+        "lines": 232,
+        "description": "Tab Viewer App Bar",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
+        "name": "url_info_popup.dart",
+        "path": "url_info_popup.dart",
+        "lines": 153,
+        "description": "Url Info Popup",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "webview_tab_app_bar.dart",
+        "path": "webview_tab_app_bar.dart",
+        "lines": 2350,
+        "description": "Webview Tab App Bar",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI",
+          "PDF",
+          "OCR",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
+        "name": "browser_model.dart",
+        "path": "browser_model.dart",
+        "lines": 440,
+        "description": "Browser Model",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI",
+          "macOS",
+          "Windows"
+        ],
+        "lastModified": "2026-02-21"
+      },
+      {
+        "name": "favorite_model.dart",
+        "path": "favorite_model.dart",
+        "lines": 43,
+        "description": "Favorite Model",
+        "tags": [
+          "Flutter",
+          "AI"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "search_engine_model.dart",
+        "path": "search_engine_model.dart",
+        "lines": 85,
+        "description": "Search Engine Model",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "web_archive_model.dart",
+        "path": "web_archive_model.dart",
+        "lines": 50,
+        "description": "Web Archive Model",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "webview_model.dart",
+        "path": "webview_model.dart",
+        "lines": 300,
+        "description": "Webview Model",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-19"
+      },
+      {
+        "name": "window_model.dart",
+        "path": "window_model.dart",
+        "lines": 320,
+        "description": "Window Model",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS",
+          "Windows"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "animated_flutter_browser_logo.dart",
+        "path": "animated_flutter_browser_logo.dart",
+        "lines": 50,
+        "description": "Animated Flutter Browser Logo",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "auth_service.dart",
+        "path": "auth_service.dart",
+        "lines": 256,
+        "description": "Auth Service",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
+        "name": "browser.dart",
+        "path": "browser.dart",
+        "lines": 539,
+        "description": "Browser",
+        "tags": [
+          "Flutter",
+          "AI",
+          "Plugin",
+          "macOS"
+        ],
+        "lastModified": "2026-03-25"
+      },
+      {
+        "name": "clipboard_monitor.dart",
+        "path": "clipboard_monitor.dart",
+        "lines": 45,
+        "description": "Clipboard Monitor",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-21"
+      },
+      {
+        "name": "custom_image.dart",
+        "path": "custom_image.dart",
+        "lines": 66,
+        "description": "Custom Image",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "custom_popup_dialog.dart",
+        "path": "custom_popup_dialog.dart",
+        "lines": 157,
+        "description": "Custom Popup Dialog",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "custom_popup_menu_item.dart",
+        "path": "custom_popup_menu_item.dart",
+        "lines": 87,
+        "description": "Custom Popup Menu Item",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "empty_tab.dart",
+        "path": "empty_tab.dart",
+        "lines": 91,
+        "description": "Empty Tab",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "javascript_console_result.dart",
+        "path": "javascript_console_result.dart",
+        "lines": 61,
+        "description": "Javascript Console Result",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "long_press_alert_dialog.dart",
+        "path": "long_press_alert_dialog.dart",
+        "lines": 358,
+        "description": "Long Press Alert Dialog",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "material_transparent_page_route.dart",
+        "path": "material_transparent_page_route.dart",
+        "lines": 57,
+        "description": "Material Transparent Page Route",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "multiselect_dialog.dart",
+        "path": "multiselect_dialog.dart",
+        "lines": 135,
+        "description": "Multiselect Dialog",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "popup_menu_actions.dart",
+        "path": "popup_menu_actions.dart",
+        "lines": 83,
+        "description": "Popup Menu Actions",
+        "tags": [
+          "Flutter",
+          "AI",
+          "Sync",
+          "OCR",
+          "macOS",
+          "Windows"
+        ],
+        "lastModified": "2026-02-21"
+      },
+      {
+        "name": "project_info_popup.dart",
+        "path": "project_info_popup.dart",
+        "lines": 154,
+        "description": "Project Info Popup",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
+        "name": "sync_service.dart",
+        "path": "sync_service.dart",
+        "lines": 1113,
+        "description": "Sync Service",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI",
+          "Sync",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-06-27"
+      },
+      {
+        "name": "tab_popup_menu_actions.dart",
+        "path": "tab_popup_menu_actions.dart",
+        "lines": 15,
+        "description": "Tab Popup Menu Actions",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "tab_viewer.dart",
+        "path": "tab_viewer.dart",
+        "lines": 287,
+        "description": "Tab Viewer",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "tab_viewer_popup_menu_actions.dart",
+        "path": "tab_viewer_popup_menu_actions.dart",
+        "lines": 18,
+        "description": "Tab Viewer Popup Menu Actions",
+        "tags": [
+          "Flutter",
+          "macOS"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "url_predictor.dart",
+        "path": "url_predictor.dart",
+        "lines": 46,
+        "description": "Url Predictor",
+        "tags": [
+          "Flutter",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-02-18"
+      },
+      {
+        "name": "util.dart",
+        "path": "util.dart",
+        "lines": 39,
+        "description": "Util",
+        "tags": [
+          "Flutter",
+          "macOS",
+          "Windows"
+        ],
+        "lastModified": "2026-02-14"
+      },
+      {
+        "name": "webview_tab.dart",
+        "path": "webview_tab.dart",
+        "lines": 643,
+        "description": "Webview Tab",
+        "tags": [
+          "Flutter",
+          "Node.js",
+          "AI",
+          "macOS",
+          "Linux"
+        ],
+        "lastModified": "2026-02-21"
+      }
+    ]
   },
   "summary": {
-    "total": 140,
-    "totalLines": 40709
+    "total": 173,
+    "totalLines": 59205
   }
 }
