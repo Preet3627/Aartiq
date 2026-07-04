@@ -48,12 +48,17 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libx11-dev libxtst-dev libpng-dev libjpeg-dev libx11-xcb-dev libxcb-dri3-dev libdrm-dev libgbm-dev libasound2-dev
+          sudo apt-get install -y libx11-dev libxtst-dev libpng-dev libjpeg-dev libx11-xcb-dev libxcb-dri3-dev libdrm-dev libgbm-dev libasound2-dev tesseract-ocr
       
       - name: Install system dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install pkg-config cairo pango libpng jpeg giflib librsvg
+          brew install pkg-config cairo pango libpng jpeg giflib librsvg tesseract
+      
+      - name: Install system dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install tesseract --version 5.3.3.20231005 -y
       
       - name: Install dependencies
         run: npm ci

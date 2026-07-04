@@ -6,7 +6,7 @@ import { useAppStore, BrowserState } from '@/store/useAppStore';
 import {
     Monitor, Shield, Globe, Info, Download,
     ChevronRight, ShieldCheck, Key, Package, Keyboard,
-    Briefcase, ShieldAlert, Database, LogIn, LogOut, History as HistoryIcon, User as UserIcon, Zap, RefreshCw, Languages, Music2, Eye, EyeOff, Lock, BookOpen, Sparkles, Puzzle
+    Briefcase, ShieldAlert, Database, LogIn, LogOut, History as HistoryIcon, User as UserIcon, Zap, RefreshCw, Languages, Music2, Eye, EyeOff, Lock, BookOpen, Sparkles, Puzzle, ScanLine
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import SearchEngineSettings from './SearchEngineSettings';
@@ -41,8 +41,15 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
     const { isGuestMode, setGuestMode } = useAppStore();
     const [showFirebaseConfig, setShowFirebaseConfig] = useState(false);
     const [showMysqlConfig, setShowMysqlConfig] = useState(false);
+    const [automationMode, setAutomationMode] = useState<'dom' | 'ocr'>('dom');
     const versionLabel = `v${useAppVersion()}`;
     const isMacOS = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+
+    useEffect(() => {
+      window.electronAPI?.loadPersistentData('automation_mode').then((r: any) => {
+        if (r?.data === 'dom' || r?.data === 'ocr') setAutomationMode(r.data);
+      }).catch(() => {});
+    }, []);
 
     useEffect(() => {
         if (store.settingsSection && store.settingsSection !== activeSection) {
@@ -566,7 +573,44 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
 
                         {activeSection === 'performance' && <PerformanceSettings />}
 
-                        {activeSection === 'automation' && <AutomationSettings />}
+                        {activeSection === 'automation' && (
+                          <div className="space-y-6">
+                            <div className="p-6 rounded-[2rem] bg-white/[0.03] border border-white/5">
+                              <div className="flex items-center gap-4 mb-4">
+                                <ScanLine size={20} className="text-white/60" />
+                                <div>
+                                  <h3 className="text-sm font-black text-white uppercase tracking-wide">Extraction Method</h3>
+                                  <p className="text-xs text-white/40">Choose DOM queries (in-browser) or OCR (cross-app) for finding elements.</p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <button
+                                  onClick={() => {
+                                    setAutomationMode('dom');
+                                    window.electronAPI?.savePersistentData('automation_mode', 'dom');
+                                  }}
+                                  className={`p-4 rounded-xl border transition-all text-left ${automationMode === 'dom' ? 'bg-deep-space-accent-neon/10 border-deep-space-accent-neon/40' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                >
+                                  <Globe size={20} className={`mb-2 ${automationMode === 'dom' ? 'text-deep-space-accent-neon' : 'text-white/40'}`} />
+                                  <p className={`text-sm font-bold ${automationMode === 'dom' ? 'text-white' : 'text-white/60'}`}>DOM Mode</p>
+                                  <p className="text-[10px] text-white/40 mt-1">Fast in-browser element selection</p>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setAutomationMode('ocr');
+                                    window.electronAPI?.savePersistentData('automation_mode', 'ocr');
+                                  }}
+                                  className={`p-4 rounded-xl border transition-all text-left ${automationMode === 'ocr' ? 'bg-deep-space-accent-neon/10 border-deep-space-accent-neon/40' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                                >
+                                  <ScanLine size={20} className={`mb-2 ${automationMode === 'ocr' ? 'text-deep-space-accent-neon' : 'text-white/40'}`} />
+                                  <p className={`text-sm font-bold ${automationMode === 'ocr' ? 'text-white' : 'text-white/60'}`}>OCR Mode</p>
+                                  <p className="text-[10px] text-white/40 mt-1">Screen recognition across apps</p>
+                                </button>
+                              </div>
+                            </div>
+                            <AutomationSettings />
+                          </div>
+                        )}
 
                         {activeSection === 'search' && <SearchEngineSettings selectedEngine={store.selectedEngine} setSelectedEngine={store.setSelectedEngine} />}
 

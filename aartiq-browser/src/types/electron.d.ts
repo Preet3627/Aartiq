@@ -31,7 +31,7 @@ declare global {
             goForward: () => void;
             reload: () => void;
             getCurrentUrl: () => Promise<string>;
-            extractPageContent: () => Promise<{ content?: string; error?: string }>;
+            extractPageContent: (tabId?: string) => Promise<{ content?: string; error?: string }>;
             extractSecureDOM: () => Promise<{
                 content: string;
                 elements: Array<{ tag: string; text: string; xpath: string; children: any[] }>;

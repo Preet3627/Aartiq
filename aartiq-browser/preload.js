@@ -47,7 +47,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reload: () => ipcRenderer.send('browser-view-reload'),
   getCurrentUrl: () => ipcRenderer.invoke('get-browser-view-url'),
   getOpenTabs: () => ipcRenderer.invoke('get-open-tabs'),
-  extractPageContent: () => ipcRenderer.invoke('extract-page-content'),
+  extractPageContent: (tabId?: string) => ipcRenderer.invoke('extract-page-content', tabId),
   extractSecureDOM: () => ipcRenderer.invoke('extract-secure-dom'),
   searchDOM: (query) => ipcRenderer.invoke('search-dom', query),
   getSelectedText: () => ipcRenderer.invoke('get-selected-text'),
