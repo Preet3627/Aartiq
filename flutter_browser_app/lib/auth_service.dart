@@ -10,13 +10,13 @@ class AuthService {
   factory AuthService() => _instance;
   AuthService._internal();
 
-  static const _storageKeyUserId = 'comet_auth_user_id';
-  static const _storageKeyUserEmail = 'comet_auth_user_email';
-  static const _storageKeyUserName = 'comet_auth_user_name';
-  static const _storageKeyUserPhoto = 'comet_auth_user_photo';
-  static const _storageKeyAuthToken = 'comet_auth_token';
-  static const _storageKeyIdToken = 'comet_auth_id_token';
-  static const _storageKeyRefreshToken = 'comet_auth_refresh_token';
+  static const _storageKeyUserId = 'aartiq_auth_user_id';
+  static const _storageKeyUserEmail = 'aartiq_auth_user_email';
+  static const _storageKeyUserName = 'aartiq_auth_user_name';
+  static const _storageKeyUserPhoto = 'aartiq_auth_user_photo';
+  static const _storageKeyAuthToken = 'aartiq_auth_token';
+  static const _storageKeyIdToken = 'aartiq_auth_id_token';
+  static const _storageKeyRefreshToken = 'aartiq_auth_refresh_token';
 
   late FlutterSecureStorage _secureStorage;
   late GoogleSignIn _googleSignIn;
@@ -46,8 +46,8 @@ class AuthService {
     _secureStorage = const FlutterSecureStorage(
       aOptions: AndroidOptions(
         encryptedSharedPreferences: true,
-        sharedPreferencesName: 'comet_secure_prefs',
-        preferencesKeyPrefix: 'comet_',
+        sharedPreferencesName: 'aartiq_secure_prefs',
+        preferencesKeyPrefix: 'aartiq_',
       ),
       iOptions: IOSOptions(
         accessibility: KeychainAccessibility.first_unlock_this_device,

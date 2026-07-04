@@ -60,13 +60,13 @@ jobs:
           
           # Get version from package.json
           if [[ "$IS_AUTO_TAG" == "true" ]]; then
-            TAG="v$(node -p "require('./comet-browser/package.json').version")"
+            TAG="v$(node -p "require('./aartiq-browser/package.json').version")"
           elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
           elif [[ -n "${{ github.event.inputs.version }}" ]]; then
             TAG="${{ github.event.inputs.version }}"
           else
-            TAG="v$(node -p "require('./comet-browser/package.json').version")"
+            TAG="v$(node -p "require('./aartiq-browser/package.json').version")"
           fi
           
           VERSION="${TAG#v}"
@@ -125,7 +125,7 @@ jobs:
           fi
           
           # Generate changelog
-          CHANGELOG="# 🚀 Comet AI Browser v${VERSION}\n\n"
+          CHANGELOG="# 🚀 Aartiq Browser v${VERSION}\n\n"
           CHANGELOG+="**Release Date:** $(date '+%B %d, %Y')\n\n"
           CHANGELOG+="## 📝 What's New\n\n"
           
@@ -228,7 +228,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-android
+          name: aartiq-android
           path: flutter_browser_app/build/app/outputs/flutter-apk/app-release.apk
 
   # ============================================================================
@@ -276,13 +276,13 @@ jobs:
         run: |
           mkdir Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r Comet-AI.ipa Payload
+          zip -r Aartiq.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-ios
-          path: flutter_browser_app/Comet-AI.ipa
+          name: aartiq-ios
+          path: flutter_browser_app/Aartiq.ipa
 
   # ============================================================================
   # DESKTOP BUILD
@@ -299,23 +299,23 @@ jobs:
             os: windows-latest
             build_cmd: npm run dist:win
             artifact_glob: |
-              comet-browser/release/*.exe
-            artifact_name: comet-ai-windows
+              aartiq-browser/release/*.exe
+            artifact_name: aartiq-windows
           - target: macos-arm64
             os: macos-latest
             build_cmd: npm run dist:mac:arm64
-            artifact_glob: "comet-browser/release/*.dmg"
-            artifact_name: comet-ai-macos-arm64
+            artifact_glob: "aartiq-browser/release/*.dmg"
+            artifact_name: aartiq-macos-arm64
           - target: macos-x64
             os: macos-latest
             build_cmd: npm run dist:mac:x64
-            artifact_glob: "comet-browser/release/*.dmg"
-            artifact_name: comet-ai-macos-x64
+            artifact_glob: "aartiq-browser/release/*.dmg"
+            artifact_name: aartiq-macos-x64
           - target: linux
             os: ubuntu-latest
             build_cmd: npm run build && npx electron-builder --linux AppImage --x64
-            artifact_glob: "comet-browser/release/*.AppImage"
-            artifact_name: comet-ai-linux
+            artifact_glob: "aartiq-browser/release/*.AppImage"
+            artifact_name: aartiq-linux
 
     steps:
       - uses: actions/checkout@v4
@@ -325,7 +325,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Install Linux Dependencies
         if: matrix.target == 'linux'
@@ -335,30 +335,30 @@ jobs:
 
       - name: Remove package-lock.json (Non-Windows)
         if: runner.os != 'Windows'
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: rm -f package-lock.json
 
       - name: Remove package-lock.json (Windows)
         if: runner.os == 'Windows'
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
         shell: pwsh
 
       - name: Install Dependencies
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm install --legacy-peer-deps
 
       - name: Cache Next.js build
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Build App
         if: ${{ !startsWith(matrix.target, 'macos') }}
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '' }}
           APPLE_ID: ${{ secrets.APPLE_ID || '' }}
@@ -372,9 +372,9 @@ jobs:
 
       - name: Build App (macOS)
         if: ${{ startsWith(matrix.target, 'macos') }}
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
           APPLE_SIGNING_IDENTITY: "-"
         run: ${{ matrix.build_cmd }}
@@ -409,7 +409,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.get-version.outputs.tag }}
-          name: Comet AI Browser v${{ needs.get-version.outputs.version }}
+          name: Aartiq Browser v${{ needs.get-version.outputs.version }}
           body: |
             ${{ needs.changelog.outputs.changelog }}
             
@@ -420,16 +420,16 @@ jobs:
             ### Desktop
             | Platform | File |
             |----------|------|
-            | 🪟 Windows | `Comet.Browser.Setup.*.exe` or `.msix` |
+            | 🪟 Windows | `Aartiq.Browser.Setup.*.exe` or `.msix` |
             | 🍎 macOS Apple Silicon | `*-arm64.dmg` |
             | 🍎 macOS Intel | `*-x64.dmg` |
-            | 🐧 Linux | `Comet.Browser-*.AppImage` |
+            | 🐧 Linux | `Aartiq.Browser-*.AppImage` |
             
             ### Mobile
             | Platform | File |
             |----------|------|
             | 📱 Android | `app-release.apk` |
-            | 🍎 iOS | `Comet-AI.ipa` |
+            | 🍎 iOS | `Aartiq.ipa` |
             
             ---
             Built with ❤️ by [Latestinssan](https://github.com/Preet3627)
@@ -510,4 +510,4 @@ jobs:
       - name: Print Summary
         run: |
           echo "🎉 Release v${{ needs.get-version.outputs.version }} created!"
-          echo "🔗 https://github.com/Preet3627/Comet-AI/releases/${{ needs.get-version.outputs.tag }}"
+          echo "🔗 https://github.com/Preet3627/Aartiq/releases/${{ needs.get-version.outputs.tag }}"

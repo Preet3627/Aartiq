@@ -21,7 +21,7 @@ class _ProjectInfoPopupState extends State<ProjectInfoPopup> {
   Widget build(BuildContext context) {
     var children = <Widget>[
       const Text(
-        "Powered by Comet-AI",
+        "Powered by Aartiq",
         style: TextStyle(
           color: Colors.white,
           fontSize: 24,
@@ -76,7 +76,7 @@ class _ProjectInfoPopupState extends State<ProjectInfoPopup> {
             WebViewTab(
               key: GlobalKey(),
               webViewModel: WebViewModel(
-                url: WebUri("https://github.com/Preet3627/Comet-AI"),
+                url: WebUri("https://github.com/Preet3627/Aartiq"),
               ),
             ),
           );
@@ -87,7 +87,7 @@ class _ProjectInfoPopupState extends State<ProjectInfoPopup> {
       const SizedBox(
         width: 280.0,
         child: Text(
-          "Comet-AI is a next-generation browser designed for speed and intelligence.",
+          "Aartiq is a next-generation browser designed for speed and intelligence.",
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.white70, fontFamily: 'Inter'),
         ),

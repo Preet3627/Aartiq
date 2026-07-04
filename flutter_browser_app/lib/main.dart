@@ -25,7 +25,7 @@ import 'sync_service.dart';
 import 'auth_service.dart';
 
 import 'browser.dart';
-import 'pages/comet_home_page.dart';
+import 'pages/aartiq_home_page.dart';
 import 'pages/splash_screen.dart';
 import 'pages/connect_desktop_page.dart';
 import 'pages/settings/main.dart';
@@ -169,7 +169,7 @@ void main(List<String> args) async {
     );
 
     webViewEnvironment = await WebViewEnvironment.create(
-      settings: WebViewEnvironmentSettings(userDataFolder: 'comet_ai'),
+      settings: WebViewEnvironmentSettings(userDataFolder: 'aartiq'),
     );
   }
 
@@ -186,7 +186,7 @@ void main(List<String> args) async {
   try {
     await Firebase.initializeApp();
     await AuthService().initialize();
-    await SyncService().initialize(AuthService().userId ?? 'comet-guest');
+    await SyncService().initialize(AuthService().userId ?? 'aartiq-guest');
 
     if (AuthService().isAuthenticated) {
       SyncService().tryAutoReconnect();
@@ -215,19 +215,19 @@ void main(List<String> args) async {
           create: (BuildContext context) => WindowModel(id: null),
         ),
       ],
-      child: const CometAIApp(),
+      child: const AartiqApp(),
     ),
   );
 }
 
-class CometAIApp extends StatefulWidget {
-  const CometAIApp({super.key});
+class AartiqApp extends StatefulWidget {
+  const AartiqApp({super.key});
 
   @override
-  State<CometAIApp> createState() => _CometAIAppState();
+  State<AartiqApp> createState() => _AartiqAppState();
 }
 
-class _CometAIAppState extends State<CometAIApp> with WindowListener {
+class _AartiqAppState extends State<AartiqApp> with WindowListener {
   late final AppLifecycleListener? _appLifecycleListener;
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
@@ -275,7 +275,7 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
 
   void _handleDeepLink(Uri uri) {
     print('[DeepLink] Received: $uri');
-    if (uri.scheme == 'comet-ai') {
+    if (uri.scheme == 'aartiq') {
       if (uri.host == 'connect' || uri.host == 'approve') {
         // Delay to allow navigator to initialize
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -337,7 +337,7 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Comet-AI',
+      title: 'Aartiq',
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
@@ -367,18 +367,18 @@ class _CometAIAppState extends State<CometAIApp> with WindowListener {
         '/auth': (context) => AuthPage(
               onAuthComplete: () {
                 unawaited(SyncService()
-                    .initialize(AuthService().userId ?? 'comet-guest')
+                    .initialize(AuthService().userId ?? 'aartiq-guest')
                     .then((_) => SyncService().tryAutoReconnect()));
                 navigatorKey.currentState
                     ?.pushNamedAndRemoveUntil('/home', (route) => false);
               },
               onGuestMode: () {
-                unawaited(SyncService().initialize('comet-guest'));
+                unawaited(SyncService().initialize('aartiq-guest'));
                 navigatorKey.currentState
                     ?.pushNamedAndRemoveUntil('/home', (route) => false);
               },
             ),
-        '/home': (context) => const CometHomePage(),
+        '/home': (context) => const AartiqHomePage(),
         '/connect-desktop': (context) => const ConnectDesktopPage(),
         '/browser': (context) => const Browser(),
         '/settings': (context) => const SettingsPage(),

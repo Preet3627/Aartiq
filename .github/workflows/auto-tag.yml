@@ -26,7 +26,7 @@ jobs:
       - name: Get package.json version and find next available tag
         id: version
         run: |
-          CURRENT_VERSION=$(node -p "require('./comet-browser/package.json').version")
+          CURRENT_VERSION=$(node -p "require('./aartiq-browser/package.json').version")
           echo "Base version from package.json: ${CURRENT_VERSION}"
           
           # Function to increment patch version

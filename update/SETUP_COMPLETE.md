@@ -5,7 +5,7 @@
 ### 1. Generated Production Keystore ✅
 - Created `upload-keystore.jks` in `flutter_browser_app/android/app/`
 - This is your **production signing key** for the Play Store
-- **Password**: `cometbrowser` (for both store and key)
+- **Password**: `aartiqbrowser` (for both store and key)
 - **Alias**: `upload`
 - **Validity**: 10,000 days (~27 years)
 
@@ -43,13 +43,13 @@
 (All 61 lines including `-----BEGIN CERTIFICATE-----` and `-----END CERTIFICATE-----`)
 
 #### Secret 2: `ANDROID_KEYSTORE_PASSWORD`
-**Value**: `cometbrowser`
+**Value**: `aartiqbrowser`
 
 #### Secret 3: `ANDROID_KEY_ALIAS`
 **Value**: `upload`
 
 #### Secret 4: `ANDROID_KEY_PASSWORD`
-**Value**: `cometbrowser`
+**Value**: `aartiqbrowser`
 
 ---
 
@@ -64,7 +64,7 @@ These are already in `.gitignore` ✅
 
 ### BACKUP these files securely:
 - 💾 `upload-keystore.jks` - Store in a password manager or encrypted backup
-- 💾 Password: `cometbrowser`
+- 💾 Password: `aartiqbrowser`
 
 **⚠️ WARNING**: If you lose the keystore file, you can NEVER update your app on the Play Store. You would have to publish it as a completely new app with a new package name.
 

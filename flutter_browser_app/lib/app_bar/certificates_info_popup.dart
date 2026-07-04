@@ -157,7 +157,7 @@ class _CertificateInfoPopupState extends State<CertificateInfoPopup> {
                         children: <Widget>[
                           Expanded(
                             child: Text(
-                              "Comet-AI has verified that ${_topMainCertificate?.issuer(dn: ASN1DistinguishedNames.COMMON_NAME)} has emitted the web site certificate.",
+                              "Aartiq has verified that ${_topMainCertificate?.issuer(dn: ASN1DistinguishedNames.COMMON_NAME)} has emitted the web site certificate.",
                               softWrap: true,
                               style: const TextStyle(fontSize: 12.0),
                             ),

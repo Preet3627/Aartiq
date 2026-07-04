@@ -517,7 +517,7 @@ class _RemoteSettingsPageState extends State<RemoteSettingsPage> {
             trailing: const Icon(Icons.restart_alt, color: Colors.red),
             onTap: () => _showConfirmDialog(
               'Restart Desktop',
-              'This will restart the Comet-AI desktop application.',
+              'This will restart the Aartiq desktop application.',
               () => SyncService().executeDesktopControl('restart'),
             ),
           ),

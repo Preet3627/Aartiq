@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:collection/collection.dart';
 import '../models/browser_model.dart';
 import '../models/window_model.dart';
-import 'comet_agent_service.dart';
+import 'aartiq_agent_service.dart';
 
 // ─────────────────────────────────────────────
 // AGENT CHAT PAGE
@@ -28,7 +28,7 @@ class AgentChatPage extends StatefulWidget {
 
 class _AgentChatPageState extends State<AgentChatPage>
     with TickerProviderStateMixin {
-  late CometAgentService _agentService;
+  late AartiqAgentService _agentService;
   final List<AgentStep> _steps = [];
   bool _isRunning = false;
   bool _isDone = false;
@@ -106,7 +106,7 @@ class _AgentChatPageState extends State<AgentChatPage>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Comet Agent uses $providerName AI to browse the web autonomously. Enter your API key to continue.',
+              'Aartiq Agent uses $providerName AI to browse the web autonomously. Enter your API key to continue.',
               style: const TextStyle(color: Colors.white60, fontSize: 13),
             ),
             const SizedBox(height: 16),
@@ -181,7 +181,7 @@ class _AgentChatPageState extends State<AgentChatPage>
       }
     }
 
-    _agentService = CometAgentService(
+    _agentService = AartiqAgentService(
       apiKey: _apiKey!,
       model: settings.geminiModel,
       webViewController: controller,
@@ -251,7 +251,7 @@ class _AgentChatPageState extends State<AgentChatPage>
         // Re-initialize service with the controller
         final browserModel = Provider.of<BrowserModel>(context, listen: false);
         final settings = browserModel.getSettings();
-        _agentService = CometAgentService(
+        _agentService = AartiqAgentService(
           apiKey: _apiKey!,
           model: settings.geminiModel,
           webViewController: currentTab.webViewModel.webViewController,
@@ -439,7 +439,7 @@ class _AgentChatPageState extends State<AgentChatPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'COMET AGENT',
+                  'AARTIQ AGENT',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 14,

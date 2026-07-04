@@ -88,7 +88,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-android-${{ github.run_number }}
+          name: aartiq-android-${{ github.run_number }}
           path: flutter_browser_app/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 5
 
@@ -141,13 +141,13 @@ jobs:
         run: |
           mkdir Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r Comet-AI.ipa Payload
+          zip -r Aartiq.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-ios-${{ github.run_number }}
-          path: flutter_browser_app/Comet-AI.ipa
+          name: aartiq-ios-${{ github.run_number }}
+          path: flutter_browser_app/Aartiq.ipa
           retention-days: 5
 
   # ============================================================================
@@ -165,42 +165,42 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Cache Electron
         uses: actions/cache@v4
         with:
           path: ${{ env.ELECTRON_CACHE_DIR }}
-          key: ${{ runner.os }}-electron-${{ hashFiles('comet-browser/package-lock.json') }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('aartiq-browser/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
 
       - name: Install Dependencies (npm ci - deterministic)
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npm ci --legacy-peer-deps
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Rebuild Native Modules
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npx electron-rebuild -f -w robotjs || npx electron-rebuild -f -w sharp || echo "Rebuild completed"
 
       - name: Cache Next.js
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-
 
       - name: Build Windows
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ github.ref_name }}
           ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
         run: npm run dist:win
@@ -208,8 +208,8 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-desktop-windows-${{ github.run_number }}
-          path: comet-browser/release/*.exe
+          name: aartiq-desktop-windows-${{ github.run_number }}
+          path: aartiq-browser/release/*.exe
           retention-days: 5
 
   # ============================================================================
@@ -227,42 +227,42 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Cache Electron
         uses: actions/cache@v4
         with:
           path: ${{ env.ELECTRON_CACHE_DIR }}
-          key: ${{ runner.os }}-electron-${{ hashFiles('comet-browser/package-lock.json') }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('aartiq-browser/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
 
       - name: Install Dependencies (npm ci - deterministic)
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npm ci --legacy-peer-deps
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Rebuild Native Modules
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npx electron-rebuild -f -w robotjs || npx electron-rebuild -f -w sharp || echo "Rebuild completed"
 
       - name: Cache Next.js
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-
 
       - name: Build macOS
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ github.ref_name }}
           ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
           APPLE_SIGNING_IDENTITY: "-"
@@ -271,8 +271,8 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-desktop-macos-${{ github.run_number }}
-          path: comet-browser/release/*.dmg
+          name: aartiq-desktop-macos-${{ github.run_number }}
+          path: aartiq-browser/release/*.dmg
           retention-days: 5
 
   # ============================================================================
@@ -299,42 +299,42 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Cache Electron
         uses: actions/cache@v4
         with:
           path: ${{ env.ELECTRON_CACHE_DIR }}
-          key: ${{ runner.os }}-electron-${{ hashFiles('comet-browser/package-lock.json') }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('aartiq-browser/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-electron-
 
       - name: Install Dependencies (npm ci - deterministic)
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npm ci --legacy-peer-deps
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Rebuild Native Modules
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npx electron-rebuild -f -w robotjs || npx electron-rebuild -f -w sharp || echo "Rebuild completed"
 
       - name: Cache Next.js
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-
 
       - name: Build Linux
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ github.ref_name }}
           ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
         run: npm run build && npx electron-builder --linux AppImage --x64
@@ -342,8 +342,8 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-desktop-linux-${{ github.run_number }}
-          path: comet-browser/release/*.AppImage
+          name: aartiq-desktop-linux-${{ github.run_number }}
+          path: aartiq-browser/release/*.AppImage
           retention-days: 5
 
   # ============================================================================

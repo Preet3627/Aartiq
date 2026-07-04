@@ -255,6 +255,6 @@ test('should complete OAuth flow', async () => {
 
 ## Credits
 
-Implemented by: Comet Browser Team
+Implemented by: Aartiq Browser Team
 Date: February 2026
 Version: 0.1.8

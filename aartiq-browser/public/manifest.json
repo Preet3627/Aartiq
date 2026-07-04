@@ -1,0 +1,16 @@
+{
+    "name": "Aartiq Browser",
+    "short_name": "Aartiq",
+    "description": "Intelligence-driven browsing workspace",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#020205",
+    "theme_color": "#00ffff",
+    "icons": [
+        {
+            "src": "/icon.ico",
+            "sizes": "192x192 512x512",
+            "type": "image/x-icon"
+        }
+    ]
+}

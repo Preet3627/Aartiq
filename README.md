@@ -1,4 +1,4 @@
-# Comet AI Browser
+# Aartiq Browser
 
 An open-source, AI-native browser with permission-gated OS automation.
 
@@ -56,8 +56,8 @@ An open-source, AI-native browser with permission-gated OS automation.
 ## Quick Start
 
 ```bash
-git clone https://github.com/Preet3627/Comet-AI.git
-cd Comet-AI/comet-browser
+git clone https://github.com/Preet3627/Aartiq.git
+cd Aartiq/aartiq-browser
 npm install
 npm run dev          # Next.js frontend
 npm run electron-start  # Electron shell
@@ -73,7 +73,7 @@ flutter run
 
 ## Installation
 
-See the [releases page](https://github.com/Preet3627/Comet-AI/releases) for pre-built binaries:
+See the [releases page](https://github.com/Preet3627/Aartiq/releases) for pre-built binaries:
 
 | Platform | Format |
 |----------|--------|
@@ -101,8 +101,8 @@ Full documentation at [browser.ponsrischool.in](https://browser.ponsrischool.in)
 ## Architecture
 
 ```
-Comet-AI/
-├── comet-browser/          # Electron desktop app
+Aartiq/
+├── aartiq-browser/          # Electron desktop app
 │   ├── main.js             # Main process
 │   ├── src/
 │   │   ├── components/     # React UI components
@@ -134,4 +134,4 @@ PRs are welcome. Please open an issue first to discuss significant changes.
 
 ## License
 
-[Apache 2.0](LICENSE) © 2026 Comet-AI
+[Apache 2.0](LICENSE) © 2026 Aartiq

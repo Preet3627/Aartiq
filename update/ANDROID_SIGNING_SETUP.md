@@ -10,13 +10,13 @@ Add these 4 secrets:
 Copy the entire content from `flutter_browser_app/android/app/keystore-base64.txt` (all 61 lines including the BEGIN and END lines)
 
 ### 2. ANDROID_KEYSTORE_PASSWORD
-Value: `cometbrowser`
+Value: `aartiqbrowser`
 
 ### 3. ANDROID_KEY_ALIAS
 Value: `upload`
 
 ### 4. ANDROID_KEY_PASSWORD
-Value: `cometbrowser`
+Value: `aartiqbrowser`
 
 ---
 

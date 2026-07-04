@@ -1,17 +1,17 @@
-# Comet-AI Mobile
+# Aartiq Mobile
 
-![Comet-AI](assets/icon/icon.png)
+![Aartiq](assets/icon/icon.png)
 
 A next-generation mobile browser created using Flutter.
 
 **Official Website**: [https://browser.ponsrischool.in](https://browser.ponsrischool.in)
-**Source Code**: [https://github.com/Preet3627/Comet-AI](https://github.com/Preet3627/Comet-AI)
+**Source Code**: [https://github.com/Preet3627/Aartiq](https://github.com/Preet3627/Aartiq)
 
 ## Features
 - **Modern UI**: Clean black interface with glowing cyan effects.
 - **Search Integration**: Unified search bar for URLs and queries.
 - **Bookmarks Management**: Save and organize your favorite sites.
-- **Connect Desktop**: Sync seamlessly with the Comet-AI Desktop application via QR code.
+- **Connect Desktop**: Sync seamlessly with the Aartiq Desktop application via QR code.
 - **Privacy First**: Secure and fast browsing experience.
 - **Managed Settings**: Detailed control over browser preferences.
 

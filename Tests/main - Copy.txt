@@ -10,7 +10,7 @@ User: hi
 
 AI: **Hey there! 👋**  
 
-I’m the Comet AI Agent – your browser‑side assistant. I can:
+I’m the Aartiq Agent – your browser‑side assistant. I can:
 
 | ✅ What I can do | 📌 How it helps you |
 |-----------------|-------------------|

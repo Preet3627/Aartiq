@@ -1,4 +1,4 @@
-# Comet Browser Enhancement Implementation Plan
+# Aartiq Browser Enhancement Implementation Plan
 
 ## Phase 1: Critical Fixes (Priority: HIGH)
 
@@ -129,7 +129,7 @@ raycast-extension/
 ## Phase 4: Native Flutter Mobile App
 
 ### 4.1 Flutter App Structure
-**Directory:** `../CometBrowserMobile/comet_ai/`
+**Directory:** `../AartiqBrowserMobile/aartiq/`
 
 **Platform-Specific Implementations:**
 - iOS: Native WebKit integration

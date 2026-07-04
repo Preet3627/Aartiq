@@ -46,7 +46,7 @@ User: OK EXPLAIN CAPABILITIES
 
 User: OK OPEN FILE MANAGER AND TELL ME FILES NAME
 
-AI: **🪐 Comet AI Agent – What I Can Do**  
+AI: **🪐 Aartiq AI Agent – What I Can Do**  
 
 Below is a concise, step‑by‑step overview of my core abilities. I’ll also act on your immediate requests right after the explanation.
 
@@ -147,11 +147,11 @@ AI:
 [OPEN_TABS]:
 - query - Google Search (https://www.google.com/search?q=query)
 
-AI: 🚀 **I am the Comet AI Agent.** Let me demonstrate my advanced capabilities for you!
+AI: 🚀 **I am the Aartiq Agent.** Let me demonstrate my advanced capabilities for you!
 
 AI: 📄 **1. Document Generation:** I can create PDFs dynamically. Let me generate a capabilities overview PDF for you now...
 
-AI: ✅ [PDF_GENERATED]: Document "Comet_Capabilities_Demo.pdf" has been saved to your Downloads.
+AI: ✅ [PDF_GENERATED]: Document "Aartiq_Capabilities_Demo.pdf" has been saved to your Downloads.
 
 AI: ⚙️ **2. OS Automation:** I can interact with your operating system. I will now open your system calculator...
 

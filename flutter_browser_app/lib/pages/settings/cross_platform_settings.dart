@@ -248,7 +248,7 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
                 "Package Name: ${packageInfo.packageName}\nVersion: ${packageInfo.version}\nBuild Number: ${packageInfo.buildNumber}";
           }
           return ListTile(
-            title: const Text("Comet-AI Package Info"),
+            title: const Text("Aartiq Package Info"),
             subtitle: Text(packageDescription),
             onLongPress: () {
               Clipboard.setData(ClipboardData(text: packageDescription));
@@ -617,7 +617,7 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
             backgroundImage: AssetImage("assets/icon/icon.png"),
           ),
         ),
-        title: const Text("Comet-AI Official Website"),
+        title: const Text("Aartiq Official Website"),
         subtitle: const Text("https://browser.ponsrischool.in"),
         trailing: const Icon(Icons.open_in_new, color: Color(0xFF00E5FF)),
         onTap: () {
@@ -643,8 +643,8 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
             color: Colors.white,
           ),
         ),
-        title: const Text("Comet-AI GitHub Repository"),
-        subtitle: const Text("https://github.com/Preet3627/Comet-AI"),
+        title: const Text("Aartiq GitHub Repository"),
+        subtitle: const Text("https://github.com/Preet3627/Aartiq"),
         trailing: const Icon(Icons.open_in_new, color: Color(0xFF00E5FF)),
         onTap: () {
           final windowModel = Provider.of<WindowModel>(context, listen: false);
@@ -652,7 +652,7 @@ class _CrossPlatformSettingsState extends State<CrossPlatformSettings> {
             WebViewTab(
               key: GlobalKey(),
               webViewModel: WebViewModel(
-                url: WebUri("https://github.com/Preet3627/Comet-AI"),
+                url: WebUri("https://github.com/Preet3627/Aartiq"),
               ),
             ),
           );

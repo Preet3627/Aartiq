@@ -1,4 +1,4 @@
-# Comet Browser - Comprehensive Bug Fixes Applied
+# Aartiq Browser - Comprehensive Bug Fixes Applied
 
 **Date:** 2026-02-03  
 **Fixed Issues:** 9 major problems resolved
@@ -197,7 +197,7 @@ To verify all fixes are working:
 
 ## Success! 🎉
 
-All requested fixes have been successfully implemented. The Comet Browser now has:
+All requested fixes have been successfully implemented. The Aartiq Browser now has:
 - ✅ Working AI sidebar with beautiful gradient logo
 - ✅ New tabs open with Google homepage
 - ✅ Reliable [NAVIGATE:] and [SEARCH:] commands

@@ -1,4 +1,4 @@
-# Comet Browser Enhancement Summary
+# Aartiq Browser Enhancement Summary
 
 ## ✅ Completed Implementations
 
@@ -134,7 +134,7 @@
 6. **Quick Actions** - Common browser actions
 
 **Integration Method:**
-- Uses AppleScript/IPC to communicate with Comet
+- Uses AppleScript/IPC to communicate with Aartiq
 - Real-time tab information
 - Quick keyboard shortcuts
 
@@ -144,7 +144,7 @@
 
 ### 9. Native Mobile Integration
 **Status:** 📝 PLANNED
-**Location:** `../CometBrowserMobile/comet_ai/`
+**Location:** `../AartiqBrowserMobile/aartiq/`
 
 **Platform Channels Required:**
 - iOS: Swift WebKit integration

@@ -1,6 +1,6 @@
-# Contributing to Comet AI Browser
+# Contributing to Aartiq Browser
 
-First off, thank you for considering contributing to Comet AI Browser! It's people like you that make building open-source software such a rewarding experience.
+First off, thank you for considering contributing to Aartiq Browser! It's people like you that make building open-source software such a rewarding experience.
 
 This project is built by a student developer, and help from the community is highly appreciated to move it towards v1.0.0.
 
@@ -25,7 +25,7 @@ If you have an idea for a feature or an improvement:
 
 ## 💻 Development Workflow
 
-1.  **Fork the repository** on GitHub: [https://github.com/Preet3627/Comet-AI](https://github.com/Preet3627/Comet-AI)
+1.  **Fork the repository** on GitHub: [https://github.com/Preet3627/Aartiq](https://github.com/Preet3627/Aartiq)
 2.  **Clone the Repo** locally:
     ```bash
     git clone https://github.com/YOUR-USERNAME/Browser-AI.git
@@ -40,11 +40,11 @@ If you have an idea for a feature or an improvement:
 
 ### 🖥️ Desktop (Electron + Next.js)
 
-The desktop code is located in `comet-browser`.
+The desktop code is located in `aartiq-browser`.
 
 1.  Navigate to the directory:
     ```bash
-    cd comet-browser
+    cd aartiq-browser
     ```
 2.  Install dependencies:
     ```bash
@@ -61,11 +61,11 @@ The desktop code is located in `comet-browser`.
 
 ### 📱 Mobile (Flutter)
 
-The mobile code is located in `CometBrowserMobile/comet_ai`.
+The mobile code is located in `AartiqBrowserMobile/aartiq`.
 
 1.  Navigate to the directory:
     ```bash
-    cd CometBrowserMobile/comet_ai
+    cd AartiqBrowserMobile/aartiq
     ```
 2.  Install dependencies:
     ```bash
@@ -113,7 +113,7 @@ The CI will automatically build all platforms and create a GitHub release.
 ### Landing Page Auto-Detection
 The landing page automatically fetches downloads from GitHub releases using:
 ```
-https://api.github.com/repos/Preet3627/Comet-AI/releases/latest
+https://api.github.com/repos/Preet3627/Aartiq/releases/latest
 ```
 
 ## ❓ Need Help?

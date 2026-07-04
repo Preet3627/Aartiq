@@ -37,7 +37,7 @@ class _FullScreenAIChatState extends State<FullScreenAIChat> {
       setState(() {
         _statusMessage = "Error: Desktop Connection Required";
         _response =
-            "Please connect to the Comet-AI Desktop application to enable AI features and desktop control.";
+            "Please connect to the Aartiq Desktop application to enable AI features and desktop control.";
         _isProcessing = false;
       });
       return;
@@ -86,7 +86,7 @@ class _FullScreenAIChatState extends State<FullScreenAIChat> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         title:
-            const Text("Comet-AI Chat", style: TextStyle(fontFamily: 'Outfit')),
+            const Text("Aartiq Chat", style: TextStyle(fontFamily: 'Outfit')),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
@@ -116,7 +116,7 @@ class _FullScreenAIChatState extends State<FullScreenAIChat> {
                     colors: [Color(0xFF00E5FF), Color(0xFFD500F9)],
                   ).createShader(bounds),
                   child: const Text(
-                    "Comet-AI Intelligence",
+                    "Aartiq Intelligence",
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,

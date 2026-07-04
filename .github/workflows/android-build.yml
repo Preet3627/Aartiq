@@ -98,13 +98,13 @@ jobs:
         run: flutter build apk --release --verbose
 
       - name: Rename APK
-        run: cp flutter_browser_app/build/app/outputs/flutter-apk/app-release.apk comet-ai-android.apk
+        run: cp flutter_browser_app/build/app/outputs/flutter-apk/app-release.apk aartiq-android.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-android-apk
-          path: comet-ai-android.apk
+          name: aartiq-android-apk
+          path: aartiq-android.apk
 
   create-release:
     name: Create Draft Release
@@ -117,7 +117,7 @@ jobs:
       - name: Download APK
         uses: actions/download-artifact@v4
         with:
-          name: comet-ai-android-apk
+          name: aartiq-android-apk
           path: release-artifacts
 
       - name: Create Draft Release

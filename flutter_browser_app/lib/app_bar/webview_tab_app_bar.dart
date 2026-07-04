@@ -25,7 +25,7 @@ import 'package:translator/translator.dart';
 
 import 'package:flutter_browser/pages/ai_chat_page.dart';
 import 'package:flutter_browser/pages/agent_chat_page.dart';
-import 'package:flutter_browser/pages/comet_agent_service.dart';
+import 'package:flutter_browser/pages/aartiq_agent_service.dart';
 import 'package:flutter_browser/url_predictor.dart';
 import 'package:flutter_browser/pages/connect_desktop_page.dart';
 import '../animated_flutter_browser_logo.dart';
@@ -504,7 +504,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(32),
               side: const BorderSide(color: Colors.white12)),
-          title: const Text("Comet Neural Agent",
+          title: const Text("Aartiq Neural Agent",
               style:
                   TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
           content: TextField(
@@ -1879,7 +1879,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
     );
 
     try {
-      final agent = CometAgentService(
+      final agent = AartiqAgentService(
         apiKey: apiKey,
         model: settings.geminiModel,
         webViewController: webViewController,
@@ -1975,7 +1975,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
       if (screenshot == null) throw Exception("Could not capture screen");
       final base64Image = base64Encode(screenshot);
 
-      final agent = CometAgentService(
+      final agent = AartiqAgentService(
         apiKey: apiKey,
         model: settings.geminiModel,
         webViewController: webViewController,
@@ -2053,7 +2053,7 @@ class _WebViewTabAppBarState extends State<WebViewTabAppBar>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Ask Comet-AI",
+            const Text("Ask Aartiq",
                 style: TextStyle(
                     color: Color(0xFF00E5FF),
                     fontSize: 18,

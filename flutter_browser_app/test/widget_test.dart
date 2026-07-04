@@ -12,9 +12,9 @@ import 'package:flutter_browser/main.dart';
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const CometAIApp());
+    await tester.pumpWidget(const AartiqApp());
 
     // Verify that the app starts.
-    expect(find.byType(CometAIApp), findsOneWidget);
+    expect(find.byType(AartiqApp), findsOneWidget);
   });
 }

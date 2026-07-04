@@ -76,28 +76,28 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Install dependencies
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm install --legacy-peer-deps
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Build macOS ARM64 DMG
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           APPLE_SIGNING_IDENTITY: "-"
         run: npm run dist:mac:arm64
 
       - name: Upload macOS ARM64 DMG
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-macos-arm64
-          path: comet-browser/release/*.dmg
+          name: aartiq-macos-arm64
+          path: aartiq-browser/release/*.dmg
           retention-days: 30
 
   build-macos-x64:
@@ -111,28 +111,28 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Install dependencies
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm install --legacy-peer-deps
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Build macOS x64 DMG
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           APPLE_SIGNING_IDENTITY: "-"
         run: npm run dist:mac:x64
 
       - name: Upload macOS x64 DMG
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-macos-x64
-          path: comet-browser/release/*.dmg
+          name: aartiq-macos-x64
+          path: aartiq-browser/release/*.dmg
           retention-days: 30
 
   build-macos-universal:
@@ -146,28 +146,28 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Install dependencies
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm install --legacy-peer-deps
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Build macOS Universal DMG
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           APPLE_SIGNING_IDENTITY: "-"
         run: npm run dist:mac:universal
 
       - name: Upload macOS Universal DMG
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-macos-universal
-          path: comet-browser/release/*.dmg
+          name: aartiq-macos-universal
+          path: aartiq-browser/release/*.dmg
           retention-days: 30
 
   # ============================================================================
@@ -184,28 +184,28 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Install dependencies
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm install --legacy-peer-deps
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Build Windows x64 EXE
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: 0.2.9
         run: npm run build && npx electron-builder --win --x64 --publish never
 
       - name: Upload Windows x64 EXE
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-windows-x64
-          path: comet-browser/release/*.exe
+          name: aartiq-windows-x64
+          path: aartiq-browser/release/*.exe
           retention-days: 30
 
   build-windows-arm64:
@@ -219,28 +219,28 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Install dependencies
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm install --legacy-peer-deps
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Build Windows ARM64 EXE
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: 0.2.9
         run: npm run build && npx electron-builder --win --arm64 --publish never
 
       - name: Upload Windows ARM64 EXE
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-windows-arm64
-          path: comet-browser/release/*.exe
+          name: aartiq-windows-arm64
+          path: aartiq-browser/release/*.exe
           retention-days: 30
 
   # ============================================================================
@@ -257,7 +257,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Install Linux Dependencies
         run: |
@@ -265,23 +265,23 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libarchive-tools icnsutils libxtst-dev libpng-dev libx11-dev
 
       - name: Install dependencies
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm install --legacy-peer-deps
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Build Linux AppImage
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: 0.2.9
         run: npm run build && npx electron-builder --linux AppImage --x64 --publish never
 
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-linux-x64
-          path: comet-browser/release/*.AppImage
+          name: aartiq-linux-x64
+          path: aartiq-browser/release/*.AppImage
           retention-days: 30

@@ -56,7 +56,7 @@ export const releases: ReleaseEntry[] = [
       new: [
         'Enhanced CLI with model selection - Reads configured models from browser',
         'Interactive model selection - Choose model by number',
-        'Chat sessions with history - Stored in ~/.comet-ai/',
+        'Chat sessions with history - Stored in ~/.aartiq/',
         'Live streaming output',
         'Last used model saved automatically',
         'Supports all providers: ollama, openai, anthropic, gemini, xai, groq'
@@ -66,7 +66,7 @@ export const releases: ReleaseEntry[] = [
         'Added scripts/ to build files'
       ],
       docs: [
-        'Added Comet CLI documentation'
+        'Added Aartiq CLI documentation'
       ]
     }
   },
@@ -123,10 +123,10 @@ export const releases: ReleaseEntry[] = [
     channel: 'stable',
     changes: {
       new: [
-        'Comet-AI CLI - Powerful terminal-based browser control (comet ask, comet search)',
+        'Aartiq CLI - Powerful terminal-based browser control (aartiq ask, aartiq search)',
         'Automatic Response Continuation - Fixed AI interruptions with seamless "Keep-Alive" stitching',
         'Finalized Siri & Apple Shortcuts - Zero-setup AppIntents for hands-free automation',
-        'Secure CLI Authentication - Token-based authorization via ~/.comet-ai-token',
+        'Secure CLI Authentication - Token-based authorization via ~/.aartiq-token',
         'Deep Link Sync - Unified routing for CLI, Siri, and deep-link triggers'
       ],
       fix: [
@@ -154,7 +154,7 @@ export const releases: ReleaseEntry[] = [
     changes: {
       new: [
         'Siri Shortcuts Integration - Native macOS App Intents with 12 pre-configured shortcuts',
-        'URL Scheme Handler - comet-ai:// protocol for Shortcuts app triggers',
+        'URL Scheme Handler - aartiq:// protocol for Shortcuts app triggers',
         'AppleScript Bridge - Voice command automation via osascript',
         'Voice Input Handler - macOS Dictation + Text-to-Speech integration',
         'Shortcuts Templates - Pre-built templates for common AI actions',
@@ -222,7 +222,7 @@ export const releases: ReleaseEntry[] = [
         'Modular IPC Handlers: Moved all handlers to src/main/handlers/ modules (14+ modules)',
         'Lazy Service Loading: Services now load on-demand for faster startup',
         'Removed landing page from default startup - app now opens directly to browser',
-        'Added Sidebar Version selector to macOS menu (Comet > Sidebar Version)',
+        'Added Sidebar Version selector to macOS menu (Aartiq > Sidebar Version)',
         'Added Sidebar Version toggle in settings panel'
       ],
       docs: [

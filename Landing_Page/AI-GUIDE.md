@@ -1,12 +1,12 @@
-# Comet AI - AI Agent Guide
+# Aartiq - AI Agent Guide
 
-This guide helps AI code writers understand the Comet AI project structure, write proper release notes, maintain documentation, and ensure the landing page and docs stay consistent.
+This guide helps AI code writers understand the Aartiq project structure, write proper release notes, maintain documentation, and ensure the landing page and docs stay consistent.
 
 ## Project Structure
 
 ```
-Comet-AI/
-├── comet-browser/           # Electron Desktop App (main)
+Aartiq/
+├── aartiq-browser/           # Electron Desktop App (main)
 ├── flutter_browser_app/      # Flutter Mobile App
 ├── Landing_Page/             # Next.js Landing Page + Docs (THIS REPO)
 │   ├── src/
@@ -70,13 +70,13 @@ export const APP_VERSION = {
 | Native API | `/docs/native-api` | macOS SwiftUI panels, IPC | New APIs |
 | Apple Integration | `/docs/apple-integration` | Siri, Shortcuts, Voice, Raycast | macOS integration |
 | Windows Integration | `/docs/windows-integration` | Shortcuts, Voice, Copilot | Windows integration |
-| Deep Links | `/docs/deep-links` | URL schemes (`comet-browser://`) | New protocols |
+| Deep Links | `/docs/deep-links` | URL schemes (`aartiq-browser://`) | New protocols |
 | Plugins | `/docs/plugins` | Plugin system, SDK, hooks | Plugin changes |
 | Extensions | `/docs/extensions` | Browser extensions | Extension features |
 | API Reference | `/docs/api-reference` | Full IPC/API documentation | Any API changes |
 | Troubleshooting | `/docs/troubleshooting` | Common issues, solutions | New issues found |
 | Contributing | `/docs/contributing` | Development guide, standards | Dev process changes |
-| Comet CLI | `/docs/native-api#cli` | Terminal-based browser control | CLI feature changes |
+| Aartiq CLI | `/docs/native-api#cli` | Terminal-based browser control | CLI feature changes |
 
 ---
 
@@ -107,7 +107,7 @@ src/components/
 ## AI Commands Reference
 
 ### Command Format
-Comet AI uses structured JSON commands. Always respond with JSON format:
+Aartiq uses structured JSON commands. Always respond with JSON format:
 
 ```json
 {
@@ -355,15 +355,15 @@ When preparing a new release, ensure all these are updated:
 
 ### Adding New AI Command
 
-1. Add to `comet-browser/src/components/AIConstants.ts`
-2. Add handler in `comet-browser/src/lib/AICommandParser.ts`
+1. Add to `aartiq-browser/src/components/AIConstants.ts`
+2. Add handler in `aartiq-browser/src/lib/AICommandParser.ts`
 3. Document in `src/app/docs/ai-commands/page.tsx`
 4. Add to search index with type: "command"
 5. Add to llms.txt documentation
 
 ### Adding New API/Feature
 
-1. Implement in `comet-browser/`
+1. Implement in `aartiq-browser/`
 2. Document in relevant doc page
 3. Add to `src/app/docs/api-reference/page.tsx`
 4. Update search index
@@ -390,12 +390,12 @@ When adding new features that need server-side storage:
 We use a script to automatically scan and update component metadata in the documentation.
 
 #### Location
-`comet-browser/scripts/component-scanner.js`
+`aartiq-browser/scripts/component-scanner.js`
 
 #### Usage
 ```bash
 # Scan and output JSON
-cd comet-browser
+cd aartiq-browser
 node scripts/component-scanner.js
 
 # Preview changes (dry run)
@@ -436,7 +436,7 @@ The script generates `component-data.json` with:
 
 #### Adding New Components to Documentation
 
-1. **Create the component** in `comet-browser/src/components/`
+1. **Create the component** in `aartiq-browser/src/components/`
 2. **Add JSDoc description** (optional but recommended):
    ```javascript
    /**
@@ -509,8 +509,8 @@ export default function PageName() {
 ### Important URLs
 - Website: https://browser.ponsrischool.in
 - Docs: https://browser.ponsrischool.in/docs
-- GitHub: https://github.com/Preet3627/Comet-AI
-- Releases: https://github.com/Preet3627/Comet-AI/releases
+- GitHub: https://github.com/Preet3627/Aartiq
+- Releases: https://github.com/Preet3627/Aartiq/releases
 
 ---
 

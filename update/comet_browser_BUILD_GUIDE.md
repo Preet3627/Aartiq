@@ -1,4 +1,4 @@
-# Quick Start - Building Comet Browser .exe
+# Quick Start - Building Aartiq Browser .exe
 
 ## Prerequisites
 - Node.js 20+ installed
@@ -9,7 +9,7 @@
 
 ### 1. Install Dependencies
 ```bash
-cd comet-browser
+cd aartiq-browser
 npm install
 ```
 
@@ -42,20 +42,20 @@ npm run dist:win
 
 **Build time**: ~2-5 minutes depending on your machine
 
-**Output location**: `release/Comet Browser Setup 0.1.7.exe`
+**Output location**: `release/Aartiq Browser Setup 0.1.7.exe`
 
 ## Installation & Testing
 
 ### Install the App
 1. Navigate to `release/` folder
-2. Double-click `Comet Browser Setup 0.1.7.exe`
+2. Double-click `Aartiq Browser Setup 0.1.7.exe`
 3. Follow installation wizard
-4. Default location: `C:\Users\<You>\AppData\Local\Programs\Comet Browser\`
+4. Default location: `C:\Users\<You>\AppData\Local\Programs\Aartiq Browser\`
 
 ### Launch the App
-- **Desktop shortcut**: Double-click "Comet Browser"
-- **Start Menu**: Search for "Comet Browser"
-- **Direct**: Navigate to install folder and run `Comet Browser.exe`
+- **Desktop shortcut**: Double-click "Aartiq Browser"
+- **Start Menu**: Search for "Aartiq Browser"
+- **Direct**: Navigate to install folder and run `Aartiq Browser.exe`
 
 ### Expected Behavior
 ✅ Window appears within 1 second
@@ -79,8 +79,8 @@ This should **NOT** happen with current fixes, but if it does:
 1. Check Task Manager - kill any running instances
 2. Run from command line to see logs:
    ```powershell
-   cd "$env:LOCALAPPDATA\Programs\Comet Browser"
-   ."Comet Browser.exe"
+   cd "$env:LOCALAPPDATA\Programs\Aartiq Browser"
+   ."Aartiq Browser.exe"
    ```
 3. Look for error messages in output
 
@@ -99,7 +99,7 @@ Builds automatically trigger on:
 - Manual workflow dispatch
 
 Download artifacts from:
-`Actions` → Select workflow run → `Artifacts` → `comet-browser-windows-installer`
+`Actions` → Select workflow run → `Artifacts` → `aartiq-browser-windows-installer`
 
 ## Scripts Reference
 

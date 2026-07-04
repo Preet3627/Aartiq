@@ -5,7 +5,7 @@ Updated all major build tools, SDKs, and libraries to their latest stable versio
 
 ## Updates Made
 
-### Mobile (Flutter/Dart) - CometBrowserMobile/comet_ai/
+### Mobile (Flutter/Dart) - AartiqBrowserMobile/aartiq/
 
 #### 1. **Dart SDK & Flutter Framework** ✅
 - **File**: `pubspec.yaml`
@@ -39,7 +39,7 @@ Updated all major build tools, SDKs, and libraries to their latest stable versio
 - **Maintained**: `platform :ios, '12.0'` (already compatible with ML Kit)
 - **Maintained**: Deployment target in post-install hook
 
-### Desktop/Web (Electron + Next.js) - comet-browser/
+### Desktop/Web (Electron + Next.js) - aartiq-browser/
 
 #### Package.json Status ✅
 Current versions are already at latest stable:
@@ -73,10 +73,10 @@ No updates needed - already up-to-date!
 - ✅ Upgraded Java version from 17 to 21 LTS
 - ✅ Already handling Dart/Flutter updates properly
 
-### 2. `CometBrowserMobile/comet_ai/pubspec.yaml`
+### 2. `AartiqBrowserMobile/aartiq/pubspec.yaml`
 - ✅ Updated Dart SDK minimum version to 3.10.9
 
-### 3. `CometBrowserMobile/comet_ai/android/gradle/wrapper/gradle-wrapper.properties`
+### 3. `AartiqBrowserMobile/aartiq/android/gradle/wrapper/gradle-wrapper.properties`
 - ✅ Upgraded Gradle from 8.14 to 9.3.1
 
 ### 4. Package Dependencies (Already Updated by Previous Commands)
@@ -115,7 +115,7 @@ After these updates, run:
 
 ```bash
 # Mobile testing
-cd CometBrowserMobile/comet_ai
+cd AartiqBrowserMobile/aartiq
 flutter clean
 flutter pub get
 flutter pub upgrade --major-versions
@@ -123,7 +123,7 @@ flutter build apk --release  # Android
 flutter build ios --release  # iOS
 
 # Desktop testing
-cd comet-browser
+cd aartiq-browser
 npm install
 npm run build-electron
 npm run dist:win  # or dist:mac for macOS
@@ -140,11 +140,11 @@ npm run dist:win  # or dist:mac for macOS
 ## Files Modified
 
 1. ✅ `.github/workflows/build.yml` - Java and toolchain updates
-2. ✅ `CometBrowserMobile/comet_ai/pubspec.yaml` - Dart SDK version
-3. ✅ `CometBrowserMobile/comet_ai/android/gradle/wrapper/gradle-wrapper.properties` - Gradle version
-4. ✅ `CometBrowserMobile/comet_ai/android/app/build.gradle` - Android configuration
-5. ✅ `CometBrowserMobile/comet_ai/ios/Podfile` - iOS dependencies (from previous update)
-6. ✅ `CometBrowserMobile/comet_ai/ios/.gitignore` - Podfile.lock management
+2. ✅ `AartiqBrowserMobile/aartiq/pubspec.yaml` - Dart SDK version
+3. ✅ `AartiqBrowserMobile/aartiq/android/gradle/wrapper/gradle-wrapper.properties` - Gradle version
+4. ✅ `AartiqBrowserMobile/aartiq/android/app/build.gradle` - Android configuration
+5. ✅ `AartiqBrowserMobile/aartiq/ios/Podfile` - iOS dependencies (from previous update)
+6. ✅ `AartiqBrowserMobile/aartiq/ios/.gitignore` - Podfile.lock management
 
 ---
 

@@ -1,4 +1,4 @@
-# 🚀 Comet AI Release Notes
+# 🚀 Aartiq Release Notes
 
 <div align="center">
 
@@ -17,14 +17,14 @@
 
 ## 📥 Download Latest
 
-**[v0.2.9.3](https://github.com/Preet3627/Comet-AI/releases/latest)**
+**[v0.2.9.3](https://github.com/Preet3627/Aartiq/releases/latest)**
 
 | Platform | Download |
 |----------|----------|
-| macOS (Intel) | [Comet-AI-0.2.9.3.dmg](https://github.com/Preet3627/Comet-AI/releases/latest/download/Comet-AI-0.2.9.3.dmg) |
-| macOS (Apple Silicon) | [Comet-AI-0.2.9.3-arm64.dmg](https://github.com/Preet3627/Comet-AI/releases/latest/download/Comet-AI-0.2.9.3-arm64.dmg) |
-| Windows | [Comet-AI-0.2.9.3.exe](https://github.com/Preet3627/Comet-AI/releases/latest/download/Comet-AI-0.2.9.3.exe) |
-| Linux | [Comet-AI-0.2.9.3.AppImage](https://github.com/Preet3627/Comet-AI/releases/latest/download/Comet-AI-0.2.9.3.AppImage) |
+| macOS (Intel) | [Aartiq-0.2.9.3.dmg](https://github.com/Preet3627/Aartiq/releases/latest/download/Aartiq-0.2.9.3.dmg) |
+| macOS (Apple Silicon) | [Aartiq-0.2.9.3-arm64.dmg](https://github.com/Preet3627/Aartiq/releases/latest/download/Aartiq-0.2.9.3-arm64.dmg) |
+| Windows | [Aartiq-0.2.9.3.exe](https://github.com/Preet3627/Aartiq/releases/latest/download/Aartiq-0.2.9.3.exe) |
+| Linux | [Aartiq-0.2.9.3.AppImage](https://github.com/Preet3627/Aartiq/releases/latest/download/Aartiq-0.2.9.3.AppImage) |
 
 ---
 
@@ -146,4 +146,4 @@
 ---
 
 *Built by a 16-year-old developer*  
-*Comet AI - An open-source AI-native browser*
+*Aartiq - An open-source AI-native browser*

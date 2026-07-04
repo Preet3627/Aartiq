@@ -44,7 +44,7 @@ jobs:
           elif [[ -n "${{ github.event.inputs.version }}" ]]; then
             TAG="${{ github.event.inputs.version }}"
           else
-            TAG="v$(node -p "require('./comet-browser/package.json').version")"
+            TAG="v$(node -p "require('./aartiq-browser/package.json').version")"
           fi
           
           VERSION="${TAG#v}"
@@ -131,7 +131,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-android
+          name: aartiq-android
           path: flutter_browser_app/build/app/outputs/flutter-apk/app-release.apk
 
   # ============================================================================
@@ -178,13 +178,13 @@ jobs:
         run: |
           mkdir Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r Comet-AI.ipa Payload
+          zip -r Aartiq.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-ios
-          path: flutter_browser_app/Comet-AI.ipa
+          name: aartiq-ios
+          path: flutter_browser_app/Aartiq.ipa
 
   # ============================================================================
   # DESKTOP BUILD - WINDOWS
@@ -202,33 +202,33 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Cache Electron
         uses: actions/cache@v4
         with:
           path: ${{ env.ELECTRON_CACHE_DIR }}
-          key: ${{ runner.os }}-electron-${{ hashFiles('comet-browser/package-lock.json') }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Install Dependencies (npm ci - deterministic)
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm ci --legacy-peer-deps
 
       - name: Rebuild Native Modules
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npx electron-rebuild -f -w robotjs || npx electron-rebuild -f -w sharp || echo "Native rebuild completed"
 
       - name: Cache Next.js
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Build Windows
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
           ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
         run: npm run dist:win
@@ -236,8 +236,8 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-windows
-          path: comet-browser/release/*.exe
+          name: aartiq-windows
+          path: aartiq-browser/release/*.exe
 
   # ============================================================================
   # DESKTOP BUILD - MACOS
@@ -255,33 +255,33 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Cache Electron
         uses: actions/cache@v4
         with:
           path: ${{ env.ELECTRON_CACHE_DIR }}
-          key: ${{ runner.os }}-electron-${{ hashFiles('comet-browser/package-lock.json') }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Install Dependencies (npm ci - deterministic)
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm ci --legacy-peer-deps
 
       - name: Rebuild Native Modules
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npx electron-rebuild -f -w robotjs || npx electron-rebuild -f -w sharp || echo "Native rebuild completed"
 
       - name: Cache Next.js
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Build macOS ARM64
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
           ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
           APPLE_SIGNING_IDENTITY: "-"
@@ -290,8 +290,8 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-macos-arm64
-          path: comet-browser/release/*.dmg
+          name: aartiq-macos-arm64
+          path: aartiq-browser/release/*.dmg
 
   # ============================================================================
   # DESKTOP BUILD - MACOS X64
@@ -309,33 +309,33 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Cache Electron
         uses: actions/cache@v4
         with:
           path: ${{ env.ELECTRON_CACHE_DIR }}
-          key: ${{ runner.os }}-electron-${{ hashFiles('comet-browser/package-lock.json') }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Install Dependencies (npm ci - deterministic)
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm ci --legacy-peer-deps
 
       - name: Rebuild Native Modules
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npx electron-rebuild -f -w robotjs || npx electron-rebuild -f -w sharp || echo "Native rebuild completed"
 
       - name: Cache Next.js
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Build macOS x64
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
           ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
           APPLE_SIGNING_IDENTITY: "-"
@@ -344,8 +344,8 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-macos-x64
-          path: comet-browser/release/*.dmg
+          name: aartiq-macos-x64
+          path: aartiq-browser/release/*.dmg
 
   # ============================================================================
   # DESKTOP BUILD - LINUX
@@ -372,33 +372,33 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Cache Electron
         uses: actions/cache@v4
         with:
           path: ${{ env.ELECTRON_CACHE_DIR }}
-          key: ${{ runner.os }}-electron-${{ hashFiles('comet-browser/package-lock.json') }}
+          key: ${{ runner.os }}-electron-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Install Dependencies (npm ci - deterministic)
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm ci --legacy-peer-deps
 
       - name: Rebuild Native Modules
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: |
           npx electron-rebuild -f -w robotjs || npx electron-rebuild -f -w sharp || echo "Native rebuild completed"
 
       - name: Cache Next.js
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Build Linux
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
           ELECTRON_CACHE_DIR: ${{ env.ELECTRON_CACHE_DIR }}
         run: npm run build && npx electron-builder --linux AppImage --x64
@@ -406,8 +406,8 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-linux
-          path: comet-browser/release/*.AppImage
+          name: aartiq-linux
+          path: aartiq-browser/release/*.AppImage
 
   # ============================================================================
   # CREATE RELEASE
@@ -434,18 +434,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: |
-            # Comet AI Browser v${{ needs.get-version.outputs.version }}
+            # Aartiq Browser v${{ needs.get-version.outputs.version }}
 
             ## Downloads
 
             | Platform | File |
             |----------|------|
-            | Windows | `Comet.Browser.Setup.*.exe` |
+            | Windows | `Aartiq.Browser.Setup.*.exe` |
             | macOS Apple Silicon | `*-arm64.dmg` |
             | macOS Intel | `*-x64.dmg` |
-            | Linux | `Comet.Browser-*.AppImage` |
+            | Linux | `Aartiq.Browser-*.AppImage` |
             | Android | `app-release.apk` |
-            | iOS | `Comet-AI.ipa` |
+            | iOS | `Aartiq.ipa` |
 
             ---
             Built with by [Latestinssan](https://github.com/Preet3627)

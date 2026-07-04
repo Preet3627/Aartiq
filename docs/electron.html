@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comet-AI — Electron Desktop Integration Guide</title>
+<title>Aartiq — Electron Desktop Integration Guide</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@700;800;900&family=DM+Sans:wght@300;400;500;600&display=swap');
 :root{--bg:#080b10;--s1:#0e1420;--s2:#141c2e;--s3:#1a2438;--bd:#1e2d4a;--cyan:#00d4ff;--blue:#3d7eff;--purple:#9b6dff;--green:#00e5a0;--orange:#ff8c42;--pink:#ff4fa3;--yellow:#ffd60a;--text:#e8edf5;--muted:#7a8ba8;--dim:#4a5a70;--code:#070a0f;}
@@ -117,8 +117,8 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
 <!-- HERO -->
 <div class="hero">
   <div class="hbadge">Electron · CEF · RobotJS · Tesseract · MCP · Flutter Bridge</div>
-  <h1><span class="brand">Comet-AI</span><span class="sub">Electron Desktop Integration Guide</span></h1>
-  <p class="hdesc">Complete reference for building the Comet-AI agentic desktop browser with Electron + CEF sandbox, cross-app RobotJS automation, Tesseract OCR click targeting, Flutter companion control, enhanced MCP v2, screen vision AI, and security-gated desktop actions.</p>
+  <h1><span class="brand">Aartiq</span><span class="sub">Electron Desktop Integration Guide</span></h1>
+  <p class="hdesc">Complete reference for building the Aartiq agentic desktop browser with Electron + CEF sandbox, cross-app RobotJS automation, Tesseract OCR click targeting, Flutter companion control, enhanced MCP v2, screen vision AI, and security-gated desktop actions.</p>
   <div class="htags">
     <span class="ht hc">Electron 32+</span>
     <span class="ht hb">CEF Sandbox</span>
@@ -161,7 +161,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
     <div class="s-icon si-purple">🤖</div>
     <h2>5. AI Provider Integration</h2>
   </div>
-  <p>Comet-AI Desktop supports multiple LLM providers via a unified <code>AiProviderService</code> interface. All calls are validated by the security layer before dispatch and support streaming responses via IPC back to the renderer UI.</p>
+  <p>Aartiq Desktop supports multiple LLM providers via a unified <code>AiProviderService</code> interface. All calls are validated by the security layer before dispatch and support streaming responses via IPC back to the renderer UI.</p>
 
   <h3>Supported Models — Feb 2026</h3>
   <div class="grid-3">
@@ -223,7 +223,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
   onChunk?: (chunk: <span class="kw">string</span>) =&gt; <span class="kw">void</span>;
 }
 
-<span class="kw">export class</span> <span class="cls">CometAiEngine</span> {
+<span class="kw">export class</span> <span class="cls">AartiqAiEngine</span> {
   <span class="kw">private</span> gemini: <span class="cls">GoogleGenerativeAI</span>;
   <span class="kw">private</span> groq: <span class="cls">Groq</span>;
   <span class="kw">private</span> openai: <span class="cls">OpenAI</span>;
@@ -332,7 +332,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
     <div class="s-icon si-pink">🤖</div>
     <h2>6. RobotJS Cross-App Control <span class="new-feature">★ New</span></h2>
   </div>
-  <p>RobotJS gives Comet-AI OS-level mouse and keyboard control — it can click buttons in any app, type text, trigger shortcuts, and scroll, all from the main Electron process. This is the most powerful and dangerous capability in the entire stack: one misfire can click "Confirm Delete" in the wrong window.</p>
+  <p>RobotJS gives Aartiq OS-level mouse and keyboard control — it can click buttons in any app, type text, trigger shortcuts, and scroll, all from the main Electron process. This is the most powerful and dangerous capability in the entire stack: one misfire can click "Confirm Delete" in the wrong window.</p>
 
   <div class="robot-pipeline">
     <div class="flow-label">// RobotJS Action Pipeline</div>
@@ -358,7 +358,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
   </div>
 
   <h3>robot-service.ts — Gated RobotJS Executor</h3>
-  <pre><code><span class="cmt">// robot-service.ts — Comet-AI Desktop
+  <pre><code><span class="cmt">// robot-service.ts — Aartiq Desktop
 // OS-level cross-app automation via RobotJS
 // ALL actions gated by PermissionStore + user confirmation</span>
 
@@ -366,7 +366,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
 <span class="kw">import</span> { screen } <span class="kw">from</span> <span class="str">'electron'</span>;
 <span class="kw">import</span> { z } <span class="kw">from</span> <span class="str">'zod'</span>;
 <span class="kw">import</span> { <span class="cls">PermissionStore</span> } <span class="kw">from</span> <span class="str">'./permission-store'</span>;
-<span class="kw">import</span> { <span class="cls">CometSecurityService</span> } <span class="kw">from</span> <span class="str">'./security-service'</span>;
+<span class="kw">import</span> { <span class="cls">AartiqSecurityService</span> } <span class="kw">from</span> <span class="str">'./security-service'</span>;
 
 <span class="cmt">// Zod schemas for all action types</span>
 <span class="kw">const</span> <span class="cls">ClickAction</span> = z.<span class="fn">object</span>({
@@ -450,7 +450,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
     <span class="kw">this</span>.lastAction = <span class="cls">Date</span>.<span class="fn">now</span>();
 
     <span class="cmt">// 6. Audit log</span>
-    <span class="cls">CometSecurityService</span>.<span class="fn">createAuditEntry</span>(<span class="str">'robot.execute'</span>, {
+    <span class="cls">AartiqSecurityService</span>.<span class="fn">createAuditEntry</span>(<span class="str">'robot.execute'</span>, {
       actionType: action.type,
       reason: action.reason,
     });
@@ -482,7 +482,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
     <div class="s-icon si-yellow">👁️</div>
     <h2>7. Tesseract OCR Click Engine <span class="new-feature">★ New</span></h2>
   </div>
-  <p>The Tesseract OCR engine allows Comet-AI to "see" the screen and click any button or text element in any app — even native desktop apps with no DOM. It captures the screen, extracts text regions with bounding boxes, resolves the target with LLM assistance, and executes the click via RobotJS.</p>
+  <p>The Tesseract OCR engine allows Aartiq to "see" the screen and click any button or text element in any app — even native desktop apps with no DOM. It captures the screen, extracts text regions with bounding boxes, resolves the target with LLM assistance, and executes the click via RobotJS.</p>
 
   <div class="ocr-panel">
     <div class="flow-label">// OCR Click Pipeline</div>
@@ -507,13 +507,13 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
   </div>
 
   <h3>tesseract-service.ts — Screen OCR + Click</h3>
-  <pre><code><span class="cmt">// tesseract-service.ts — Comet-AI Desktop
+  <pre><code><span class="cmt">// tesseract-service.ts — Aartiq Desktop
 // Screen capture → Tesseract WASM OCR → click target resolution</span>
 
 <span class="kw">import</span> { <span class="fn">createWorker</span> } <span class="kw">from</span> <span class="str">'tesseract.js'</span>;
 <span class="kw">import</span> { desktopCapturer, screen } <span class="kw">from</span> <span class="str">'electron'</span>;
 <span class="kw">import</span> sharp <span class="kw">from</span> <span class="str">'sharp'</span>;
-<span class="kw">import</span> { <span class="cls">CometAiEngine</span> } <span class="kw">from</span> <span class="str">'./ai-engine'</span>;
+<span class="kw">import</span> { <span class="cls">AartiqAiEngine</span> } <span class="kw">from</span> <span class="str">'./ai-engine'</span>;
 <span class="kw">import</span> { <span class="cls">RobotService</span>, <span class="cls">RobotAction</span> } <span class="kw">from</span> <span class="str">'./robot-service'</span>;
 
 <span class="kw">export interface</span> <span class="cls">OcrWord</span> {
@@ -582,7 +582,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
   <span class="cmt">/** Find and click a text element via OCR + LLM resolution */</span>
   <span class="kw">async</span> <span class="fn">ocrClick</span>(
     targetDescription: <span class="kw">string</span>,
-    ai: <span class="cls">CometAiEngine</span>,
+    ai: <span class="cls">AartiqAiEngine</span>,
     robot: <span class="cls">RobotService</span>,
     perms: <span class="kw">any</span>
   ): <span class="cls">Promise</span>&lt;{ success: <span class="kw">boolean</span>; clickedText?: <span class="kw">string</span> }&gt; {
@@ -680,7 +680,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
   <span class="kw">private</span> db!: <span class="cls">Database</span>.<span class="cls">Database</span>;
 
   <span class="kw">async</span> <span class="fn">load</span>(): <span class="cls">Promise</span>&lt;<span class="kw">void</span>&gt; {
-    <span class="kw">const</span> dbPath = path.<span class="fn">join</span>(app.<span class="fn">getPath</span>(<span class="str">'userData'</span>), <span class="str">'comet-permissions.db'</span>);
+    <span class="kw">const</span> dbPath = path.<span class="fn">join</span>(app.<span class="fn">getPath</span>(<span class="str">'userData'</span>), <span class="str">'aartiq-permissions.db'</span>);
     <span class="kw">this</span>.db = <span class="kw">new</span> <span class="cls">Database</span>(dbPath);
     <span class="kw">this</span>.db.<span class="fn">exec</span>(<span class="str">`
       CREATE TABLE IF NOT EXISTS permissions (
@@ -774,7 +774,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
 <span class="kw">import</span> { <span class="cls">Server</span> } <span class="kw">from</span> <span class="str">'socket.io'</span>;
 <span class="kw">import</span> { <span class="fn">createServer</span> } <span class="kw">from</span> <span class="str">'http'</span>;
 <span class="kw">import</span> { <span class="fn">randomBytes</span>, <span class="fn">createHmac</span> } <span class="kw">from</span> <span class="str">'crypto'</span>;
-<span class="kw">import</span> { <span class="cls">CometAiEngine</span> } <span class="kw">from</span> <span class="str">'./ai-engine'</span>;
+<span class="kw">import</span> { <span class="cls">AartiqAiEngine</span> } <span class="kw">from</span> <span class="str">'./ai-engine'</span>;
 <span class="kw">import</span> { <span class="cls">TesseractOcrService</span> } <span class="kw">from</span> <span class="str">'./tesseract-service'</span>;
 
 <span class="kw">export class</span> <span class="cls">FlutterBridgeServer</span> {
@@ -783,7 +783,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
   <span class="kw">private</span> connectedDevices = <span class="kw">new</span> <span class="cls">Map</span>&lt;<span class="kw">string</span>, <span class="kw">string</span>&gt;(); <span class="cmt">// socketId → deviceId</span>
 
   <span class="fn">constructor</span>(
-    <span class="kw">private</span> ai: <span class="cls">CometAiEngine</span>,
+    <span class="kw">private</span> ai: <span class="cls">AartiqAiEngine</span>,
     <span class="kw">private</span> ocr: <span class="cls">TesseractOcrService</span>
   ) {
     <span class="kw">this</span>.secret = <span class="fn">randomBytes</span>(<span class="num">24</span>).<span class="fn">toString</span>(<span class="str">'hex'</span>); <span class="cmt">// shown as QR</span>
@@ -899,7 +899,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
     <div class="s-icon si-cyan">🔌</div>
     <h2>10. MCP Enhanced (v2) <span class="new-feature">★ Desktop Additions</span></h2>
   </div>
-  <p>Comet-AI Desktop extends the Model Context Protocol with new desktop-only servers. Beyond the original Gmail/GitHub/Notion integrations, the Electron version adds FileSystem, NativeApp (AppleScript/PowerShell), ScreenContext (OCR as a tool), and Flutter bridge MCP servers.</p>
+  <p>Aartiq Desktop extends the Model Context Protocol with new desktop-only servers. Beyond the original Gmail/GitHub/Notion integrations, the Electron version adds FileSystem, NativeApp (AppleScript/PowerShell), ScreenContext (OCR as a tool), and Flutter bridge MCP servers.</p>
 
   <div class="mcp-grid">
     <div class="mcp-card">
@@ -1018,7 +1018,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
     <div class="s-icon si-blue">🔍</div>
     <h2>11. Web Search Integration</h2>
   </div>
-  <p>Comet-AI Desktop supports three search providers — Brave (privacy-first, no tracking), Tavily (AI-optimized with summaries), and SerpAPI (comprehensive Google results). All run via Axios in the main process and results are injected into the LLM context window.</p>
+  <p>Aartiq Desktop supports three search providers — Brave (privacy-first, no tracking), Tavily (AI-optimized with summaries), and SerpAPI (comprehensive Google results). All run via Axios in the main process and results are injected into the LLM context window.</p>
 
   <table>
     <thead><tr><th>Provider</th><th>Best For</th><th>Free Tier</th><th>Key Env Var</th></tr></thead>
@@ -1086,7 +1086,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
     <div class="s-icon si-green">🧠</div>
     <h2>12. RAG + Local Vector DB (LanceDB)</h2>
   </div>
-  <p>Comet-AI Desktop uses <strong>LanceDB</strong> (the better-supported desktop alternative to ObjectBox) for local vector storage. Documents are chunked, embedded, and stored on-device. Retrieval augments every AI query with relevant private context.</p>
+  <p>Aartiq Desktop uses <strong>LanceDB</strong> (the better-supported desktop alternative to ObjectBox) for local vector storage. Documents are chunked, embedded, and stored on-device. Retrieval augments every AI query with relevant private context.</p>
 
   <pre><code><span class="cmt">// rag-service.ts — LanceDB local vector RAG
 // Embeds text with Gemini embedding API, stores in LanceDB</span>
@@ -1162,7 +1162,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
     <div class="s-icon si-purple">📺</div>
     <h2>13. Screen Capture & Vision AI <span class="new-feature">★ New</span></h2>
   </div>
-  <p>Comet-AI Desktop can describe, analyze, and act on the current screen using multimodal vision AI. Uses Electron's <code>desktopCapturer</code> API to grab a screenshot and sends it as a base64 image to Claude Sonnet's vision endpoint.</p>
+  <p>Aartiq Desktop can describe, analyze, and act on the current screen using multimodal vision AI. Uses Electron's <code>desktopCapturer</code> API to grab a screenshot and sends it as a base64 image to Claude Sonnet's vision endpoint.</p>
 
   <pre><code><span class="cmt">// screen-vision-service.ts — AI-powered screen understanding</span>
 
@@ -1206,7 +1206,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
     <div class="s-icon si-orange">🎤</div>
     <h2>14. Voice Control <span class="new-feature">★ New</span></h2>
   </div>
-  <p>Users can speak commands to Comet-AI Desktop. The app captures audio via the OS microphone (gated by Electron permission request), transcribes via OpenAI Whisper, and routes the text through the normal AI + robot pipeline.</p>
+  <p>Users can speak commands to Aartiq Desktop. The app captures audio via the OS microphone (gated by Electron permission request), transcribes via OpenAI Whisper, and routes the text through the normal AI + robot pipeline.</p>
 
   <pre><code><span class="cmt">// voice-service.ts — Mic capture → Whisper transcription → AI command</span>
 
@@ -1238,7 +1238,7 @@ footer{text-align:center;color:var(--dim);font-size:.82rem;padding:36px;border-t
 
 <span class="cmt">// In main.ts — register voice IPC handlers</span>
 ipcMain.<span class="fn">handle</span>(<span class="str">'voice:transcribe'</span>, <span class="kw">async</span> (_, audioBase64: <span class="kw">string</span>) =&gt; {
-  <span class="kw">const</span> tmpPath = path.<span class="fn">join</span>(os.<span class="fn">tmpdir</span>(), <span class="str">'comet-voice.wav'</span>);
+  <span class="kw">const</span> tmpPath = path.<span class="fn">join</span>(os.<span class="fn">tmpdir</span>(), <span class="str">'aartiq-voice.wav'</span>);
   fs.<span class="fn">writeFileSync</span>(tmpPath, <span class="cls">Buffer</span>.<span class="fn">from</span>(audioBase64, <span class="str">'base64'</span>));
   <span class="kw">const</span> voice = <span class="kw">new</span> <span class="cls">VoiceService</span>();
   <span class="kw">const</span> text = <span class="kw">await</span> voice.<span class="fn">transcribeFile</span>(tmpPath);
@@ -1248,7 +1248,7 @@ ipcMain.<span class="fn">handle</span>(<span class="str">'voice:transcribe'</spa
 
   <div class="alert alert-info">
     <div class="alert-icon">ℹ️</div>
-    <div class="alert-body">Record audio in the renderer using the Web Audio API (<code>MediaRecorder</code>), export as WAV blob, encode as base64, and send via <code>cometBridge.transcribeVoice(base64)</code>. The mic permission request dialog is shown to the user only once per session.</div>
+    <div class="alert-body">Record audio in the renderer using the Web Audio API (<code>MediaRecorder</code>), export as WAV blob, encode as base64, and send via <code>aartiqBridge.transcribeVoice(base64)</code>. The mic permission request dialog is shown to the user only once per session.</div>
   </div>
 </section>
 
@@ -1392,7 +1392,7 @@ ipcMain.<span class="fn">handle</span>(<span class="str">'voice:transcribe'</spa
       <tbody>
         <tr><td>contextIsolation: true in all BrowserWindow configs</td><td style="color:var(--accent-green)">✅ Required</td></tr>
         <tr><td>nodeIntegration: false in all BrowserWindow configs</td><td style="color:var(--accent-green)">✅ Required</td></tr>
-        <tr><td>CometSecurityService.classify() before every LLM call</td><td style="color:var(--accent-green)">✅ Required</td></tr>
+        <tr><td>AartiqSecurityService.classify() before every LLM call</td><td style="color:var(--accent-green)">✅ Required</td></tr>
         <tr><td>User confirmation dialog before any robot write action</td><td style="color:var(--accent-green)">✅ Required</td></tr>
         <tr><td>Emergency kill shortcut (Cmd/Ctrl+Shift+Esc) registered</td><td style="color:var(--accent-green)">✅ Required</td></tr>
         <tr><td>RobotJS coordinate bounds-checked before every click</td><td style="color:var(--accent-green)">✅ Required</td></tr>
@@ -1413,7 +1413,7 @@ ipcMain.<span class="fn">handle</span>(<span class="str">'voice:transcribe'</spa
 <hr>
 
 <footer>
-  Comet-AI Electron Desktop Integration Guide — v2.0 — February 2026<br>
+  Aartiq Electron Desktop Integration Guide — v2.0 — February 2026<br>
   Electron 32+ · CEF · RobotJS · Tesseract · Flutter Bridge · MCP v2<br>
   <span style="color:var(--accent-cyan)">// Security-first. Every action gated. Every action logged.</span>
 </footer>

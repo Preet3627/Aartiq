@@ -30,7 +30,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
-  if (!window.Create(L"Comet-AI", origin, size)) {
+  if (!window.Create(L"Aartiq", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(false);
@@ -45,7 +45,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
       auto window = std::make_shared<FlutterWindow>(project);
       Win32Window::Point origin(10, 10);
       Win32Window::Size size(1280, 720);
-      if (!window->Create(L"Comet-AI", origin, size)) {
+      if (!window->Create(L"Aartiq", origin, size)) {
         std::cerr << "Failed to create a new window" << std::endl;
       }
       window->SetQuitOnClose(false);

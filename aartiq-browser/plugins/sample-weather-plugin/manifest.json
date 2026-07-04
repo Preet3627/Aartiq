@@ -1,0 +1,26 @@
+{
+  "id": "sample-weather-plugin",
+  "name": "Weather Plugin",
+  "version": "1.0.0",
+  "description": "Get weather information for any location using web search",
+  "author": "Aartiq",
+  "type": "command",
+  "permissions": ["network"],
+  "hasConfig": false,
+  "commands": [
+    {
+      "id": "get-weather",
+      "name": "Get Weather",
+      "description": "Get current weather for a city",
+      "params": [
+        {
+          "name": "city",
+          "type": "string",
+          "required": true,
+          "description": "City name"
+        }
+      ]
+    }
+  ],
+  "entry": "index.js"
+}

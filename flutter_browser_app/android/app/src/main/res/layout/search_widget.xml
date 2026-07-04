@@ -28,7 +28,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="12dp"
-            android:text="Search with Comet AI..."
+            android:text="Search with Aartiq..."
             android:textColor="#80FFFFFF"
             android:textSize="16sp" />
 

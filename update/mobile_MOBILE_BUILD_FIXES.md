@@ -84,7 +84,7 @@ See: `ANDROID_BUILD_FIX.md`
 
 ### Android
 ```bash
-cd CometBrowserMobile/comet_ai
+cd AartiqBrowserMobile/aartiq
 flutter clean
 flutter pub get
 flutter build apk --release
@@ -92,7 +92,7 @@ flutter build apk --release
 
 ### iOS
 ```bash
-cd CometBrowserMobile/comet_ai
+cd AartiqBrowserMobile/aartiq
 flutter clean
 flutter pub get
 cd ios

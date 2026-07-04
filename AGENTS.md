@@ -1,14 +1,14 @@
-# Comet-AI Architecture
+# Aartiq Architecture
 
 ## Overview
 
-Comet-AI is a cross-platform AI-native browser with OS automation capabilities. It consists of three main components connected via WebSocket and IPC.
+Aartiq is a cross-platform AI-native browser with OS automation capabilities. It consists of three main components connected via WebSocket and IPC.
 
 ## Component Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                   comet-browser (Electron)                   │
+│                   aartiq-browser (Electron)                   │
 │  ┌─────────────┐  ┌──────────────┐  ┌──────────────────┐   │
 │  │ main.js      │  │ Next.js UI   │  │ Background       │   │
 │  │ (IPC, window │◄─┤ (React/TS)   │  │ Service          │   │
@@ -40,13 +40,13 @@ Comet-AI is a cross-platform AI-native browser with OS automation capabilities. 
 
 | Path | Purpose |
 |------|---------|
-| `comet-browser/` | Electron desktop application |
-| `comet-browser/main.js` | Main process entry point |
-| `comet-browser/src/components/` | React UI components |
-| `comet-browser/src/lib/` | Services, automation, utilities |
-| `comet-browser/src/lib/native-panels/` | Swift native macOS panels (14 files) |
-| `comet-browser/src/service/` | Background task scheduler |
-| `comet-browser/scripts/` | Build and service installation scripts |
+| `aartiq-browser/` | Electron desktop application |
+| `aartiq-browser/main.js` | Main process entry point |
+| `aartiq-browser/src/components/` | React UI components |
+| `aartiq-browser/src/lib/` | Services, automation, utilities |
+| `aartiq-browser/src/lib/native-panels/` | Swift native macOS panels (14 files) |
+| `aartiq-browser/src/service/` | Background task scheduler |
+| `aartiq-browser/scripts/` | Build and service installation scripts |
 | `flutter_browser_app/` | Flutter mobile companion |
 | `Landing_Page/` | Documentation site (Next.js) |
 

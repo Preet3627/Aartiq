@@ -30,7 +30,7 @@ jobs:
           elif [[ -n "${{ github.event.inputs.version }}" ]]; then
             TAG="${{ github.event.inputs.version }}"
           else
-            TAG="v$(node -p "require('./comet-browser/package.json').version")"
+            TAG="v$(node -p "require('./aartiq-browser/package.json').version")"
           fi
           
           VERSION="${TAG#v}"
@@ -57,32 +57,32 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Remove package-lock.json (Windows)
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
         shell: pwsh
 
       - name: Install Dependencies
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm install --legacy-peer-deps
 
       - name: Cache Next.js build
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
 
       - name: Build MSIX (AppX) Target
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
         run: npm run build && npx electron-builder --win appx --x64
 
       - name: Rename to MSIX (Optional helper)
-        working-directory: comet-browser/release
+        working-directory: aartiq-browser/release
         run: |
           Get-ChildItem -Filter *.appx | Rename-Item -NewName { $_.Name -replace '\.appx$','.msix' }
         shell: pwsh
@@ -91,10 +91,10 @@ jobs:
       - name: Upload MSIX Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-windows-msix
+          name: aartiq-windows-msix
           path: |
-            comet-browser/release/*.msix
-            comet-browser/release/*.appx
+            aartiq-browser/release/*.msix
+            aartiq-browser/release/*.appx
 
   create-msix-release:
     name: Add MSIX to Release
@@ -106,7 +106,7 @@ jobs:
       - name: Download MSIX Artifact
         uses: actions/download-artifact@v4
         with:
-          name: comet-ai-windows-msix
+          name: aartiq-windows-msix
           path: release-artifacts
 
       - name: Upload Assets

@@ -392,7 +392,7 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
 
     try {
       final uri = Uri.parse(qrData);
-      if (uri.scheme == 'comet-ai') {
+      if (uri.scheme == 'aartiq') {
         if (uri.host == 'connect') {
           final ip = uri.queryParameters['ip'];
           final port = uri.queryParameters['port'];
@@ -422,10 +422,10 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
             throw Exception('Invalid approve QR code data');
           }
         } else {
-          throw Exception('Unknown Comet-AI QR Action');
+          throw Exception('Unknown Aartiq QR Action');
         }
       } else {
-        throw Exception('Not a Comet-AI QR code');
+        throw Exception('Not a Aartiq QR code');
       }
     } catch (e) {
       if (mounted) {

@@ -27,7 +27,7 @@ jobs:
       - name: Extra version
         id: pkg
         run: |
-          VERSION=$(grep '"version":' comet-browser/package.json | head -1 | awk -F: '{ print $2 }' | sed 's/[", ]//g')
+          VERSION=$(grep '"version":' aartiq-browser/package.json | head -1 | awk -F: '{ print $2 }' | sed 's/[", ]//g')
           INPUT_VERSION="${{ github.event.inputs.version_name }}"
           INPUT_TAG="${{ github.event.inputs.release_tag }}"
           
@@ -138,7 +138,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-android-apk
+          name: aartiq-android-apk
           path: flutter_browser_app/build/app/outputs/flutter-apk/app-release.apk
 
   # ============================================================================
@@ -188,13 +188,13 @@ jobs:
         run: |
           mkdir Payload
           cp -r build/ios/iphoneos/Runner.app Payload/
-          zip -r Comet-AI.ipa Payload
+          zip -r Aartiq.ipa Payload
           
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-ios-ipa
-          path: flutter_browser_app/Comet-AI.ipa
+          name: aartiq-ios-ipa
+          path: flutter_browser_app/Aartiq.ipa
 
   # ============================================================================
   # DESKTOP BUILD
@@ -211,19 +211,19 @@ jobs:
           - target: windows
             os: windows-latest
             build_cmd: npm run dist:win
-            artifact_path: comet-browser/release/*.exe
+            artifact_path: aartiq-browser/release/*.exe
           - target: macos-x64
             os: macos-latest
             build_cmd: npm run dist:mac:x64
-            artifact_path: comet-browser/release/*.dmg
+            artifact_path: aartiq-browser/release/*.dmg
           - target: macos-arm64
             os: macos-14
             build_cmd: npm run dist:mac:arm64
-            artifact_path: comet-browser/release/*.dmg
+            artifact_path: aartiq-browser/release/*.dmg
           - target: linux
             os: ubuntu-latest
             build_cmd: npm run build && npx electron-builder --linux AppImage --x64
-            artifact_path: comet-browser/release/*.AppImage
+            artifact_path: aartiq-browser/release/*.AppImage
 
     steps:
       - uses: actions/checkout@v4
@@ -233,7 +233,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: comet-browser/package-lock.json
+          cache-dependency-path: aartiq-browser/package-lock.json
 
       - name: Install Linux Dependencies
         if: matrix.target == 'linux'
@@ -243,39 +243,39 @@ jobs:
 
       - name: Remove package-lock.json (Non-Windows)
         if: runner.os != 'Windows'
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: rm -f package-lock.json
 
       - name: Remove package-lock.json (Windows)
         if: runner.os == 'Windows'
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: if (Test-Path package-lock.json) { Remove-Item package-lock.json -Force }
         shell: pwsh
 
       - name: Install Dependencies
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm install --legacy-peer-deps
 
       - name: Rebuild native modules (robotjs)
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm rebuild robotjs || npm install --force
 
       - name: Run Jest tests
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         run: npm test
 
       - name: Cache Next.js build
         uses: actions/cache@v4
         with:
-          path: comet-browser/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('comet-browser/package-lock.json') }}
+          path: aartiq-browser/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-nextjs-
 
       - name: Build App
-        working-directory: comet-browser
+        working-directory: aartiq-browser
         env:
-          NEXT_PUBLIC_APP_NAME: Comet
+          NEXT_PUBLIC_APP_NAME: Aartiq
           NEXT_PUBLIC_APP_VERSION: ${{ needs.get-version.outputs.version }}
           APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.target, 'macos') && '-' || '' }}
         run: ${{ matrix.build_cmd }}
@@ -283,7 +283,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comet-ai-desktop-${{ matrix.target }}
+          name: aartiq-desktop-${{ matrix.target }}
           path: ${{ matrix.artifact_path }}
 
   # ============================================================================

@@ -1,10 +1,10 @@
-# Comet-AI Component Documentation
+# Aartiq Component Documentation
 
-Complete reference for all components across the Comet-AI project.
+Complete reference for all components across the Aartiq project.
 
 ---
 
-## Desktop Browser (`comet-browser`)
+## Desktop Browser (`aartiq-browser`)
 
 ### AI Components (`src/components/ai/`)
 
@@ -127,13 +127,13 @@ Complete reference for all components across the Comet-AI project.
 | `desktop_control_page.dart` | 1172 | `/desktop-control` | Remote desktop control with AI chat |
 | `agent_chat_page.dart` | 1020 | `/agent-chat` | Agent task execution interface |
 | `connect_desktop_page.dart` | 996 | `/connect-desktop` | QR scanner for desktop pairing |
-| `comet_agent_service.dart` | 888 | - | Background agent service |
+| `aartiq_agent_service.dart` | 888 | - | Background agent service |
 | `sync_service.dart` | 843 | - | WiFi/WebRTC sync service |
 | `remote_settings_page.dart` | 730 | `/remote-settings` | Remote settings control |
 | `automation_page.dart` | 648 | `/automation` | Scheduled task management |
 | `webview_tab.dart` | 642 | - | WebView tab renderer |
 | `auth_page.dart` | 580 | `/auth` | Authentication page |
-| `comet_home_page.dart` | 576 | `/` | Main browser home |
+| `aartiq_home_page.dart` | 576 | `/` | Main browser home |
 | `browser.dart` | 538 | - | Browser controller |
 | `pdf_viewer_page.dart` | 511 | `/pdf-viewer` | PDF viewing & sharing |
 | `splash_screen.dart` | 187 | - | App splash screen |
@@ -194,7 +194,7 @@ Complete reference for all components across the Comet-AI project.
 
 ---
 
-## Background Service (`comet-browser/src/service/`)
+## Background Service (`aartiq-browser/src/service/`)
 
 | File | Description |
 |------|-------------|
@@ -273,8 +273,8 @@ MultiProvider
 ## File Organization
 
 ```
-Comet-AI/
-├── comet-browser/                    # Electron Desktop
+Aartiq/
+├── aartiq-browser/                    # Electron Desktop
 │   ├── main.js                       # Main process
 │   ├── preload.js                    # Preload scripts
 │   ├── src/

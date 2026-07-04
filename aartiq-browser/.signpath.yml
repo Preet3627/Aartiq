@@ -1,0 +1,27 @@
+# SignPath configuration for Aartiq Browser
+# Free code signing provided by SignPath Foundation
+
+version: 1.0
+
+artifacts:
+  - name: Aartiq Browser Windows Installer
+    description: Windows NSIS installer for Aartiq Browser
+    type: nsis-installer
+    
+    file-metadata-restrictions:
+      product-name: Aartiq Browser
+      product-version: ${VERSION}
+      
+    signing-configuration:
+      kind: authenticode
+      
+  - name: Aartiq Browser Executable  
+    description: Main Aartiq Browser executable
+    type: pe-file
+    
+    file-metadata-restrictions:
+      product-name: Aartiq Browser
+      product-version: ${VERSION}
+      
+    signing-configuration:
+      kind: authenticode

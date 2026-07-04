@@ -71,7 +71,7 @@ The `jvmToolchain` was redundant and causing conflicts with the existing configu
 ## Testing
 Build the Android APK:
 ```bash
-cd CometBrowserMobile/comet_ai
+cd AartiqBrowserMobile/aartiq
 flutter build apk --release
 ```
 

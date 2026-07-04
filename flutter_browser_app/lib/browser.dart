@@ -13,7 +13,7 @@ import 'package:flutter_browser/clipboard_monitor.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 
-import 'pages/comet_home_page.dart';
+import 'pages/aartiq_home_page.dart';
 import 'pages/ai_chat_page.dart';
 import 'app_bar/tab_viewer_app_bar.dart';
 import 'models/browser_model.dart';
@@ -28,7 +28,7 @@ class Browser extends StatefulWidget {
 
 class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
   static const platform =
-      MethodChannel('com.comet_ai_com.comet_ai.intent_data');
+      MethodChannel('com.aartiq.intent_data');
 
   var _isRestored = false;
   final ClipboardMonitor _clipboardMonitor = ClipboardMonitor();
@@ -312,7 +312,7 @@ class _BrowserState extends State<Browser> with SingleTickerProviderStateMixin {
     final windowModel = Provider.of<WindowModel>(context, listen: true);
 
     if (windowModel.webViewTabs.isEmpty) {
-      return CometHomePage(
+      return AartiqHomePage(
         onSearch: (value) {
           final windowModel = Provider.of<WindowModel>(context, listen: false);
           final browserModel =

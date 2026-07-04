@@ -1,6 +1,6 @@
 display_name: Flutter Browser
-publisher_display_name: comet-ai
-identity_name: com.comet_ai_com.flutter_browser
+publisher_display_name: aartiq
+identity_name: com.aartiq.flutter_browser
 logo_path: assets/icon/icon.png
 capabilities: internetClient, location, microphone, webcam
 languages: en-us

@@ -2,7 +2,7 @@
 
 ## 🚀 New Features Overview
 
-This document outlines the implementation of advanced cross-app control features in Comet Browser.
+This document outlines the implementation of advanced cross-app control features in Aartiq Browser.
 
 ---
 

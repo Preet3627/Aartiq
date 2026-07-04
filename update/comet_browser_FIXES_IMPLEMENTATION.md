@@ -1,7 +1,7 @@
-# Comet Browser - Critical Fixes Implementation
+# Aartiq Browser - Critical Fixes Implementation
 
 ## Overview
-This document outlines all fixes implemented for the Comet Browser to address critical issues.
+This document outlines all fixes implemented for the Aartiq Browser to address critical issues.
 
 ---
 

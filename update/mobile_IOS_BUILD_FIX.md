@@ -10,7 +10,7 @@ The iOS build was failing due to CocoaPods dependency resolution issues with aud
 Temporarily commented out these dependencies in `pubspec.yaml` to allow the iOS build to complete successfully.
 
 ## Files Modified
-- `CometBrowserMobile/comet_ai/pubspec.yaml`
+- `AartiqBrowserMobile/aartiq/pubspec.yaml`
 
 ## Changes Made
 ```yaml

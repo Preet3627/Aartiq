@@ -1,8 +1,8 @@
-# Comet-AI Automation System - Complete Specification
+# Aartiq Automation System - Complete Specification
 
 ## Overview
 
-The Comet-AI Automation System enables scheduled task execution even when the browser is closed. It runs as a lightweight background service that can execute tasks like PDF generation, web scraping, AI prompts, and shell commands on a schedule.
+The Aartiq Automation System enables scheduled task execution even when the browser is closed. It runs as a lightweight background service that can execute tasks like PDF generation, web scraping, AI prompts, and shell commands on a schedule.
 
 ---
 
@@ -14,7 +14,7 @@ The Comet-AI Automation System enables scheduled task execution even when the br
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │   ┌─────────────────────────────────────────────────────────────────────┐  │
-│   │  comet-ai-service (Background Service)                              │  │
+│   │  aartiq-service (Background Service)                              │  │
 │   │  • Runs as SYSTEM user (no login required)                         │  │
 │   │  • System tray icon only                                           │  │
 │   │  • Executes scheduled tasks                                         │  │
@@ -24,7 +24,7 @@ The Comet-AI Automation System enables scheduled task execution even when the br
 │                         Browser ↔ Service IPC                               │
 │                                    │                                        │
 │   ┌─────────────────────────────────────────────────────────────────────┐  │
-│   │  Comet-AI Browser (GUI - Optional)                                  │  │
+│   │  Aartiq Browser (GUI - Optional)                                  │  │
 │   │  • Same tasks can run here too                                     │  │
 │   │  • View/manage scheduled tasks                                      │  │
 │   │  • Real-time task status                                            │  │
@@ -159,7 +159,7 @@ Execute an AI query and optionally save/notify the result.
     model: { provider: 'gemini', model: 'gemini-2.0-flash' }
   },
   output: {
-    path: '~/Documents/Comet-AI',
+    path: '~/Documents/Aartiq',
     filename: 'tech-news_{date}.txt'
   }
 }
@@ -343,7 +343,7 @@ AI Response:
 ## Storage Structure
 
 ```
-~/Documents/Comet-AI/
+~/Documents/Aartiq/
 ├── tasks.json                    # All scheduled tasks
 ├── queue.json                   # Pending task queue
 ├── results/
@@ -365,25 +365,25 @@ AI Response:
 
 ```powershell
 # Install as SYSTEM service (runs without login)
-schtasks /CREATE /SC ONSTART /TN "Comet-AI-Service" /TR "C:\Program Files\Comet-AI\service.exe" /RU SYSTEM /RL HIGHEST
+schtasks /CREATE /SC ONSTART /TN "Aartiq-Service" /TR "C:\Program Files\Aartiq\service.exe" /RU SYSTEM /RL HIGHEST
 
 # Or per-user (runs when user logs in)
-schtasks /CREATE /SC LOGON /TN "Comet-AI-Service" /TR "C:\Program Files\Comet-AI\service.exe"
+schtasks /CREATE /SC LOGON /TN "Aartiq-Service" /TR "C:\Program Files\Aartiq\service.exe"
 ```
 
 ### macOS (LaunchDaemon)
 
 ```xml
-<!-- /Library/LaunchDaemons/com.ai.comet-service.plist -->
+<!-- /Library/LaunchDaemons/com.ai.aartiq-service.plist -->
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.ai.comet-service</string>
+    <string>com.ai.aartiq-service</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Applications/Comet-AI.app/Contents/MacOS/comet-ai-service</string>
+        <string>/Applications/Aartiq.app/Contents/MacOS/aartiq-service</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -396,14 +396,14 @@ schtasks /CREATE /SC LOGON /TN "Comet-AI-Service" /TR "C:\Program Files\Comet-AI
 ### Linux (systemd)
 
 ```ini
-# ~/.config/systemd/user/comet-ai.service
+# ~/.config/systemd/user/aartiq.service
 [Unit]
-Description=Comet-AI Background Service
+Description=Aartiq Background Service
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/comet-ai-service
+ExecStart=/usr/bin/aartiq-service
 Restart=on-failure
 RestartSec=5
 
@@ -480,7 +480,7 @@ WantedBy=default.target
 ### Access Methods
 
 1. **Local HTTP Server** (Port 3999)
-   - Service serves files from `~/Documents/Comet-AI/public/`
+   - Service serves files from `~/Documents/Aartiq/public/`
    - Mobile accesses via `http://desktop-ip:3999/file.pdf`
 
 2. **Firebase Storage** (Future)

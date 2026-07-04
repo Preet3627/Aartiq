@@ -36,7 +36,7 @@ I have three recent web‑search results that give reliable, up‑to‑date fact
 
 I will extract the key points, include the source URLs, and then generate a PDF titled **“India – Overview 2024”** that contains this information. The PDF will be created with the  command; the content will be built solely from the data above, respecting the anti‑hallucination rule.
 </think>
-[GENERATE_PDF: India – Overview 2024 | author:Comet AI | subtitle:Key facts about geography, government, economy & demographics (2024) | screenshot:yes | 
+[GENERATE_PDF: India – Overview 2024 | author:Aartiq | subtitle:Key facts about geography, government, economy & demographics (2024) | screenshot:yes | 
 **India – Overview 2024**  
 
 *Source URLs are included inline.*
@@ -91,7 +91,7 @@ India, officially the Republic of India, is a South‑Asian nation that is the *
 
 ---  
 
-*Prepared by Comet AI, using real‑time web data (2024).*  
+*Prepared by Aartiq, using real‑time web data (2024).*  
 
 ]
 
@@ -203,7 +203,7 @@ MODEL:
 I have gathered the Wikipedia pages for India’s general overview, its economy, and its demographics. I will now extract the key information from each page and compile a concise PDF titled “India – Overview 2024”. The PDF will include sections on geography, government, economy (GDP, growth rate, major sectors), and demographics (population, density, age structure). I will cite the source URLs directly from the pages I just read.
 </think>
 
-[GENERATE_PDF: India – Overview 2024 | author:Comet AI | subtitle:Key facts about geography, government, economy & demographics (2024) | screenshot:yes | 
+[GENERATE_PDF: India – Overview 2024 | author:Aartiq | subtitle:Key facts about geography, government, economy & demographics (2024) | screenshot:yes | 
 **India – Overview 2024**  
 
 *Sources: https://en.wikipedia.org/wiki/India, https://en.wikipedia.org/wiki/Economy_of_India, https://en.wikipedia.org/wiki/Demographics_of_India*  
@@ -313,7 +313,7 @@ The web‑search commands returned result listings but not the actual content ne
 
 MODEL:
 
-[GENERATE_PDF: India – Overview 2024 | author:Comet AI | subtitle:Key facts about geography, government, economy & demographics (2024) | screenshot:yes | 
+[GENERATE_PDF: India – Overview 2024 | author:Aartiq AI | subtitle:Key facts about geography, government, economy & demographics (2024) | screenshot:yes | 
 **India – Overview 2024**  
 
 *Sources:*  

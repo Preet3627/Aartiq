@@ -1,4 +1,4 @@
-# Comet Browser - Installation & Launch Troubleshooting Guide
+# Aartiq Browser - Installation & Launch Troubleshooting Guide
 
 ## Problem: Browser runs in background but window doesn't show
 
@@ -57,7 +57,7 @@ This will:
 ## After Installation
 
 ### Where the .exe is installed:
-- **Default Location**: `C:\Users\<YourName>\AppData\Local\Programs\Comet Browser\`
+- **Default Location**: `C:\Users\<YourName>\AppData\Local\Programs\Aartiq Browser\`
 - **Desktop Shortcut**: Created automatically
 
 ### First Launch Checklist:
@@ -66,7 +66,7 @@ This will:
 2. **Window should appear within 3 seconds**
 3. **If window doesn't show**:
    - Open Task Manager (Ctrl+Shift+Esc)
-   - Check if "Comet Browser" is running
+   - Check if "Aartiq Browser" is running
    - If yes, kill it and try again
    - Check logs (see below)
 
@@ -75,10 +75,10 @@ This will:
 **Windows:**
 ```powershell
 # Navigate to app directory
-cd "$env:LOCALAPPDATA\Programs\Comet Browser"
+cd "$env:LOCALAPPDATA\Programs\Aartiq Browser"
 
 # Run from command line to see logs
-."Comet Browser.exe"
+."Aartiq Browser.exe"
 ```
 
 Look for these log messages:
@@ -149,7 +149,7 @@ npm run dist:win   # Creates .exe in release/ folder
 ## File Structure (After Build)
 
 ```
-comet-browser/
+aartiq-browser/
 ├── out/                    # Next.js static export (REQUIRED)
 │   ├── index.html         # Main entry point
 │   ├── _next/             # Next.js assets
@@ -162,7 +162,7 @@ comet-browser/
 ├── verify-build.js        # Pre-build verification
 ├── test-production.js     # Production mode tester
 └── release/               # Built installers (created by electron-builder)
-    └── Comet Browser Setup 0.1.7.exe
+    └── Aartiq Browser Setup 0.1.7.exe
 ```
 
 ## Diagnostic Commands

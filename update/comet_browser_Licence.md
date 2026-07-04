@@ -1,6 +1,6 @@
-# Third-Party Licenses for Comet Browser
+# Third-Party Licenses for Aartiq Browser
 
-Comet Browser utilizes various open-source software packages and libraries. We are grateful to the open-source community for their contributions. This document provides a list of these dependencies and their respective licenses.
+Aartiq Browser utilizes various open-source software packages and libraries. We are grateful to the open-source community for their contributions. This document provides a list of these dependencies and their respective licenses.
 
 ## Core Frameworks & Runtime
 
@@ -49,4 +49,4 @@ Comet Browser utilizes various open-source software packages and libraries. We a
 
 ---
 
-**Note:** This list may not be exhaustive and is subject to change with future updates to Comet Browser.
+**Note:** This list may not be exhaustive and is subject to change with future updates to Aartiq Browser.

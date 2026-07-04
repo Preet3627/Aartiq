@@ -363,7 +363,7 @@ class SyncService {
             try {
               String message = utf8.decode(dg.data);
               Map<String, dynamic> data = jsonDecode(message);
-              if (data['type'] == 'comet-ai-beacon') {
+              if (data['type'] == 'aartiq-beacon') {
                 String? deviceId = data['deviceId'];
                 if (deviceId != null &&
                     !_discoveredDeviceIds.contains(deviceId)) {
@@ -493,7 +493,7 @@ class SyncService {
         jsonEncode({
           'type': 'handshake',
           'deviceId': this.deviceId,
-          'deviceName': 'Comet Mobile (${Platform.operatingSystem})',
+          'deviceName': 'Aartiq Mobile (${Platform.operatingSystem})',
           'platform': 'mobile',
           'pairingCode': pairingCode,
         }),
@@ -825,7 +825,7 @@ class SyncService {
           'platform': device['platform'] ?? 'cloud',
           'connectionMode': 'cloud',
           'online': device['online'] ?? true,
-          'activeApp': 'Remote Comet Desktop',
+          'activeApp': 'Remote Aartiq Desktop',
           'screenOn': true,
         };
       }

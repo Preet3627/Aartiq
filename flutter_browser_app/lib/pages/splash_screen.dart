@@ -134,7 +134,7 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Column(
                     children: [
                       Text(
-                        'COMET',
+                        'AARTIQ',
                         style: GoogleFonts.outfit(
                           fontSize: 48,
                           fontWeight: FontWeight.w900,

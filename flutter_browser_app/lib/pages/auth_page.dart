@@ -233,7 +233,7 @@ class _AuthPageState extends State<AuthPage>
         const SizedBox(height: 12),
         Text(
           _isSignUp
-              ? 'Join the Comet ecosystem'
+              ? 'Join the Aartiq ecosystem'
               : 'Sign in to sync across devices',
           style: GoogleFonts.inter(
             fontSize: 14,

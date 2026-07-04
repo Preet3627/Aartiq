@@ -114,7 +114,7 @@ class _SettingsPageState extends State<SettingsPage> {
           _buildSettingsTile(
             context,
             'Set as Default Browser',
-            'Make Comet-AI your primary browser',
+            'Make Aartiq your primary browser',
             Icons.star_outline,
             () => _setAsDefaultBrowser(context),
           ),
@@ -227,8 +227,8 @@ class _SettingsPageState extends State<SettingsPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(Util.isDesktop()
-              ? 'Please set Comet-AI as default in your System Settings.'
-              : 'Please set Comet-AI as default in your System Settings.'),
+              ? 'Please set Aartiq as default in your System Settings.'
+              : 'Please set Aartiq as default in your System Settings.'),
         ),
       );
     }

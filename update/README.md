@@ -1,6 +1,6 @@
 # Update History & Fixes
 
-This directory contains the history of updates, bug fixes, and implementation guides that have been applied to the Comet Browser project.
+This directory contains the history of updates, bug fixes, and implementation guides that have been applied to the Aartiq Browser project.
 
 ## Recent Fixes (February 2026)
 
@@ -12,6 +12,6 @@ This directory contains the history of updates, bug fixes, and implementation gu
 
 ## File Key
 
--   `comet_browser_*.md`: Documentation related to the desktop Electron app.
+-   `aartiq_browser_*.md`: Documentation related to the desktop Electron app.
 -   `mobile_*.md`: Documentation related to the Flutter mobile app.
 -   `LIBRARY_UPDATES_*.md`: Logs of dependency updates.
