@@ -952,12 +952,12 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
 
         if (part.type === 'text-delta') {
-          fullText += (part.textDelta || '');
+          fullText += (part.text || part.textDelta || '');
           if (animationFrame === null) {
             animationFrame = window.requestAnimationFrame(flushStreamText);
           }
         } else if (part.type === 'reasoning-delta') {
-          fullThought += (part.reasoningDelta || '');
+          fullThought += (part.delta || part.reasoningDelta || '');
           setThinkingText(fullThought.trim());
         } else if (part.type === 'error') {
           if (animationFrame !== null) {
@@ -1005,18 +1005,11 @@ I couldn't schedule the task. The background service may not be running. Please 
     setMessages(prev => [...prev, { id: createMessageId('user'), role: 'user', content: rawContent }]);
     if (!customContent) { setInputMessage(''); setAttachments([]); }
     
-    // Show AI placeholder immediately so user knows AI received the message
-    const aiPlaceholderId = createMessageId('assistant');
-    setMessages(prev => [...prev, { id: aiPlaceholderId, role: 'model', content: '' }]);
-    
     setIsLoading(true);
     setIsThinking(true);
     setThinkingSteps([]);
     setThinkingText('');
     setError(null);
-
-    // Update the streaming message ref
-    activeStreamingMessageIdRef.current = aiPlaceholderId;
 
     // Security Checks
     const threatCheck = checkThreat(rawContent);
@@ -4481,7 +4474,7 @@ I've successfully executed the following real tasks:
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl p-1 border" style={softPanelStyle}>
-              <img src="icon.png" alt="Aartiq" className="w-full h-full object-contain" />
+              <img src="/logo-transparent.png" alt="Aartiq" className="w-full h-full object-contain" />
             </div>
             <div>
               <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary-text leading-tight">Aartiq</h2>

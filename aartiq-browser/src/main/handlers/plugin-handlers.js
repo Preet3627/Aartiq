@@ -2,7 +2,7 @@ const { ipcMain, session } = require('electron');
 const QRCode = require('qrcode');
 
 module.exports = function registerExtensionHandlers(ipcMain, handlers) {
-  const { store, permissionStore, popupWindows, createPopupWindow, mainWindow } = handlers;
+  const { store, permissionStore, popupWindows, createPopupWindow, mainWindow, pluginManager } = handlers;
 
   ipcMain.handle('plugins:list', async () => {
     const { pluginManager } = handlers;
@@ -30,7 +30,7 @@ module.exports = function registerExtensionHandlers(ipcMain, handlers) {
     const { pluginManager } = handlers;
     if (!pluginManager) return { success: false };
     return await pluginManager.update(pluginId);
-  });don
+  });
 
   ipcMain.handle('plugins:enable', async (event, pluginId) => {
     const { pluginManager } = handlers;

@@ -1,3 +1,7 @@
+// Automation Fallback Chain (runtime order):
+// 1. nut.js (@nut-tree/nut-js, @nut-tree/bolt)
+// 2. xa11y
+// 3. robotjs (legacy fallback)
 let nutJs = null;
 let xa11y = null;
 

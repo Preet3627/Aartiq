@@ -200,7 +200,7 @@ const LandingPage = () => {
             <footer className="relative z-10 py-20 border-t border-white/5 mt-20 text-center">
                 <div className="flex flex-col items-center gap-6">
                     <div className="flex items-center gap-3 opacity-30 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500 cursor-pointer">
-                        <img src="/icon.png" className="w-8 h-8" alt="Logo" />
+                        <img src="/logo-transparent.png" className="w-8 h-8" alt="Logo" />
                         <span className="font-black text-xl tracking-tight text-white">AARTIQ</span>
                     </div>
                     <div className="text-[10px] font-black uppercase tracking-[0.4em] text-white/20">

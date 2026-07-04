@@ -116,7 +116,7 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
             )}
             {/* Aartiq Logo and Text */}
             <div className="flex items-center gap-2 px-3 drag-region">
-                <img src="icon.ico" alt="Aartiq Logo" className="w-5 h-5 object-contain" />
+                <img src="/logo-transparent.png" alt="Aartiq Logo" className="w-5 h-5 object-contain" />
                 <span className="text-xs font-black uppercase tracking-widest text-primary-text">Aartiq</span>
             </div>
             {showTabBar && (

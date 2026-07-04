@@ -102,16 +102,5 @@ module.exports = function registerAutomationHandlers(ipcMain, handlers) {
     } catch (e) { return { success: false, error: e.message }; }
   });
 
-  ipcMain.handle('capture-browser-view-screenshot', async () => {
-    const { tabViews, activeTabId } = handlers;
-    const view = tabViews?.get(activeTabId);
-    if (!view) return null;
-    try {
-      const image = await view.webContents.capturePage();
-      if (!image || image.isEmpty()) return null;
-      return `data:image/png;base64,${image.toPNG().toString('base64')}`;
-    } catch (e) { return null; }
-  });
-
   console.log('[Handlers] Automation handlers registered');
 };

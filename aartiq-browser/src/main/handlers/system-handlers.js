@@ -136,5 +136,21 @@ module.exports = function registerSystemHandlers(ipcMain, handlers) {
     }
   });
 
+  ipcMain.handle('check-python-available', async () => {
+    try {
+      const { execSync } = require('child_process');
+      execSync('python3 --version', { timeout: 3000 });
+      return true;
+    } catch {
+      try {
+        const { execSync } = require('child_process');
+        execSync('python --version', { timeout: 3000 });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  });
+
   console.log('[Handlers] System handlers registered');
 };

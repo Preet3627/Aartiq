@@ -82,7 +82,7 @@ function isErrorResult(result) {
 }
 var P2PFileSyncService = /** @class */ (function (_super) {
     __extends(P2PFileSyncService, _super);
-    function P2PFileSyncService(deviceId) {
+    function P2PFileSyncService(deviceId, passphrase) {
         var _this = _super.call(this) || this;
         _this.peerConnection = null;
         _this.dataChannel = null;
@@ -94,9 +94,35 @@ var P2PFileSyncService = /** @class */ (function (_super) {
         _this.remoteDeviceId = null; // Track the device we are trying to connect to
         _this._relayListenerOff = null;
         _this.deviceId = deviceId;
+        _this._passphrase = passphrase || P2PFileSyncService.generatePassphrase();
         _this.initializeFirebase();
         return _this;
     }
+    P2PFileSyncService.generatePassphrase = function () {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return crypto.randomUUID() + crypto.randomUUID();
+        }
+        var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        var result = '';
+        var array = new Uint8Array(64);
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            crypto.getRandomValues(array);
+        }
+        else {
+            var nodeCrypto = require('crypto');
+            var buf = nodeCrypto.randomBytes(64);
+            for (var i = 0; i < 64; i++)
+                array[i] = buf[i];
+        }
+        for (var i = 0; i < 64; i++)
+            result += chars[array[i] % chars.length];
+        return result;
+    };
+    P2PFileSyncService.prototype.setPassphrase = function (passphrase) {
+        if (passphrase && passphrase.length >= 8) {
+            this._passphrase = passphrase;
+        }
+    };
     P2PFileSyncService.prototype.initializeFirebase = function () {
         var _this = this;
         FirebaseService_1.default.onAuthReady(function () {
@@ -252,7 +278,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
      * Add folder to sync configuration
      */
     P2PFileSyncService.prototype.addSyncFolder = function (config) {
-        var id = "sync-".concat(Date.now(), "-").concat(Math.random().toString(36).substr(2, 9));
+        var id = "sync-".concat(Date.now(), "-").concat(crypto.randomUUID().slice(0, 8));
         var folder = __assign(__assign({}, config), { id: id, lastSync: 0 });
         this.syncFolders.set(id, folder);
         this.emit('folder-added', folder);
@@ -325,7 +351,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
                                         if (match) {
                                             stats = fs.statSync(fullPath);
                                             results.push({
-                                                id: "file-".concat(Date.now(), "-").concat(Math.random().toString(36).substring(2, 7)),
+                                                id: "file-".concat(Date.now(), "-").concat(crypto.randomUUID().slice(0, 6)),
                                                 name: entry.name,
                                                 path: fullPath,
                                                 size: stats.size,
@@ -432,7 +458,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
      */
     P2PFileSyncService.prototype.syncViaRelay = function (folderId) {
         return __awaiter(this, void 0, void 0, function () {
-            var folder, localFiles, filesQueued, passphrase, _i, localFiles_2, file, fileData, encryptResult, encryptedData, iv, authTag, salt, storagePath, fileRef, downloadURL, fileRelayMetadata, e_2;
+            var folder, localFiles, filesQueued, _i, localFiles_2, file, fileData, encryptResult, encryptedData, iv, authTag, salt, storagePath, fileRef, downloadURL, fileRelayMetadata, e_2;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -449,7 +475,6 @@ var P2PFileSyncService = /** @class */ (function (_super) {
                     case 2:
                         localFiles = _a.sent();
                         filesQueued = 0;
-                        passphrase = 'temp-key';
                         _i = 0, localFiles_2 = localFiles;
                         _a.label = 3;
                     case 3:
@@ -458,7 +483,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
                         return [4 /*yield*/, this.readFileData(file.path)];
                     case 4:
                         fileData = _a.sent();
-                        return [4 /*yield*/, this.encryptData(fileData, passphrase)];
+                        return [4 /*yield*/, this.encryptData(fileData, this._passphrase)];
                     case 5:
                         encryptResult = _a.sent();
                         if (isErrorResult(encryptResult)) {
@@ -502,7 +527,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
             return;
         var relayRef = (0, database_1.ref)(this.db, "p2p_relay_metadata/".concat(this.deviceId));
         this._relayListenerOff = (0, database_1.onValue)(relayRef, function (snapshot) { return __awaiter(_this, void 0, void 0, function () {
-            var filesToProcess, _a, _b, _c, _i, fileId, fileMetadata, fileRef, arrayBuffer, passphrase, decryptResult, decryptedData, e_3;
+            var filesToProcess, _a, _b, _c, _i, fileId, fileMetadata, fileRef, arrayBuffer, decryptResult, decryptedData, e_3;
             return __generator(this, function (_d) {
                 switch (_d.label) {
                     case 0:
@@ -530,8 +555,7 @@ var P2PFileSyncService = /** @class */ (function (_super) {
                     case 3: return [4 /*yield*/, (_d.sent()).arrayBuffer()];
                     case 4:
                         arrayBuffer = _d.sent();
-                        passphrase = 'temp-key';
-                        return [4 /*yield*/, this.decryptData(arrayBuffer, passphrase, Buffer.from(fileMetadata.iv, 'base64').buffer, Buffer.from(fileMetadata.authTag, 'base64').buffer, Buffer.from(fileMetadata.salt, 'base64').buffer)];
+                        return [4 /*yield*/, this.decryptData(arrayBuffer, this._passphrase, Buffer.from(fileMetadata.iv, 'base64').buffer, Buffer.from(fileMetadata.authTag, 'base64').buffer, Buffer.from(fileMetadata.salt, 'base64').buffer)];
                     case 5:
                         decryptResult = _d.sent();
                         if (isErrorResult(decryptResult)) {

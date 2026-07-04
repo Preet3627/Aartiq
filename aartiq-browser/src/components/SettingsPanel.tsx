@@ -197,7 +197,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                     }}
                 >
                     <div className="flex items-center gap-4 px-4 mb-10 drag-region cursor-move" title="Drag to move window">
-                        <img src="icon.png" alt="Aartiq" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]" />
+                        <img src="/logo-transparent.png" alt="Aartiq" className="w-10 h-10 object-contain drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]" />
                         <span className="text-xl font-black tracking-tighter uppercase text-primary-text">AARTIQ</span>
                     </div>
 
@@ -959,7 +959,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                         
                         {activeSection === 'about' && (
                             <div className="text-center py-16 space-y-8">
-                                <img src="icon.png" alt="Comet Icon" className="w-24 h-24 mx-auto mb-2 shadow-2xl drop-shadow-[0_0_20px_rgba(56,189,248,0.4)] animate-pulse" />
+                                <img src="/logo-transparent.png" alt="Aartiq" className="w-24 h-24 mx-auto mb-2 shadow-2xl drop-shadow-[0_0_20px_rgba(56,189,248,0.4)] animate-pulse" />
                                 <h2 className="text-5xl font-black tracking-tighter">{store.appName}</h2>
                                 <p className="text-white/40 max-w-md mx-auto text-sm leading-relaxed font-medium">
                                     A performance-hardened Chromium shell with native AI orchestration, optimized for decentralized workflows.

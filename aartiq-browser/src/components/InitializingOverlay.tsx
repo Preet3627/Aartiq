@@ -29,7 +29,7 @@ const InitializingOverlay = () => {
                     className="relative z-10 flex flex-col items-center gap-6"
                 >
                     <div className="w-20 h-20 relative px-4">
-                        <img src="/icon.png" alt="Aartiq" className="w-full h-full object-contain drop-shadow-[0_0_30px_rgba(56,189,248,0.5)]" />
+                        <img src="/logo-transparent.png" alt="Aartiq" className="w-full h-full object-contain drop-shadow-[0_0_30px_rgba(56,189,248,0.5)]" />
                     </div>
                     
                     <div className="flex flex-col items-center gap-3">

@@ -40,7 +40,7 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-blue)]()
-[![Version](https://img.shields.io/badge/Version-0.2.8--stable-green)]()
+[![Version](https://img.shields.io/badge/Version-0.2.98--alpha-blue)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)]()
 ![Maintained](https://img.shields.io/badge/Maintained-Yes-green)
 ![Hardware](https://img.shields.io/badge/Tested_On-i5--8250U_|_8GB-orange)
@@ -91,9 +91,9 @@ Comet is for developers, researchers, and power users who want programmable brow
 Comet includes a multimodal browser-level agent.
 
 ### Perception System
-- **Secure DOM Parser** (Primary) - Fast, reliable structured data extraction with XSS prevention
+- **Secure DOM Parser** (Primary) - Fast, reliable structured data extraction with XSS prevention (DOMPurify)
 - **DOM Search Display** - Visual element highlighting and metadata
-- **OCR Engine** (Fallback) - Tesseract.js for screenshots and cross-app text recognition
+- **OCR Engine** (Fallback) - Multi-tier chain: uniOCR → RustO! → Platform Native → Tesseract.js
 - Vision models (Claude / Gemini) for complex visual reasoning
 
 The AI sees **structured DOM data** for speed and reliability, with **OCR fallback** for screenshots, external apps, and visual verification.
@@ -135,19 +135,19 @@ It enforces **system-level isolation.**
 
 ### 1️⃣ Secure DOM Parser + OCR Fallback
 The agent perceives pages via **structured DOM extraction** with secure parsing (primary).  
-OCR with **Tesseract.js** provides fallback for screenshots and cross-app text.
+OCR provides fallback for screenshots and cross-app text via a multi-tier chain.
 
 **SecureDOMReader** features:
-- XSS prevention and sanitization
+- XSS prevention via DOMPurify (replaced legacy regex sanitization in v0.2.98)
 - Structured data extraction (text, links, images, tables)
 - DOM search with element highlighting
-- Fast regex-based parsing with fallback support
+- URL validation via protocol allowlist (http:, https:, mailto:)
 
-**OCR Fallback** (for external apps, screenshots, visual verification):
-- Tesseract.js text recognition
-- Cross-app element detection
-- Screenshot analysis
-- Vision model integration
+**OCR Fallback Chain** — verified against actual tesseract-service.js runtime order (for external apps, screenshots, visual verification):
+1. uniOCR (platform-native, macOS/Windows)
+2. RustO! / PaddleOCR (macOS/Linux, 99.3% accuracy)
+3. Platform Native (macOS @cherrystudio/mac-system-ocr, Windows native, Linux native)
+4. Tesseract.js (universal fallback, with 2 retry attempts)
 
 Prevents:
 - Hidden prompt injection
@@ -157,16 +157,17 @@ Prevents:
 
 ---
 
-### 2️⃣ Syntactic Firewall
-Before text reaches the LLM:
+### 2️⃣ Capability-Scoped Execution Model
+Actions are gated by an allowlist of registered capabilities, not a regex denylist:
 
-- OS-level commands are filtered
-- Encoded shell payloads are rejected
-- Dangerous execution primitives are stripped
+- **Capability Controller**: Only explicitly registered actions can execute — if `run_shell_command` is not registered, no prompt injection can invoke it
+- **Syntactic Firewall (Legacy, First Pass)**: Regex-based pattern detection for known dangerous strings (rm -rf, sudo, encoded payloads). This is a warning layer, not an enforcement layer — bypassable patterns are documented
+- **DOMPurify HTML Sanitization**: Replaced legacy regex HTML cleaning in v0.2.98 — eliminates years of known regex-bypass techniques
+- **Protocol Allowlist URLs**: URL validation uses an allowlist (http:, https:, mailto:) instead of a denylist
 
-Examples blocked:
+Examples acked by the allowlist:
 
-rm -rf powershell.exe sudo cmd.exe
+The only actions callable are those explicitly registered via `CapabilityController.registerAction()`
 
 ---
 
@@ -189,8 +190,10 @@ Even if socially engineered, it cannot act without approval.
 Comet enforces:
 
 - Non-executable perception  
-- Filtered planning  
-- Human-authorized execution  
+- Capability-scoped execution (allowlist, not denylist)  
+- Human-authorized execution for high-risk actions  
+
+**Encryption**: AES-256-GCM + PBKDF2 (600K iterations). Legacy base64 "encryption" replaced in v0.2.98 — no silent fallback to unauthenticated encoding.
 
 This is **architectural isolation**, not prompt engineering.
 
@@ -320,7 +323,7 @@ Comet uses **native OS automation** with platform-specific backends:
 | **macOS** | `src/automation/mac.js` | AppleScript, native bridges |
 | **Windows** | `src/automation/win.js` | PowerShell, Win32 API |
 | **Linux** | `src/automation/linux.js` | xdotool, xte, X11 |
-| **Fallback** | `src/automation/fallback.js` | RobotJS conditional loader |
+| **Fallback** | `src/automation/fallback.js` | nut.js → xa11y → robotjs fallback chain |
 
 ### Additional Features
 - Secure DOM Parser for fast, reliable page analysis

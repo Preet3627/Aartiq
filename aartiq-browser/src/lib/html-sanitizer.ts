@@ -1,4 +1,4 @@
-let purify: typeof import('dompurify').default | null = null;
+let purify: { sanitize: (html: string, options?: any) => string } | null = null;
 
 try {
     if (typeof window !== 'undefined' && typeof document !== 'undefined') {
@@ -33,5 +33,5 @@ export function sanitizeHTML(html: string, options?: SanitizeOptions): string {
     return purify.sanitize(html, {
         ...DEFAULT_OPTIONS,
         ...options,
-    } as Parameters<typeof purify.sanitize>[1]);
+    });
 }

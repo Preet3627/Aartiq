@@ -1,43 +1,127 @@
 const { ipcMain, BrowserView } = require('electron');
 const path = require('path');
 
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
 module.exports = function registerBrowserHandlers(ipcMain, handlers) {
   const { mainWindow, tabViews, activeTabId, store } = handlers;
+  const audibleTabs = new Set();
+
+  const applyProxyConfigToSession = (ses) => {
+    try {
+      const proxyConfig = store.get('proxyConfig');
+      if (proxyConfig && proxyConfig.mode !== 'direct') {
+        ses.setProxy(proxyConfig).catch(() => {});
+      }
+    } catch (e) {}
+  };
 
   ipcMain.on('create-view', (event, { tabId, url }) => {
+    if (tabViews.has(tabId)) return;
     const view = new BrowserView({
       webPreferences: {
-        preload: path.join(__dirname, '../../preload.js'),
+        preload: path.join(__dirname, '../../../view_preload.js'),
+        nodeIntegration: false,
         contextIsolation: true,
+        sandbox: false,
         partition: `persist:tab-${tabId}`
       }
     });
+    view.webContents.setUserAgent(CHROME_UA);
+    applyProxyConfigToSession(view.webContents.session);
+
     tabViews.set(tabId, view);
+
     if (mainWindow) {
       mainWindow.addBrowserView(view);
       view.webContents.loadURL(url || 'https://google.com');
     }
+
+    view.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
+      const isAuth = targetUrl.includes('accounts.google.com') || targetUrl.includes('facebook.com') || targetUrl.includes('oauth') || targetUrl.includes('auth0');
+      if (isAuth) {
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            width: 600, height: 700, center: true,
+            autoHideMenuBar: true, parent: mainWindow,
+          }
+        };
+      }
+      if (mainWindow) mainWindow.webContents.send('add-new-tab', targetUrl);
+      return { action: 'deny' };
+    });
+
+    view.webContents.on('did-start-loading', () => {
+      mainWindow?.webContents.send('tab-loading-status', { tabId, isLoading: true });
+    });
+    view.webContents.on('did-stop-loading', () => {
+      mainWindow?.webContents.send('tab-loading-status', { tabId, isLoading: false });
+    });
+    view.webContents.on('did-finish-load', () => {
+      mainWindow?.webContents.send('on-tab-loaded', { tabId, url: view.webContents.getURL() });
+    });
+    view.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      const nonCritical = [-3, -7, -8, -9, -105, -106];
+      if (nonCritical.includes(errorCode)) return;
+      mainWindow?.webContents.send('tab-load-error', { tabId, errorCode, errorDescription, url });
+    });
+    view.webContents.on('render-process-gone', (_event, details) => {
+      mainWindow?.webContents.send('tab-crashed', { tabId, reason: details.reason });
+    });
+    view.webContents.on('unresponsive', () => {
+      mainWindow?.webContents.send('tab-unresponsive', { tabId });
+    });
+    view.webContents.on('responsive', () => {
+      mainWindow?.webContents.send('tab-responsive', { tabId });
+    });
+    view.webContents.on('did-navigate', (_event, navUrl) => {
+      mainWindow?.webContents.send('browser-view-url-changed', { tabId, url: navUrl });
+      if (navUrl.includes('/search?') || navUrl.includes('?q=')) {
+        try {
+          const parsed = new URL(navUrl);
+          const query = parsed.searchParams.get('q') || parsed.searchParams.get('query');
+          if (query) mainWindow?.webContents.send('ai-query-detected', query);
+        } catch (e) {}
+      }
+    });
+    view.webContents.on('page-title-updated', (_event, title) => {
+      mainWindow?.webContents.send('browser-view-title-changed', { tabId, title });
+    });
+    view.webContents.on('is-currently-audible-changed', (isAudible) => {
+      if (isAudible) audibleTabs.add(tabId);
+      else audibleTabs.delete(tabId);
+      mainWindow?.webContents.send('audio-status-changed', audibleTabs.size > 0);
+    });
+    view.webContents.on('enter-html-fullscreen-window', () => mainWindow?.setFullScreen(true));
+    view.webContents.on('leave-html-fullscreen-window', () => mainWindow?.setFullScreen(false));
   });
 
   ipcMain.on('suspend-tab', (event, tabId) => {
     const view = tabViews.get(tabId);
-    if (view && mainWindow) {
-      mainWindow.removeBrowserView(view);
+    if (view) {
+      if (mainWindow) mainWindow.removeBrowserView(view);
+      if (view.webContents && !view.webContents.isDestroyed()) {
+        view.webContents.destroy();
+      }
+      tabViews.delete(tabId);
     }
   });
 
   ipcMain.on('resume-tab', (event, { tabId, url }) => {
-    let view = tabViews.get(tabId);
-    if (!view) {
-      view = new BrowserView({
-        webPreferences: {
-          preload: path.join(__dirname, '../../preload.js'),
-          contextIsolation: true,
-          partition: `persist:tab-${tabId}`
-        }
-      });
-      tabViews.set(tabId, view);
-    }
+    if (tabViews.has(tabId)) return;
+    const view = new BrowserView({
+      webPreferences: {
+        preload: path.join(__dirname, '../../../view_preload.js'),
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: false,
+        partition: `persist:tab-${tabId}`
+      }
+    });
+    view.webContents.setUserAgent(CHROME_UA);
+    applyProxyConfigToSession(view.webContents.session);
+    tabViews.set(tabId, view);
     if (mainWindow) {
       mainWindow.addBrowserView(view);
       view.webContents.loadURL(url);
@@ -52,7 +136,7 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
         if (prevView) mainWindow.removeBrowserView(prevView);
       }
       mainWindow.addBrowserView(view);
-      if (bounds) mainWindow.setBrowserViewBounds(view, bounds);
+      if (bounds) view.setBounds(bounds);
       handlers.activeTabId = tabId;
     }
   });
@@ -69,12 +153,13 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
   ipcMain.on('set-browser-view-bounds', (event, bounds) => {
     if (handlers.activeTabId) {
       const view = tabViews.get(handlers.activeTabId);
-      if (view && mainWindow) mainWindow.setBrowserViewBounds(view, bounds);
+      if (view) view.setBounds(bounds);
     }
   });
 
   ipcMain.on('navigate-browser-view', async (event, { tabId, url }) => {
-    const view = tabViews.get(tabId);
+    const targetId = tabId || handlers.activeTabId;
+    const view = tabViews.get(targetId);
     if (view) view.webContents.loadURL(url);
   });
 

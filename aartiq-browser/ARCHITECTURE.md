@@ -32,8 +32,8 @@ Aartiq is a cross-platform AI-powered browser with advanced automation capabilit
 **Key Files:**
 | File | Lines | Purpose |
 |------|-------|---------|
-| `main.js` | ~10,200 | Main Electron process, IPC handlers, window management |
-| `preload.js` | ~1,800 | Context bridge, secure IPC exposure |
+| `main.js` | ~8,300 | Main Electron process, IPC handlers, window management |
+| `preload.js` | ~680 | Context bridge, secure IPC exposure |
 | `src/components/AIChatSidebar.tsx` | 4,477 | AI chat interface, command execution |
 | `src/components/SettingsPanel.tsx` | ~1,000 | Settings management UI |
 
@@ -140,13 +140,17 @@ Runs scheduled tasks even when browser is closed:
 
 ## Security Architecture
 
-### Command Validation (`SecurityValidator.js`)
+### Capability-Scoped Execution (`capability-controller.js` + `Security.ts`)
 
-**Validation Layers:**
-1. **Command Validation** - Shell command safety
-2. **URL Validation** - Blocks javascript:, file:, localhost
-3. **File Path Validation** - Path traversal prevention
-4. **AI Command Validation** - Structured command parsing
+Actions are gated by an allowlist of registered capabilities:
+1. **Capability Controller** (`src/core/capability-controller.js`, `Security.ts`) - Only explicitly registered actions can execute
+2. **Command Validation** (`SecurityValidator.js`) - Shell command safety (legacy regex layer, warnings only)
+3. **URL Validation** - Protocol allowlist (http:, https:, mailto:)
+4. **File Path Validation** - Path traversal prevention
+5. **AI Command Validation** - Structured command parsing
+6. **HTML Sanitization** - DOMPurify (replaced legacy regex sanitization in v0.2.98)
+
+**Encryption**: AES-256-GCM + PBKDF2 (600K iterations). No silent base64 fallback.
 
 **Risk Levels:**
 - `LOW` - Safe, auto-executable
@@ -240,8 +244,8 @@ Desktop (Port 3004) ←→ WebSocket ←→ Mobile App
 
 ```
 aartiq-browser/
-├── main.js                    # Main process (10,200 lines)
-├── preload.js                 # Context bridge (1,800 lines)
+├── main.js                    # Main process (~8,300 lines)
+├── preload.js                 # Context bridge (~680 lines)
 ├── package.json
 ├── src/
 │   ├── automation/           # Native automation (5 files)

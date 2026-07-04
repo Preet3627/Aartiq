@@ -105,6 +105,7 @@ var ws_1 = require("ws");
 var os = __importStar(require("os"));
 var dgram = __importStar(require("dgram"));
 var electron_1 = require("electron");
+var crypto_1 = require("crypto");
 var electron_store_1 = __importDefault(require("electron-store"));
 var WiFiSyncService = /** @class */ (function (_super) {
     __extends(WiFiSyncService, _super);
@@ -124,7 +125,7 @@ var WiFiSyncService = /** @class */ (function (_super) {
         _this.port = port;
         _this.deviceId = "desktop-".concat(os.hostname().substring(0, 8));
         _this.deviceName = os.hostname();
-        _this.pairingCode = String(100000 + require('crypto').randomInt(900000));
+        _this.pairingCode = String(100000 + (0, crypto_1.randomInt)(900000));
         _this._loadKnownDevices();
         return _this;
     }

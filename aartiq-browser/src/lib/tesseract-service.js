@@ -1,3 +1,8 @@
+// OCR Fallback Chain (actual runtime order, see captureAndRecognizeNative + captureAndOcr):
+// 1. uniOCR (macOS/Windows)
+// 2. RustO! / PaddleOCR (macOS/Linux)
+// 3. Platform Native (macOS @cherrystudio/mac-system-ocr, Windows native, Linux native)
+// 4. Tesseract.js (universal, 2 retry attempts)
 const { desktopCapturer, screen, systemPreferences } = require('electron');
 const { createWorker } = require('tesseract.js');
 const fs = require('fs');

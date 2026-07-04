@@ -39,7 +39,8 @@ module.exports = function registerFileHandlers(ipcMain, handlers) {
   });
 
   ipcMain.handle('load-persistent-data', async (event, key) => {
-    return store.get(`persistent_${key}`);
+    const data = store.get(`persistent_${key}`);
+    return data !== undefined ? { success: true, data } : { success: false };
   });
 
   ipcMain.handle('delete-persistent-data', async (event, key) => {

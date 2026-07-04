@@ -28,7 +28,7 @@ export const releases: ReleaseEntry[] = [
         'Added migrateToNewFormat() to transparently upgrade legacy blobs to PBKDF2-based E2EE2: format',
         'Added runtime DOMPurify guard: gracefully degrades when window/document unavailable (main process safety)',
         'Removed dead checkCSSAttacks() — CSS safety is handled by DOMPurify or style stripping',
-        'Identified Security.js as dead code (zero imports) — all callers resolve to Security.ts via extensionless imports',
+        'Audited Security.js vs Security.ts — Security.js is compiled output from Security.ts, used by CloudSyncService.js at runtime',
         'Audited 31 AI-action IPC channels: 22 gated, 9 monitoring-only — documented in docs-audit/action-inventory.md',
       ],
       change: [
@@ -117,7 +117,7 @@ export const releases: ReleaseEntry[] = [
     }
   },
   {
-    version: '0.2.9.4.2',
+    version: '0.2.9.4.4',
     date: '2026-04-23',
     codename: 'Nebula',
     channel: 'stable',
@@ -218,7 +218,7 @@ export const releases: ReleaseEntry[] = [
         'Fixed hasSeenWelcomePage/hasCompletedStartupSetup defaults blocking BrowserView bounds'
       ],
       change: [
-        'MASSIVE REFACTOR: main.js reduced from ~11,000 lines to ~3,900 lines (64% reduction)',
+        'REFACTOR ATTEMPT: main.js partially split from ~11,000 to ~3,900 lines, but handlers accumulated back to ~8,300 lines in subsequent releases',
         'Modular IPC Handlers: Moved all handlers to src/main/handlers/ modules (14+ modules)',
         'Lazy Service Loading: Services now load on-demand for faster startup',
         'Removed landing page from default startup - app now opens directly to browser',

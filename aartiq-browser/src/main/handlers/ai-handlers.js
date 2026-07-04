@@ -29,7 +29,7 @@ module.exports = function registerAiHandlers(ipcMain, handlers) {
   });
 
   ipcMain.on('llm-stream-chat-content', (event, messages, options = {}) => {
-    llmStreamHandler(event.sender, messages, options);
+    llmStreamHandler(event, messages, options);
   });
 
   ipcMain.handle('ai-engine-chat', async (event, { message, model, provider, systemPrompt, history }) => {
@@ -66,6 +66,34 @@ module.exports = function registerAiHandlers(ipcMain, handlers) {
     groq: store.get('groq_api_key') ? 'set' : '',
     azure: store.get('azure_openai_api_key') ? 'set' : '',
   }));
+
+  ipcMain.handle('ollama-list-models', async () => {
+    try {
+      const http = require('http');
+      return new Promise((resolve) => {
+        const req = http.get('http://localhost:11434/api/tags', (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(data);
+              const models = (parsed.models || []).map(m => ({
+                name: m.name,
+                modified_at: m.modified_at,
+              }));
+              resolve({ models });
+            } catch {
+              resolve({ models: [], error: 'Failed to parse Ollama response' });
+            }
+          });
+        });
+        req.on('error', () => resolve({ models: [], error: 'Ollama not running' }));
+        req.setTimeout(3000, () => { req.destroy(); resolve({ models: [], error: 'Ollama timeout' }); });
+      });
+    } catch {
+      return { models: [], error: 'Ollama request failed' };
+    }
+  });
 
   console.log('[Handlers] AI handlers registered');
 };

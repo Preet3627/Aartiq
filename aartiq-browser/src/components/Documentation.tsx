@@ -46,7 +46,7 @@ Unlock the full potential of Aartiq with these curated search & query examples:
 *   **Perplexity-Style Answers**: Ask complex questions to your sidebar. Comet scans your current page and retrieves relevant context from your history.
 *   **Local Vector DB**: Automatically indexes your browsing for offline semantic search.
 *   **Deepseek R1 Integration**: Optimized for the 1.5B model running locally via Ollama.
-*   **OCR & Vision**: Automatic screenshot analysis and text extraction via Tesseract.js.
+*   **OCR & Vision**: Automatic screenshot analysis and text extraction via multi-tier OCR chain (uniOCR → RustO! → Platform Native → Tesseract.js).
 
 ### ⚡ Performance & Core
 *   **Chromium Rendering Engine**: We use the raw power of Chromium for 100% web compatibility, stripped of bloatware.
@@ -54,7 +54,9 @@ Unlock the full potential of Aartiq with these curated search & query examples:
 *   **Google Navigation Fixed**: Resolved infinite loop issues with search engine redirects.
 
 ### 🛡️ Security & Sync
-*   **Identity-Aware**: Login via \`browser.ponsrischool.in\` to verify your session.
+*   **Capability-Scoped Execution**: Actions gated by allowlist, not regex denylist (CapabilityController)
+*   **AES-256-GCM Encryption**: + PBKDF2 (600K iterations), no silent base64 fallback
+*   **DOMPurify HTML Sanitization**: Replaced legacy regex sanitization — eliminates known bypass techniques
 *   **P2P File Drop**: Send files between Mobile and Desktop instantly.
 *   **Admin Console**: (Enterprise) Manage user access and monitor sync status.
 

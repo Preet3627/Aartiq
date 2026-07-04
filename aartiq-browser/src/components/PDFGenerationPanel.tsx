@@ -104,7 +104,7 @@ export const PDFGenerationPanel: React.FC<PDFGenerationPanelProps> = ({
       try {
         iconBase64 = tryGetIconBase64();
         if (!iconBase64) {
-          const iconPath = '/icon.png';
+          const iconPath = '/logo-transparent.png';
           const response = await fetch(iconPath);
           if (response.ok) {
             const blob = await response.blob();

@@ -17,7 +17,7 @@ export function useAppVersion(): string {
     const fetchVersion = async () => {
       try {
         const v = await (window as any)?.electronAPI?.getVersion?.();
-        if (mounted && v) setVersion(v);
+        if (mounted && v) setVersion(typeof v === 'string' ? v : v.version);
       } catch {
         // fallback stays
       }

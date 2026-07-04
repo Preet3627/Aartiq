@@ -35,6 +35,7 @@ function registerAllHandlers(ipcMain, handlers) {
     'llm-get-available-providers','llm-get-provider-models','llm-set-active-provider',
     'llm-configure-provider','llm-generate-chat-content',
     'ai-engine-chat','ai-engine-configure','test-gemini-api','get-stored-api-keys',
+    'ollama-list-models',
     'get-wifi-sync-uri','wifi-sync-broadcast','get-wifi-sync-qr','get-wifi-sync-info',
     'generate-high-risk-qr','login-to-cloud','logout-from-cloud','save-cloud-config',
     'get-cloud-devices','connect-to-cloud-device','disconnect-from-cloud-device',

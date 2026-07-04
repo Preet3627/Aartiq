@@ -1301,11 +1301,11 @@ if (typeof window !== 'undefined' && window.electronAPI) {
 
     // Initial load of user data from persistent storage
     window.electronAPI.loadPersistentData('user-data').then((result: any) => {
-        if (result.success && result.data) {
+        if (result?.success && result?.data) {
             useAppStore.getState().setUser(result.data);
             useAppStore.getState().setActiveView('browser');
         }
-    });
+    }).catch(() => {});
 
     // Load stored API keys from electron-store on startup
     window.electronAPI.getStoredApiKeys().then((keys: any) => {

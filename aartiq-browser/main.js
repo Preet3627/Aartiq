@@ -678,7 +678,7 @@ ipcMain.handle('get-app-icon', async (event, appPath) => {
 
 
 const permissionStore = new PermissionStore();
-let cometAiEngine = null;
+let cometAiEngine = new AartiqAiEngine();
 let robotService = null;
 const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -2790,7 +2790,7 @@ const llmStreamHandler = async (event, messages, options = {}) => {
         message, model, systemPrompt, history, provider: providerId,
         onChunk: (chunk) => {
           if (!event.sender.isDestroyed()) {
-            event.sender.send('llm-chat-stream-part', { type: 'text-delta', textDelta: chunk });
+            event.sender.send('llm-chat-stream-part', { type: 'text-delta', text: chunk });
           }
         }
       });
@@ -5625,32 +5625,31 @@ async function generateHighRiskPairingQR(actionId, deviceName) {
   const deviceId = os.hostname();
   const token = actionId || randomBytes(5).toString('hex');
   const pin = String(100000 + (randomBytes(4).readUInt32BE(0) % 900000));
-    const deepLinkUrl = `aartiq://approve?id=${token}&deviceId=${encodeURIComponent(deviceId)}&pin=${pin}`;
-    try {
-      const qrImage = await QRCode.toDataURL(deepLinkUrl);
-      // We must return both the image and the pin so the web UI can display the pin
-      return JSON.stringify({ qrImage, pin, token });
-    } catch (err) {
-      console.error('[Main] Failed to generate High-Risk QR:', err);
-      return null;
-    }
-  });
-
-  async function generateShellApprovalQR(command) {
-    const deviceId = os.hostname();
-    const token = randomBytes(5).toString('hex');
-    const pin = String(100000 + (randomBytes(4).readUInt32BE(0) % 900000));
-    const deepLinkUrl = `aartiq://shell-approve?id=${token}&deviceId=${encodeURIComponent(deviceId)}&pin=${pin}&cmd=${encodeURIComponent(command)}`;
-
-    try {
-      const qrImage = await QRCode.toDataURL(deepLinkUrl);
-      return { qrImage, pin, token };
-    } catch (err) {
-      console.error('[Main] Failed to generate Shell Approval QR:', err);
-      return { qrImage: null, pin, token };
-    }
+  const deepLinkUrl = `aartiq://approve?id=${token}&deviceId=${encodeURIComponent(deviceId)}&pin=${pin}`;
+  try {
+    const qrImage = await QRCode.toDataURL(deepLinkUrl);
+    // We must return both the image and the pin so the web UI can display the pin
+    return JSON.stringify({ qrImage, pin, token });
+  } catch (err) {
+    console.error('[Main] Failed to generate High-Risk QR:', err);
+    return null;
   }
+}
 
+function checkAiActionPermission(actionType, target, riskLevel) {
+  const permKey = `AI_ACTION:${actionType}`;
+  if (permissionStore.isGranted(permKey)) {
+    return { allowed: true };
+  }
+  const autoApproved = permissionStore.getAutoApprovedActions() || [];
+  if (autoApproved.includes(riskLevel)) {
+    permissionStore.grant(permKey, riskLevel, `AI action: ${actionType}`, true);
+    return { allowed: true };
+  }
+  return { allowed: false, error: `Action "${actionType}" not permitted.` };
+}
+
+app.whenReady().then(async () => {
   async function streamPromptToMobile(promptId, prompt, model, provider) {
     const messages = [{ role: 'user', content: prompt }];
     const streamEvent = {
@@ -8265,7 +8264,10 @@ ${tabData}`;
     process.exit(0);
   });
 
+  createWindow();
+
   // Wire modular IPC handlers from src/main/handlers/
+  // NOTE: must be after createWindow() so mainWindow is initialized
   const handlerDeps = {
     mainWindow, store, getTopWindow, isDev, isOnline,
     cometAiEngine, llmProviders, llmGenerateHandler, llmStreamHandler,
@@ -8282,9 +8284,8 @@ ${tabData}`;
   };
   registerAllHandlers(ipcMain, handlerDeps);
 }).catch(err => {
-  console.error('[Main] Fatal error during app startup:', err);
-  // Emergency fallback to at least show the window
-  if (openWindows.size === 0) {
-    createWindow();
+  console.error('[Main] App ready failed:', err);
+  if (app?.quit) {
+    app.quit();
   }
 });

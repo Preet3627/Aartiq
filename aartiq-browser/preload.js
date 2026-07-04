@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('browser-view-title-changed', subscription);
     return () => ipcRenderer.removeListener('browser-view-title-changed', subscription);
   },
+  navigateTo: (url) => ipcRenderer.send('navigate-browser-view', { url }),
   navigateBrowserView: (args) => ipcRenderer.send('navigate-browser-view', args),
   goBack: () => ipcRenderer.send('browser-view-go-back'),
   goForward: () => ipcRenderer.send('browser-view-go-forward'),
