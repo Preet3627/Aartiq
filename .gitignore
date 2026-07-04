@@ -137,8 +137,8 @@ dist
 .DS_Store
 Thumbs.db
 
-# Test directories
-tests/
+# Test directories (root-level only)
+/Tests/
 __tests__/
 
 # Backup files
