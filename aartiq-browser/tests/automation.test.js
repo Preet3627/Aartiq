@@ -4,10 +4,9 @@ const path = require('path');
 const { automationLayer, PLATFORM } = require('../src/automation');
 
 describe('Automation Layer', () => {
-  before(async function() {
-    this.timeout(10000);
+  beforeAll(async () => {
     await automationLayer.initialize();
-  });
+  }, 10000);
 
   describe('Platform Detection', () => {
     it('should detect the current platform', () => {

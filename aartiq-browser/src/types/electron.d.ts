@@ -495,6 +495,7 @@ declare global {
             workflowStatus: () => Promise<{ success: boolean; isRecording?: boolean; stepCount?: number }>;
             generateHighRiskQr: (actionId: string) => Promise<string | null>;
             onMobileApproveHighRisk: (callback: (data: { pin: string; id: string }) => void) => () => void;
+            logError: (message: string) => void;
             getAppIcon: (path?: string) => Promise<string | null>;
             getCometIcon: () => Promise<string | null>;
             classifyTabsAi: (args: { tabs: Array<{ id: string; title: string; url: string }> }) => Promise<{ success: boolean; classifications?: Record<string, string>; error?: string }>;
