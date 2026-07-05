@@ -196,7 +196,9 @@
       "languages": [
         "en-US"
       ],
-      "showNameOnTiles": true
+      "showNameOnTiles": true,
+      "minVersion": "10.0.17763.0",
+      "maxVersionTested": "10.0.22621.0"
     },
     "mac": {
       "icon": "assets/icon.png",
