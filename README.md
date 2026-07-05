@@ -6,6 +6,12 @@ An open-source, AI-native browser with permission-gated OS automation.
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blue)]()
 [![Version](https://img.shields.io/badge/Version-0.2.97-blue)]()
 
+
+
+
+<img width="1512" height="1012" alt="image" src="https://github.com/user-attachments/assets/f289221f-4d40-451a-94bc-bf4392f28145" />
+
+
 ## Features
 
 ### AI Agent
