@@ -69,26 +69,6 @@ export default function WelcomeScreen() {
   const { setHasSeenWelcomePage, setGuestMode } = useAppStore();
   const versionLabel = `v${useAppVersion()}`;
   const [activeHighlight, setActiveHighlight] = useState(0);
-  const [brandIconSrc, setBrandIconSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const api = window.electronAPI;
-        if (!api?.getAppIcon) return;
-        const b64 = await api.getAppIcon();
-        if (!cancelled && b64 && typeof b64 === 'string') {
-          setBrandIconSrc(`data:image/png;base64,${b64}`);
-        }
-      } catch {
-        /* packaged file:// may not resolve relative icon.png — ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -159,13 +139,7 @@ export default function WelcomeScreen() {
         >
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/6 shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
-              {brandIconSrc ? (
-                <img src={brandIconSrc} alt="Aartiq" className="h-9 w-9 object-contain" />
-              ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-400/20">
-                  <Sparkles className="h-5 w-5 text-sky-200" aria-hidden />
-                </div>
-              )}
+              <img src="/logo-transparent.png" alt="Aartiq" className="h-9 w-9 object-contain" />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/70">Aartiq Browser</p>
