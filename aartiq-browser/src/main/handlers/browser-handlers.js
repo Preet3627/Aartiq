@@ -16,6 +16,13 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
     } catch (e) {}
   };
 
+  const getPartition = (tabId) => {
+    if (tabId?.startsWith('incognito')) {
+      return `incognito-${tabId}`;
+    }
+    return 'persist:browserview';
+  };
+
   ipcMain.on('create-view', (event, { tabId, url }) => {
     if (tabViews.has(tabId)) return;
     const view = new BrowserView({
@@ -24,7 +31,7 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
-        partition: `persist:tab-${tabId}`
+        partition: getPartition(tabId)
       }
     });
     view.webContents.setUserAgent(CHROME_UA);
@@ -116,7 +123,7 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
         nodeIntegration: false,
         contextIsolation: true,
         sandbox: false,
-        partition: `persist:tab-${tabId}`
+        partition: getPartition(tabId)
       }
     });
     view.webContents.setUserAgent(CHROME_UA);
