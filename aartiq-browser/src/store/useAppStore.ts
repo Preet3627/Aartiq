@@ -171,12 +171,22 @@ export interface BrowserState {
     setAiSafetyMode: (enabled: boolean) => void;
 
     // Theme settings
-    theme: "system" | "dark" | "light" | "vibrant" | "custom";
+    theme: "system" | "dark" | "light" | "vibrant" | "custom" | "minimal";
     customThemePrimary: string;
     customThemeSecondary: string;
-    setTheme: (theme: "system" | "dark" | "light" | "vibrant" | "custom") => void;
+    setTheme: (theme: "system" | "dark" | "light" | "vibrant" | "custom" | "minimal") => void;
     setCustomThemePrimary: (color: string) => void;
     setCustomThemeSecondary: (color: string) => void;
+    browserTabLayout: 'top' | 'left' | 'right' | 'both';
+    browserAccentPreset: 'minimal' | 'brave' | 'ocean' | 'mint' | 'rose' | 'mono';
+    toolbarIconOrder: Array<'downloads' | 'clipboard' | 'cart' | 'translate' | 'extensions' | 'quick-search'>;
+    setBrowserTabLayout: (layout: BrowserState['browserTabLayout']) => void;
+    setBrowserAccentPreset: (preset: BrowserState['browserAccentPreset']) => void;
+    setToolbarIconOrder: (order: BrowserState['toolbarIconOrder']) => void;
+    minimalCompactMode: boolean;
+    setMinimalCompactMode: (enabled: boolean) => void;
+    minimalAnimations: boolean;
+    setMinimalAnimations: (enabled: boolean) => void;
 
     // Online status
     isOnline: boolean;
@@ -434,6 +444,11 @@ export const useAppStore = create<BrowserState>()(
             theme: 'system',
             customThemePrimary: '#ff6b6b',
             customThemeSecondary: '#22d3ee',
+            browserTabLayout: 'top',
+            browserAccentPreset: 'minimal',
+            toolbarIconOrder: ['downloads', 'clipboard', 'cart', 'translate', 'extensions', 'quick-search'],
+            minimalCompactMode: false,
+            minimalAnimations: true,
             ambientMusicUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
             enableAmbientMusic: false,
             ambientMusicMode: 'off',
@@ -878,9 +893,14 @@ export const useAppStore = create<BrowserState>()(
             setAiSafetyMode: (enabled: boolean) => set({ aiSafetyMode: enabled }),
 
             // Theme settings
-            setTheme: (theme: "light" | "dark" | "system" | "vibrant" | "custom") => set({ theme }),
+            setTheme: (theme: "light" | "dark" | "system" | "vibrant" | "custom" | "minimal") => set({ theme }),
             setCustomThemePrimary: (color: string) => set({ customThemePrimary: color }),
             setCustomThemeSecondary: (color: string) => set({ customThemeSecondary: color }),
+            setBrowserTabLayout: (layout) => set({ browserTabLayout: layout }),
+            setBrowserAccentPreset: (preset) => set({ browserAccentPreset: preset }),
+            setToolbarIconOrder: (order) => set({ toolbarIconOrder: order }),
+            setMinimalCompactMode: (enabled) => set({ minimalCompactMode: enabled }),
+            setMinimalAnimations: (enabled) => set({ minimalAnimations: enabled }),
 
             // Online status
             setIsOnline: (online: boolean) => set({ isOnline: online }),
@@ -1228,6 +1248,11 @@ export const useAppStore = create<BrowserState>()(
                 theme: state.theme,
                 customThemePrimary: state.customThemePrimary,
                 customThemeSecondary: state.customThemeSecondary,
+                browserTabLayout: state.browserTabLayout,
+                browserAccentPreset: state.browserAccentPreset,
+                toolbarIconOrder: state.toolbarIconOrder,
+                minimalCompactMode: state.minimalCompactMode,
+                minimalAnimations: state.minimalAnimations,
                 sidebarOpen: state.sidebarOpen,
                 sidebarWidth: state.sidebarWidth,
                 sidebarSide: state.sidebarSide,

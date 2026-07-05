@@ -143,7 +143,7 @@ class WebSearchProvider {
         `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
         {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
           },
@@ -156,22 +156,39 @@ class WebSearchProvider {
 
       const html = await htmlRes.text();
       const results = [];
-      const linkRegex = /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi;
-      const snippetRegex = /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
-      let linkMatch;
       const snippets = [];
-      let sMatch;
-      while ((sMatch = snippetRegex.exec(html)) !== null) {
-        snippets.push(sMatch[1].replace(/<[^>]*>/g, '').trim());
-      }
-      while ((linkMatch = linkRegex.exec(html)) !== null && results.length < count) {
-        let rawUrl = linkMatch[1].trim();
-        const title = linkMatch[2].replace(/<[^>]*>/g, '').trim();
-        if (!title) continue;
-        const cleanUrl = this._cleanDdgUrl(rawUrl);
-        if (!cleanUrl) continue;
-        const snippet = snippets[results.length] || '';
-        results.push({ title, url: cleanUrl, snippet });
+
+      // Try multiple HTML patterns (DDG changes their markup frequently)
+      const patterns = [
+        // Pattern 1: Modern DDG result links (class="result__a")
+        { link: /<a[^>]+class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi,
+          snippet: /<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi },
+        // Pattern 2: Article result items with heading links
+        { link: /<article[^>]*>[\s\S]*?<a[^>]+href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi,
+          snippet: /<article[^>]*>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi },
+      ];
+
+      for (const pattern of patterns) {
+        if (results.length >= count) break;
+        snippets.length = 0;
+
+        // Collect snippets
+        let sMatch;
+        while ((sMatch = pattern.snippet.exec(html)) !== null) {
+          snippets.push(sMatch[1].replace(/<[^>]*>/g, '').trim());
+        }
+
+        // Collect links
+        let linkMatch;
+        while ((linkMatch = pattern.link.exec(html)) !== null && results.length < count) {
+          let rawUrl = linkMatch[1].trim();
+          const title = linkMatch[2].replace(/<[^>]*>/g, '').trim();
+          if (!title) continue;
+          const cleanUrl = this._cleanDdgUrl(rawUrl);
+          if (!cleanUrl || results.some(r => r.url === cleanUrl)) continue;
+          const snippet = snippets[results.length] || '';
+          results.push({ title, url: cleanUrl, snippet });
+        }
       }
 
       return results;

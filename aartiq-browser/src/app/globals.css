@@ -52,6 +52,8 @@
   --deep-space-accent-neon: #2563EB;
   --custom-primary: #8B5CF6;
   --custom-secondary: #06B6D4;
+  --browser-accent-1: #8AA4FF;
+  --browser-accent-2: #43D9AD;
   --shadow-color: rgba(15, 23, 42, 0.15); /* Safe neutral fallback */
 
   /* fonts */
@@ -193,6 +195,439 @@
     radial-gradient(900px at 14% 18%, color-mix(in srgb, var(--custom-primary) 24%, transparent) 0%, transparent 50%),
     radial-gradient(1000px at 82% 12%, color-mix(in srgb, var(--custom-secondary) 20%, transparent) 0%, transparent 48%),
     linear-gradient(140deg, #060816 0%, #0c1228 55%, #070b18 100%);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MINIMAL THEME  (clean browser chrome, calm graphite surfaces)
+   ───────────────────────────────────────────────────────────── */
+.minimal {
+  --primary-bg: #030305;
+  --navbar-bg: rgba(6, 7, 10, 0.92);
+  --card-bg: #0A0C10;
+  --sidebar-bg: #050608;
+  --primary-text: #EEF0F4;
+  --secondary-text: #8A94A6;
+  --accent: var(--browser-accent-1, #8AA4FF);
+  --accent-light: var(--browser-accent-2, #43D9AD);
+  --border-color: rgba(238, 240, 244, 0.08);
+  --glass-bg: rgba(8, 10, 14, 0.86);
+  --glass-border: rgba(238, 240, 244, 0.08);
+  --shadow-color: rgba(0, 0, 0, 0.55);
+  --overlay-bg: rgba(3, 3, 5, 0.85);
+
+  --color-primary-bg: #030305;
+  --color-primary-text: #EEF0F4;
+  --color-secondary-text: #8A94A6;
+  --color-accent: var(--browser-accent-1, #8AA4FF);
+  --color-accent-light: var(--browser-accent-2, #43D9AD);
+  --color-border-color: rgba(238, 240, 244, 0.08);
+  --color-dark-border: rgba(238, 240, 244, 0.08);
+
+  --deep-space-glow: color-mix(in srgb, var(--browser-accent-1, #8AA4FF) 25%, transparent);
+  --deep-space-accent-neon: var(--browser-accent-1, #8AA4FF);
+
+  color-scheme: dark;
+}
+
+.minimal body,
+.minimal .bg-deep-space {
+  background:
+    linear-gradient(180deg, #080A0E 0%, #030305 56%, #020204 100%);
+}
+
+.minimal .glass,
+.minimal .glass-dark,
+.minimal .glass-vibrant {
+  background-color: rgba(8, 10, 14, 0.88);
+  border-color: rgba(238, 240, 244, 0.08);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.40);
+}
+
+.minimal .ai-sidebar-theme {
+  background: linear-gradient(180deg, rgba(8, 10, 14, 0.94), rgba(3, 3, 5, 0.96)) !important;
+  border-color: rgba(238, 240, 244, 0.08);
+}
+
+.minimal .card-premium {
+  background-color: rgba(10, 12, 16, 0.88);
+  border-color: rgba(238, 240, 244, 0.08);
+}
+
+.minimal-browser-chrome {
+  background: color-mix(in srgb, var(--navbar-bg) 94%, transparent);
+  border-color: color-mix(in srgb, var(--border-color) 80%, transparent);
+}
+
+.minimal-tab-active {
+  background: color-mix(in srgb, var(--accent) 15%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-color));
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MINIMAL UI OVERRIDES
+   Stripped-back chrome — only essentials remain visible
+   ───────────────────────────────────────────────────────────── */
+
+/* Minimal sidebar header — no logo, compact */
+.minimal .ai-sidebar-theme header {
+  height: 44px !important;
+  padding: 0 12px !important;
+}
+.minimal .ai-sidebar-theme header [class*="flex items-center justify-between"] > [class*="flex items-center gap"] > [class*="w-8 h-8"] {
+  display: none !important;
+}
+.minimal .ai-sidebar-theme header h2 {
+  font-size: 9px !important;
+  letter-spacing: 0.25em !important;
+}
+/* Hide all sidebar header icon buttons except collapse (last) and fullscreen (2nd to last) */
+.minimal .ai-sidebar-theme header [class*="flex items-center gap-1"] > button:not(:last-child):not(:nth-last-child(2)) {
+  display: none !important;
+}
+
+/* Minimal chat bubbles — remove heavy border-radius, padding, shadow */
+.minimal .ai-sidebar-theme [class*="rounded-[2.5rem]"] {
+  border-radius: 14px !important;
+  padding: 10px 14px !important;
+  box-shadow: none !important;
+}
+.minimal .ai-sidebar-theme [class*="rounded-[2.5rem]"]:hover {
+  box-shadow: none !important;
+}
+/* Hide sparkle icon before "Comet Response" label */
+.minimal .ai-sidebar-theme [class*="rounded-[2.5rem]"] [class*="w-6 h-6"] {
+  display: none !important;
+}
+/* Hide response label by default, show on bubble hover */
+.minimal .ai-sidebar-theme [class*="rounded-[2.5rem]"] [class*="text-[9px] font-black"] {
+  opacity: 0 !important;
+  font-size: 7px !important;
+  transition: opacity 0.15s;
+}
+.minimal .ai-sidebar-theme [class*="rounded-[2.5rem]"]:hover [class*="text-[9px] font-black"] {
+  opacity: 0.4 !important;
+}
+/* Reduce gap between model header and content */
+.minimal .ai-sidebar-theme [class*="rounded-[2.5rem]"] [class*="mb-3"] {
+  margin-bottom: 4px !important;
+}
+
+/* Minimal empty state */
+.minimal .ai-sidebar-theme [class*="py-20"] {
+  padding-top: 40px !important;
+  padding-bottom: 40px !important;
+}
+.minimal .ai-sidebar-theme [class*="py-20"] [class*="w-16 h-16"] {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 10px !important;
+}
+.minimal .ai-sidebar-theme [class*="py-20"] h3 {
+  font-size: 11px !important;
+}
+
+/* Minimal URL bar header — thinner, less padding */
+.minimal [class*="flex-shrink-0 flex items-center px-6 gap-6 border-b"] {
+  height: 48px !important;
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+  gap: 6px !important;
+}
+
+/* Hide rail toggle button in Minimal */
+.minimal button[title="Toggle Tools Rail"] {
+  display: none !important;
+}
+
+/* Hide history, read-aloud buttons in Minimal */
+.minimal button[title="History"],
+.minimal button[title="Read Aloud"] {
+  display: none !important;
+}
+
+/* Compact nav buttons in Minimal */
+.minimal [class*="flex-shrink-0 flex items-center px-6 gap-6 border-b"] [class*="flex items-center gap-1"] button {
+  padding: 5px !important;
+}
+.minimal [class*="flex-shrink-0 flex items-center px-6 gap-6 border-b"] [class*="flex items-center gap-1"] button svg {
+  width: 15px !important;
+  height: 15px !important;
+}
+
+/* Minimal URL input */
+.minimal [class*="flex-shrink-0 flex items-center px-6 gap-6 border-b"] input[type="text"] {
+  padding-top: 5px !important;
+  padding-bottom: 5px !important;
+  font-size: 12px !important;
+  padding-left: 32px !important;
+  padding-right: 70px !important;
+  border-radius: 8px !important;
+}
+
+/* Right header actions compact */
+.minimal [class*="flex-shrink-0 flex items-center px-6 gap-6 border-b"] [class*="flex items-center gap-1"]:last-child {
+  gap: 1px !important;
+}
+
+/* Hide non-essential right-side buttons in Minimal — only keep theme/customizer, spacer, profile */
+.minimal button[title="Toggle Fullscreen"],
+.minimal button[title="More"] {
+  display: none !important;
+}
+
+/* Compact profile button in Minimal */
+.minimal button[onclick*="openSettingsPanel"] {
+  padding: 1px !important;
+  border: none !important;
+  background: transparent !important;
+}
+.minimal button[onclick*="openSettingsPanel"] img,
+.minimal button[onclick*="openSettingsPanel"] div {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Minimal side tabs panel */
+.minimal aside[class*="w-[220px]"] {
+  width: 180px !important;
+}
+.minimal aside[class*="w-[220px]"] > div:first-child {
+  height: 32px !important;
+  padding: 0 10px !important;
+}
+.minimal aside[class*="w-[220px]"] > div:first-child span {
+  font-size: 8px !important;
+  letter-spacing: 0.25em !important;
+}
+
+/* Smaller browser viewport border-radius in Minimal */
+.minimal [class*="rounded-2xl overflow-hidden border"] {
+  border-radius: 10px !important;
+}
+
+/* Title bar minimal */
+.minimal [class*="h-10 backdrop-blur-xl"] {
+  height: 32px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+.minimal [class*="h-10 backdrop-blur-xl"] [class*="w-8"] {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+/* ── MINIMAL COMPACT MODE ──────────────────────────────────────
+   Inspired by Zen Browser compact mode — chrome can be toggled
+   to auto-hide the URL bar, creating an immersive browsing view.
+   ────────────────────────────────────────────────────────────── */
+
+/* Hide the browser header bar when compact mode is active */
+.minimal.minimal-compact-active [class*="flex-shrink-0 flex items-center px-6 gap-6 border-b"],
+.minimal .minimal-compact-active [class*="flex-shrink-0 flex items-center px-6 gap-6 border-b"] {
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Side tabs auto-collapse in compact mode */
+.minimal.minimal-compact-active aside[class*="w-[220px]"],
+.minimal .minimal-compact-active aside[class*="w-[220px]"] {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+}
+
+/* Title bar hides in compact mode */
+.minimal.minimal-compact-active [class*="h-10 backdrop-blur-xl"],
+.minimal .minimal-compact-active [class*="h-10 backdrop-blur-xl"] {
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Remove pt-10 spacing that accounts for title bar when in compact mode */
+.minimal.minimal-compact-active [class*="pt-10"] {
+  padding-top: 0 !important;
+}
+
+/* ── MINIMAL THEME ANIMATIONS ──────────────────────────────────
+   Smooth, Arc-inspired motion with CSS custom properties for
+   timing.  Toggle on/off via .minimal-animations-enabled /
+   .minimal-animations-disabled on the root element.
+   ────────────────────────────────────────────────────────────── */
+
+/* ── Easing & Timing Tokens ─────────────────────────────────── */
+.minimal.minimal-animations-enabled {
+  --anim-fast:   0.15s;
+  --anim-base:   0.28s;
+  --anim-slow:   0.40s;
+  --anim-spring: cubic-bezier(0.32, 0.72, 0, 1);   /* Arc-style spring */
+  --anim-ease:   cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --anim-bounce: cubic-bezier(0.34, 1.56, 0.64, 1); /* Gentle overshoot */
+}
+
+/* ── Keyframe Animations ────────────────────────────────────── */
+@keyframes minimal-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes minimal-fade-in-up {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes minimal-slide-in-right {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes minimal-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(var(--accent-rgb, 56, 189, 248), 0); }
+  50%      { box-shadow: 0 0 0 4px rgba(var(--accent-rgb, 56, 189, 248), 0.15); }
+}
+
+@keyframes minimal-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes minimal-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes minimal-tab-activate {
+  from { opacity: 0.7; transform: translateY(1px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Smooth compact mode transitions ────────────────────────── */
+/* Apply smooth transitions to ALL chrome elements when compact mode toggles */
+.minimal.minimal-animations-enabled [class*="h-[56px]"],
+.minimal.minimal-animations-enabled [class*="h-10 backdrop-blur-xl"],
+.minimal.minimal-animations-enabled aside[class*="w-[220px]"] {
+  transition: height    var(--anim-base) var(--anim-spring),
+              opacity   var(--anim-base) var(--anim-spring),
+              padding   var(--anim-base) var(--anim-spring),
+              margin    var(--anim-base) var(--anim-spring),
+              transform var(--anim-base) var(--anim-spring) !important;
+}
+
+/* Also apply to the pt-10 spacer */
+.minimal.minimal-animations-enabled [class*="pt-10"] {
+  transition: padding-top var(--anim-base) var(--anim-spring) !important;
+}
+
+/* ── URL Bar Focus Animation ────────────────────────────────── */
+.minimal.minimal-animations-enabled input[type="text"]:focus {
+  animation: minimal-glow-pulse 1.5s ease-in-out 2;
+  transition: box-shadow var(--anim-fast) var(--anim-ease),
+              background var(--anim-fast) var(--anim-ease),
+              border-color var(--anim-fast) var(--anim-ease) !important;
+}
+
+/* ── Tab Switch Animation ───────────────────────────────────── */
+.minimal.minimal-animations-enabled [class*="minimal-tab-active"] {
+  animation: minimal-tab-activate var(--anim-base) var(--anim-spring);
+}
+
+/* ── Side Tabs Item Mount/Reorder ───────────────────────────── */
+.minimal.minimal-animations-enabled aside[class*="w-[220px"] button[class*="rounded-lg border"] {
+  animation: minimal-slide-in-right var(--anim-fast) var(--anim-ease) both;
+  transition: background var(--anim-fast) var(--anim-ease),
+              border-color var(--anim-fast) var(--anim-ease),
+              transform var(--anim-fast) var(--anim-spring),
+              box-shadow var(--anim-fast) var(--anim-ease);
+}
+.minimal.minimal-animations-enabled aside[class*="w-[220px"] button[class*="rounded-lg border"]:hover {
+  transform: translateX(2px);
+}
+
+/* ── Chrome Customizer Popover ──────────────────────────────── */
+.minimal.minimal-animations-enabled [class*="rounded-2xl border shadow-2xl p-4 z-[200]"] {
+  animation: minimal-fade-in-up var(--anim-slow) var(--anim-spring);
+}
+
+/* ── Toolbar Buttons Micro-interactions ─────────────────────── */
+.minimal.minimal-animations-enabled [class*="rounded-xl hover:bg"] {
+  transition: all var(--anim-fast) var(--anim-ease);
+}
+.minimal.minimal-animations-enabled [class*="rounded-xl hover:bg"]:active {
+  transform: scale(0.92);
+}
+
+/* ── Theme Icon Buttons in Customizer ───────────────────────── */
+.minimal.minimal-animations-enabled [class*="grid-cols-3 gap-2"] button,
+.minimal.minimal-animations-enabled [class*="grid-cols-4 gap-2"] button,
+.minimal.minimal-animations-enabled [class*="grid-cols-6 gap-2"] button {
+  transition: all var(--anim-fast) var(--anim-spring);
+}
+.minimal.minimal-animations-enabled [class*="grid-cols-3 gap-2"] button:hover,
+.minimal.minimal-animations-enabled [class*="grid-cols-4 gap-2"] button:hover,
+.minimal.minimal-animations-enabled [class*="grid-cols-6 gap-2"] button:hover {
+  transform: translateY(-1px);
+}
+
+/* ── Main Content Area ──────────────────────────────────────── */
+.minimal.minimal-animations-enabled main {
+  transition: opacity var(--anim-base) var(--anim-ease);
+}
+
+/* ── Settings Panel Entrance ────────────────────────────────── */
+.minimal.minimal-animations-enabled [class*="rounded-2xl border shadow-2xl overflow-hidden"] {
+  animation: minimal-scale-in var(--anim-slow) var(--anim-spring);
+}
+
+/* ── Header Right-Action Buttons ────────────────────────────── */
+.minimal.minimal-animations-enabled header [class*="p-2 rounded-xl"] {
+  transition: all var(--anim-fast) var(--anim-spring);
+}
+.minimal.minimal-animations-enabled header [class*="p-2 rounded-xl"]:hover {
+  transform: translateY(-1px);
+}
+.minimal.minimal-animations-enabled header [class*="p-2 rounded-xl"]:active {
+  transform: scale(0.92);
+}
+
+/* ── Theme Toggle Button ────────────────────────────────────── */
+.minimal.minimal-animations-enabled [class*="rounded-2xl"].theme-toggle-btn {
+  transition: all var(--anim-fast) var(--anim-spring);
+}
+.minimal.minimal-animations-enabled [class*="rounded-2xl"].theme-toggle-btn:hover {
+  transform: scale(1.05);
+}
+
+/* ── Compact Mode Hover Reveal ──────────────────────────────── */
+/* When compact mode hides the header and the user hovers the trigger
+   zone near the top, the chrome should slide down smoothly.           */
+.minimal.minimal-animations-enabled.minimal-compact-active [class*="h-[56px]"] {
+  transition: height    var(--anim-slow) var(--anim-spring),
+              opacity   var(--anim-slow) var(--anim-spring),
+              padding   var(--anim-slow) var(--anim-spring),
+              transform var(--anim-slow) var(--anim-spring) !important;
+}
+
+/* ── Disable All Animations ─────────────────────────────────── */
+/* Single toggle — kills every animation and transition instantly */
+.minimal.minimal-animations-disabled,
+.minimal.minimal-animations-disabled *,
+.minimal.minimal-animations-disabled *::before,
+.minimal.minimal-animations-disabled *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
 }
 
 /* ─────────────────────────────────────────────────────────────

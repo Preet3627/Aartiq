@@ -68,18 +68,67 @@ module.exports = function registerFileHandlers(ipcMain, handlers) {
   const { getAppIconBase64 } = require('./utils.js');
   const { generateCometPDFTemplate } = require('./pdf-utils.js');
 
-  ipcMain.handle('generate-pdf', async (event, options) => {
-    // try {
-    //   const { generateDocument } = require('../../lib/AdvancedDocumentEngine.ts');
-    //   return await generateDocument('pdf', options);
-    // } catch (e) {
-    // Fallback to legacy template if engine fails or not available
-    const title = options.title || 'Aartiq Document';
-    const content = options.content || '';
-    const icon = await getAppIconBase64();
-    const html = generateCometPDFTemplate(title, content, icon);
-    return { success: true, html };
-    // }
+  ipcMain.handle('generate-pdf', async (event, title, content) => {
+    const { BrowserWindow, app } = require('electron');
+    const os = require('os');
+    try {
+      const pdfTitle = title || 'Aartiq Document';
+      const cleanContent = content || '';
+      const icon = await getAppIconBase64();
+      const html = generateCometPDFTemplate(pdfTitle, cleanContent, icon);
+
+      const downloadsPath = app.getPath('downloads');
+      let workerWindow = null;
+      let tempHtmlPath = '';
+
+      try {
+        const tempDir = os.tmpdir();
+        tempHtmlPath = path.join(tempDir, `aartiq_pdf_${Date.now()}.html`);
+        fs.writeFileSync(tempHtmlPath, html, 'utf8');
+
+        workerWindow = new BrowserWindow({
+          width: 900, height: 1200, show: false,
+          webPreferences: { offscreen: true, partition: 'persist:pdf' }
+        });
+
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('PDF load timeout')), 30000);
+          workerWindow.webContents.once('did-finish-load', () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+          workerWindow.webContents.once('did-fail-load', (e, err) => {
+            clearTimeout(timeout);
+            reject(new Error(`Failed to load: ${err}`));
+          });
+          workerWindow.loadFile(tempHtmlPath).catch(reject);
+        });
+
+        const pdfData = await workerWindow.webContents.printToPDF({
+          printBackground: true, pageSize: 'A4',
+          margins: { top: 0, bottom: 0, left: 0, right: 0 }
+        });
+
+        const safeName = pdfTitle.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50);
+        const filePath = path.join(downloadsPath, `${safeName}_${Date.now()}.pdf`);
+        fs.writeFileSync(filePath, pdfData);
+
+        const finalName = path.basename(filePath);
+        mainWindow.webContents.send('download-started', { name: finalName, path: filePath });
+        setTimeout(() => {
+          mainWindow.webContents.send('download-progress', { name: finalName, progress: 100 });
+          mainWindow.webContents.send('download-complete', { name: finalName, path: filePath });
+        }, 500);
+
+        return { success: true, filePath };
+      } finally {
+        if (workerWindow && !workerWindow.isDestroyed()) workerWindow.destroy();
+        if (tempHtmlPath && fs.existsSync(tempHtmlPath)) try { fs.unlinkSync(tempHtmlPath); } catch (e) {}
+      }
+    } catch (err) {
+      console.error('[Generate-PDF] Failed:', err);
+      return { success: false, error: err.message };
+    }
   });
 
   ipcMain.handle('generate-xlsx', async (event, options) => {

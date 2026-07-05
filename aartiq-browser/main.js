@@ -997,6 +997,77 @@ const createNativeMacUiSnapshot = () => {
   };
 };
 
+let nativeMacUiBridgeServer = null;
+
+const startNativeMacUiBridge = () => {
+  try {
+    const bridgeApp = express();
+    bridgeApp.use(express.json());
+
+    bridgeApp.post('/native-mac-ui/prompt', (req, res) => {
+      const { prompt, source } = req.body || {};
+      if (!prompt || typeof prompt !== 'string') {
+        return res.status(400).json({ error: 'Missing or invalid prompt field' });
+      }
+      deliverNativeMacUiEvent('native-mac-ui-submit-prompt', { prompt: prompt.slice(0, 32000), source })
+        .catch(err => console.error('[NativeMacBridge] deliver error:', err));
+      res.json({ received: true });
+    });
+
+    bridgeApp.get('/native-mac-ui/state', (_req, res) => {
+      const snapshot = createNativeMacUiSnapshot();
+      res.json({
+        success: true,
+        state: snapshot,
+        error: null,
+      });
+    });
+
+    bridgeApp.post('/native-mac-ui/panels/open', (req, res) => {
+      const { mode } = req.body || {};
+      if (!mode) {
+        return res.status(400).json({ error: 'Missing mode field' });
+      }
+      const normalized = normalizeMacNativePanelMode(mode);
+      nativeMacPanelManager.show(normalized).catch(err => {
+        console.error('[NativeMacBridge] Failed to open panel:', err);
+      });
+      res.json({ opened: normalized });
+    });
+
+    bridgeApp.post('/native-mac-ui/config', (req, res) => {
+      const updates = req.body || {};
+      if (typeof updates !== 'object' || Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'Empty or invalid config payload' });
+      }
+      setMacNativeUiPreferences(updates);
+      res.json({ applied: true, preferences: getMacNativeUiPreferences() });
+    });
+
+    nativeMacUiBridgeServer = bridgeApp.listen(nativeMacUiPort, '127.0.0.1', () => {
+      console.log(`[NativeMacBridge] Express UI bridge listening on http://127.0.0.1:${nativeMacUiPort}`);
+    });
+
+    bridgeApp.on('error', (err) => {
+      console.error('[NativeMacBridge] Server error:', err);
+    });
+  } catch (err) {
+    console.error('[NativeMacBridge] Failed to start bridge server:', err);
+  }
+};
+
+const stopNativeMacUiBridge = () => {
+  if (nativeMacUiBridgeServer) {
+    try {
+      nativeMacUiBridgeServer.close();
+      nativeMacUiBridgeServer = null;
+      console.log('[NativeMacBridge] Bridge server stopped');
+    } catch (err) {
+      console.error('[NativeMacBridge] Error stopping server:', err);
+    }
+  }
+};
+
 const appendNativeMacUiMessage = (message = {}) => {
   const existing = Array.isArray(nativeMacUiState.messages) ? nativeMacUiState.messages : [];
   nativeMacUiState.messages = [
@@ -5147,7 +5218,7 @@ ipcMain.on('set-mcp-server-port', (event, port) => {
   console.log(`MCP Server port updated to: ${mcpServerPort}`);
 });
 
-ipcMain.handle('extract-page-content', async (_event, tabId?: string) => {
+ipcMain.handle('extract-page-content', async (_event, tabId) => {
   const targetId = tabId || activeTabId;
   let view = targetId ? tabViews.get(targetId) : null;
 
@@ -6158,12 +6229,11 @@ app.whenReady().then(async () => {
       let searchResults = [];
       try {
         const results = await webSearchProvider.search(query, 'duckduckgo', 6);
-        searchResults = results.map((r, index) => [
-          `[Result ${index + 1}]`,
-          `Title: ${r.title || 'Untitled result'}`,
-          `URL: ${r.url || ''}`,
-          `Snippet: ${r.snippet || ''}`,
-        ].join('\n'));
+        searchResults = results.map(r => ({
+          title: r.title || 'Untitled result',
+          url: r.url || '',
+          snippet: r.snippet || '',
+        }));
       } catch (e) {
         console.warn(`[RAG] Deep search failed for ${query}`);
       }
@@ -8239,6 +8309,7 @@ ${tabData}`;
   });
 
   app.on('before-quit', () => {
+    stopNativeMacUiBridge();
     if (macSidebarWindow && !macSidebarWindow.isDestroyed()) {
       macSidebarWindow.destroy();
     }
@@ -8277,6 +8348,9 @@ ${tabData}`;
   });
 
   createWindow();
+
+  // Start the Express HTTP bridge so SwiftUI native panels can communicate
+  startNativeMacUiBridge();
 
   // Wire modular IPC handlers from src/main/handlers/
   // NOTE: must be after createWindow() so mainWindow is initialized

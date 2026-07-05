@@ -24,7 +24,7 @@ import {
 import { useAppVersion } from '@/lib/useAppVersion';
 import { useAppStore } from '@/store/useAppStore';
 
-type ThemeChoice = 'system' | 'light' | 'dark' | 'vibrant';
+type ThemeChoice = 'system' | 'light' | 'dark' | 'minimal' | 'vibrant';
 
 const themeOptions: Array<{
   id: ThemeChoice;
@@ -53,6 +53,13 @@ const themeOptions: Array<{
       description: 'Minimal contrast-first theme for long sessions and focus.',
       preview: 'linear-gradient(135deg, #020617 0%, #0f172a 100%)',
       icon: <MoonStar size={16} />,
+    },
+    {
+      id: 'minimal',
+      title: 'Minimal',
+      description: 'Stripped-back chrome with compact tabs and minimal UI.',
+      preview: 'linear-gradient(135deg, #0D0F12 0%, #15191E 100%)',
+      icon: <Sparkles size={16} />,
     },
     {
       id: 'vibrant',
@@ -154,7 +161,13 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
     onComplete();
   };
 
-  const goNext = () => setStep((current) => Math.min(current + 1, 4));
+  const goNext = () => setStep((current) => {
+    if (current === 3 && wantsAI && !verifiedProvider) return current;
+    if (current === 3 && wantsAI && verifiedProvider) {
+      store.setAIProvider(verifiedProvider);
+    }
+    return Math.min(current + 1, 4);
+  });
   const goBack = () => setStep((current) => Math.max(current - 1, 1));
 
   const [activeProviderSetup, setActiveProviderSetup] = useState<string | null>(null);
@@ -162,6 +175,30 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
   const [verificationError, setVerificationError] = useState<string | null>(null);
   const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
   const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [verifiedProvider, setVerifiedProvider] = useState<string | null>(null);
+
+  const testChatCompletion = async (
+    url: string,
+    body: Record<string, any>,
+    headers: Record<string, string> = {}
+  ): Promise<any> => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => '');
+      throw new Error(`API error (${res.status}): ${errBody.slice(0, 200)}`);
+    }
+    return res.json();
+  };
+
+  const extractTextAndCheck = (responseText: string): void => {
+    if (!responseText.includes('246')) {
+      throw new Error(`Model gave wrong answer. Expected "246", got: "${responseText.trim().slice(0, 120)}"`);
+    }
+  };
 
   const handleVerifyProvider = async (providerId: string) => {
     setVerifying(true);
@@ -172,50 +209,96 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
     try {
       if (providerId === 'ollama') {
         const url = store.ollamaBaseUrl || 'http://127.0.0.1:11434';
-        const res = await fetch(`${url}/api/tags`);
-        if (res.ok) {
-          const data = await res.json();
-          const models = data.models?.map((m: any) => m.name) || [];
-          setFetchedModels(models);
-          setVerificationSuccess(`Connected to Ollama! Found ${models.length} models.`);
-          if (models.length > 0 && !store.ollamaModel) {
-            store.setOllamaModel(models[0]);
-          }
-        } else {
-          setVerificationError('Ollama responded with an error. Is it running?');
-        }
+        const tagsRes = await fetch(`${url}/api/tags`);
+        if (!tagsRes.ok) throw new Error('Ollama responded with an error. Is it running?');
+        const tagsData = await tagsRes.json();
+        const models = tagsData.models?.map((m: any) => m.name) || [];
+        setFetchedModels(models);
+        if (!models.length) throw new Error('No models found on Ollama server. Pull one first (e.g. llama3.2).');
+        const model = store.ollamaModel || models[0];
+        const chatData = await testChatCompletion(`${url}/api/chat`, {
+          model, messages: [{ role: 'user', content: '123+123' }], stream: false,
+        });
+        extractTextAndCheck(chatData.message?.content || '');
+        setVerifiedProvider(providerId);
+        store.setAIProvider(providerId);
+        setVerificationSuccess(`Ollama "${model}" connected and passed the math test!`);
+        if (!store.ollamaModel) store.setOllamaModel(model);
       } else if (providerId === 'openai') {
         if (!store.openaiApiKey) throw new Error('API key is required');
-        const res = await fetch('https://api.openai.com/v1/models', {
+        const modelsRes = await fetch('https://api.openai.com/v1/models', {
           headers: { 'Authorization': `Bearer ${store.openaiApiKey}` }
         });
-        if (res.ok) {
-          const data = await res.json();
-          const models = data.data?.filter((m: any) => m.id.includes('gpt')).map((m: any) => m.id) || [];
-          setFetchedModels(models);
-          setVerificationSuccess('OpenAI key verified! Models loaded.');
-        } else {
-          setVerificationError('Invalid OpenAI API key or network error.');
-        }
+        if (!modelsRes.ok) throw new Error('Invalid OpenAI API key.');
+        const modelsData = await modelsRes.json();
+        const models = modelsData.data?.filter((m: any) => m.id.includes('gpt')).map((m: any) => m.id) || [];
+        setFetchedModels(models);
+        const chatData = await testChatCompletion('https://api.openai.com/v1/chat/completions', {
+          model: 'gpt-4o-mini', messages: [{ role: 'user', content: '123+123' }], max_tokens: 50,
+        }, { 'Authorization': `Bearer ${store.openaiApiKey}` });
+        extractTextAndCheck(chatData.choices?.[0]?.message?.content || '');
+        setVerifiedProvider(providerId);
+        store.setAIProvider(providerId);
+        setVerificationSuccess('OpenAI key verified and passed the math test!');
       } else if (providerId === 'groq') {
         if (!store.groqApiKey) throw new Error('API key is required');
-        const res = await fetch('https://api.groq.com/openai/v1/models', {
+        const modelsRes = await fetch('https://api.groq.com/openai/v1/models', {
           headers: { 'Authorization': `Bearer ${store.groqApiKey}` }
         });
-        if (res.ok) {
-          const data = await res.json();
-          const models = data.data?.map((m: any) => m.id) || [];
-          setFetchedModels(models);
-          setVerificationSuccess('Groq key verified! High-speed models loaded.');
-        } else {
-          setVerificationError('Invalid Groq API key or network error.');
-        }
+        if (!modelsRes.ok) throw new Error('Invalid Groq API key.');
+        const modelsData = await modelsRes.json();
+        const models = modelsData.data?.map((m: any) => m.id) || [];
+        setFetchedModels(models);
+        const chatData = await testChatCompletion('https://api.groq.com/openai/v1/chat/completions', {
+          model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: '123+123' }], max_tokens: 50,
+        }, { 'Authorization': `Bearer ${store.groqApiKey}` });
+        extractTextAndCheck(chatData.choices?.[0]?.message?.content || '');
+        setVerifiedProvider(providerId);
+        store.setAIProvider(providerId);
+        setVerificationSuccess('Groq key verified and passed the math test!');
       } else if (providerId === 'google') {
         if (!store.geminiApiKey) throw new Error('Gemini API key is required');
-        setVerificationSuccess('Gemini key saved. Verification skipped (pre-flight check not available for this endpoint).');
+        const chatData = await testChatCompletion(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${store.geminiApiKey}`,
+          { contents: [{ parts: [{ text: '123+123' }] }] }
+        );
+        extractTextAndCheck(chatData.candidates?.[0]?.content?.parts?.[0]?.text || '');
+        setVerifiedProvider(providerId);
+        store.setAIProvider(providerId);
+        setVerificationSuccess('Gemini key verified and passed the math test!');
       } else if (providerId === 'anthropic') {
         if (!store.anthropicApiKey) throw new Error('Claude API key is required');
-        setVerificationSuccess('Claude key saved. Check in chat to verify.');
+        const chatData = await testChatCompletion('https://api.anthropic.com/v1/messages', {
+          model: 'claude-3-haiku-20240307', max_tokens: 50,
+          messages: [{ role: 'user', content: '123+123' }],
+        }, { 'x-api-key': store.anthropicApiKey, 'anthropic-version': '2023-06-01' });
+        extractTextAndCheck(chatData.content?.[0]?.text || '');
+        setVerifiedProvider(providerId);
+        store.setAIProvider(providerId);
+        setVerificationSuccess('Claude key verified and passed the math test!');
+      } else if (providerId === 'xai') {
+        if (!store.xaiApiKey) throw new Error('xAI API key is required');
+        const chatData = await testChatCompletion('https://api.x.ai/v1/chat/completions', {
+          model: 'grok-2', messages: [{ role: 'user', content: '123+123' }], max_tokens: 50,
+        }, { 'Authorization': `Bearer ${store.xaiApiKey}` });
+        extractTextAndCheck(chatData.choices?.[0]?.message?.content || '');
+        setVerifiedProvider(providerId);
+        store.setAIProvider(providerId);
+        setVerificationSuccess('xAI key verified and passed the math test!');
+      } else if (providerId === 'azure-openai') {
+        if (!store.azureOpenaiApiKey) throw new Error('Azure API key is required');
+        if (!store.azureOpenaiEndpoint) throw new Error('Azure endpoint is required');
+        const model = store.azureOpenaiModel || 'gpt-4o-mini';
+        const endpoint = store.azureOpenaiEndpoint.replace(/\/+$/, '');
+        const chatData = await testChatCompletion(
+          `${endpoint}/openai/deployments/${model}/chat/completions?api-version=2024-08-01-preview`,
+          { messages: [{ role: 'user', content: '123+123' }], max_tokens: 50 },
+          { 'api-key': store.azureOpenaiApiKey }
+        );
+        extractTextAndCheck(chatData.choices?.[0]?.message?.content || '');
+        setVerifiedProvider(providerId);
+        store.setAIProvider(providerId);
+        setVerificationSuccess('Azure OpenAI key verified and passed the math test!');
       } else {
         setVerificationSuccess('Configuration saved!');
       }
@@ -245,7 +328,7 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                 <Palette size={14} />
                 Setup guide
               </div>
-              <h2 className="text-3xl font-semibold tracking-[-0.03em]">Make Comet feel ready before the first tab opens.</h2>
+              <h2 className="text-3xl font-semibold tracking-[-0.03em]">Make Aartiq feel ready before the first tab opens.</h2>
               Choose how much AI you want, pick a theme, review provider options, then finish with sync and security basics.
             </div>
 
@@ -319,7 +402,7 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                     </div>
                     <h3 className="mt-5 text-xl font-semibold tracking-[-0.02em]">Start simple</h3>
                     <p className="mt-2 text-sm leading-7 text-white/58">
-                      Skip built-in AI for now and keep Comet as a focused browser while you finish the rest of onboarding.
+                      Skip built-in AI for now and keep Aartiq as a focused browser while you finish the rest of onboarding.
                     </p>
                   </button>
                 </div>
@@ -329,7 +412,7 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                   <div className="mt-4 grid gap-3 md:grid-cols-3">
                     {[
                       'The theme selector now lives in setup instead of only settings.',
-                      'Windows users get an official Copilot companion path with no Comet API key needed.',
+                      'Windows users get an official Copilot companion path with no Aartiq API key needed.',
                       'You can still finish setup even if you want to connect AI later.',
                     ].map((item) => (
                       <div key={item} className="rounded-2xl border border-white/10 bg-black/10 p-4 text-sm leading-6 text-white/62">
@@ -397,7 +480,7 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                     <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Choose how you want to power the assistant.</h3>
                   </div>
                   <div className="rounded-2xl border border-sky-300/18 bg-sky-300/10 px-4 py-3 text-sm leading-6 text-sky-50/82">
-                    Comet supports Ollama (local) or API keys for reasoning. Your settings are synced across devices securely.
+                    Aartiq supports Ollama (local) or API keys for reasoning. Your settings are synced across devices securely.
                   </div>
                 </div>
 
@@ -435,18 +518,20 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
 
                               <div className="space-y-2">
                                 <label className="text-[10px] font-bold uppercase tracking-widest text-white/30">
-                                  {provider.id === 'ollama' ? 'Ollama URL' : 'API Key'}
+                                  {provider.id === 'ollama' ? 'Ollama URL' :
+                                   provider.id === 'azure-openai' ? 'Azure Endpoint' : 'API Key'}
                                 </label>
                                 <div className="relative">
                                   <input
-                                    type={provider.id === 'ollama' ? 'text' : 'password'}
+                                    type={provider.id === 'ollama' || provider.id === 'azure-openai' ? 'text' : 'password'}
                                     value={
                                       provider.id === 'ollama' ? store.ollamaBaseUrl :
                                         provider.id === 'openai' ? store.openaiApiKey :
                                           provider.id === 'google' ? store.geminiApiKey :
                                             provider.id === 'anthropic' ? store.anthropicApiKey :
                                               provider.id === 'groq' ? store.groqApiKey :
-                                                provider.id === 'xai' ? store.xaiApiKey : ''
+                                                provider.id === 'xai' ? store.xaiApiKey :
+                                                  provider.id === 'azure-openai' ? store.azureOpenaiEndpoint : ''
                                     }
                                     onChange={(e) => {
                                       const val = e.target.value;
@@ -456,12 +541,28 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                                       if (provider.id === 'anthropic') store.setAnthropicApiKey(val);
                                       if (provider.id === 'groq') store.setGroqApiKey(val);
                                       if (provider.id === 'xai') store.setXaiApiKey(val);
+                                      if (provider.id === 'azure-openai') store.setAzureOpenaiEndpoint(val);
                                     }}
-                                    placeholder={provider.id === 'ollama' ? 'http://127.0.0.1:11434' : 'sk-...'}
+                                    placeholder={
+                                      provider.id === 'ollama' ? 'http://127.0.0.1:11434' :
+                                      provider.id === 'azure-openai' ? 'https://my-resource.openai.azure.com' : 'sk-...'
+                                    }
                                     className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:border-sky-400/40 focus:ring-0"
                                   />
                                   <Key size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20" />
                                 </div>
+                                {provider.id === 'azure-openai' && (
+                                  <div className="relative mt-2">
+                                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/30">API Key</label>
+                                    <input
+                                      type="password"
+                                      value={store.azureOpenaiApiKey}
+                                      onChange={(e) => store.setAzureOpenaiApiKey(e.target.value)}
+                                      placeholder="sk-..."
+                                      className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:border-sky-400/40 focus:ring-0"
+                                    />
+                                  </div>
+                                )}
                               </div>
 
                               {verificationError && (
@@ -478,7 +579,21 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                                 </div>
                               )}
 
-                              {fetchedModels.length > 0 && (
+                              {fetchedModels.length > 0 && provider.id === 'ollama' && (
+                                <div className="space-y-2">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/30">Select Model to Test</label>
+                                  <select
+                                    value={store.ollamaModel || fetchedModels[0]}
+                                    onChange={(e) => store.setOllamaModel(e.target.value)}
+                                    className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white focus:border-sky-400/40 focus:ring-0"
+                                  >
+                                    {fetchedModels.map(m => (
+                                      <option key={m} value={m} className="bg-[#0a1720]">{m}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                              {fetchedModels.length > 0 && provider.id !== 'ollama' && (
                                 <div className="space-y-2">
                                   <label className="text-[10px] font-bold uppercase tracking-widest text-white/30">Detected Models</label>
                                   <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1 thin-scrollbar">
@@ -620,7 +735,12 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
             <button
               type="button"
               onClick={goNext}
-              className="flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+              disabled={step === 3 && wantsAI && !verifiedProvider}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                step === 3 && wantsAI && !verifiedProvider
+                  ? 'bg-white/20 text-white/30 cursor-not-allowed pointer-events-none'
+                  : 'bg-white text-slate-900 hover:bg-slate-100'
+              }`}
             >
               Next
               <ArrowRight size={16} />

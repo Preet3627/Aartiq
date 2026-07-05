@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '@/store/useAppStore';
 import { BrowserAI } from '@/lib/BrowserAI';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, Reorder } from 'framer-motion';
 import { detectSchedulingIntent, type SchedulingIntent } from '@/components/ai/SchedulingIntentDetector';
 import {
   ShoppingBag, FileText, Globe, Plus, Bookmark, ChevronLeft, ChevronRight,
@@ -77,15 +77,34 @@ import { safeEval } from '@/lib/safe-eval';
 // Three concrete themes + "system" (resolves to dark/light at runtime).
 // "vibrant" maps to the .vibrant CSS class defined in globals.css.
 // ─────────────────────────────────────────────────────────────────────────────
-type AppTheme = 'dark' | 'light' | 'vibrant' | 'custom' | 'system';
+type AppTheme = 'dark' | 'light' | 'vibrant' | 'custom' | 'minimal' | 'system';
+type BrowserTabLayout = 'top' | 'left' | 'right' | 'both';
+type ToolbarActionId = 'downloads' | 'clipboard' | 'cart' | 'translate' | 'extensions' | 'quick-search';
+type BrowserAccentPreset = 'minimal' | 'brave' | 'ocean' | 'mint' | 'rose' | 'mono';
 
 /** Cycle order for the header toggle button */
-const THEME_CYCLE: AppTheme[] = ['dark', 'light', 'vibrant', 'custom'];
+const THEME_CYCLE: AppTheme[] = ['dark', 'light', 'minimal', 'vibrant', 'custom'];
+
+const TAB_LAYOUTS: Array<{ id: BrowserTabLayout; label: string }> = [
+  { id: 'top', label: 'Top' },
+  { id: 'left', label: 'Left' },
+  { id: 'right', label: 'Right' },
+  { id: 'both', label: 'Both' },
+];
+
+const BROWSER_ACCENT_PRESETS: Array<{ id: BrowserAccentPreset; label: string; primary: string; secondary: string }> = [
+  { id: 'minimal', label: 'Minimal', primary: '#8AA4FF', secondary: '#43D9AD' },
+  { id: 'brave', label: 'Brave', primary: '#FB542B', secondary: '#8D5CFF' },
+  { id: 'ocean', label: 'Ocean', primary: '#2DD4BF', secondary: '#38BDF8' },
+  { id: 'mint', label: 'Mint', primary: '#34D399', secondary: '#A3E635' },
+  { id: 'rose', label: 'Rose', primary: '#FB7185', secondary: '#F59E0B' },
+  { id: 'mono', label: 'Mono', primary: '#E5E7EB', secondary: '#94A3B8' },
+];
 
 /** Icon + label shown in the header button for the CURRENT theme */
 function ThemeIcon({ theme }: { theme: AppTheme }) {
   if (theme === 'light') return <Sun size={16} />;
-  if (theme === 'vibrant' || theme === 'custom') return <Palette size={16} />;
+  if (theme === 'vibrant' || theme === 'custom' || theme === 'minimal') return <Palette size={16} />;
   return <Moon size={16} />;
 }
 
@@ -192,9 +211,8 @@ export default function Home() {
     const canUseNativeUtilityPanel = section === 'profile' || section === 'downloads' || section === 'clipboard';
 
     if (isMacOS && !preferElectron && canUseNativeUtilityPanel && useAppStore.getState().macNativeUtilityPanelMode === 'swiftui') {
+      window.electronAPI?.hideAllViews();
       window.electronAPI?.showMacNativePanel?.(section === 'downloads' ? 'downloads' : section === 'clipboard' ? 'clipboard' : 'settings');
-      setShowSettings(false);
-      setIsBrowserDisabled(false);
       return;
     }
     setSettingsSection(section);
@@ -205,6 +223,7 @@ export default function Home() {
 
   const openClipboardPanel = useCallback(() => {
     if (isMacOS && useAppStore.getState().macNativeUtilityPanelMode === 'swiftui') {
+      window.electronAPI?.hideAllViews();
       window.electronAPI?.showMacNativePanel?.('clipboard');
       return;
     }
@@ -213,6 +232,7 @@ export default function Home() {
 
   const openDownloadsPanel = useCallback(() => {
     if (isMacOS && useAppStore.getState().macNativeUtilityPanelMode === 'swiftui') {
+      window.electronAPI?.hideAllViews();
       window.electronAPI?.showMacNativePanel?.('downloads');
       return;
     }
@@ -242,6 +262,22 @@ export default function Home() {
   const [isReadingAloud, setIsReadingAloud] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const [showTranslateDialog, setShowTranslateDialog] = useState(false);
+  const [showChromeCustomizer, setShowChromeCustomizer] = useState(false);
+  const [draggedToolbarAction, setDraggedToolbarAction] = useState<ToolbarActionId | null>(null);
+  const [compactRevealed, setCompactRevealed] = useState(false);
+  const compactHideTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const revealCompact = useCallback(() => {
+    if (compactHideTimerRef.current) clearTimeout(compactHideTimerRef.current);
+    setCompactRevealed(true);
+  }, []);
+
+  const scheduleHideCompact = useCallback(() => {
+    if (compactHideTimerRef.current) clearTimeout(compactHideTimerRef.current);
+    compactHideTimerRef.current = setTimeout(() => {
+      setCompactRevealed(false);
+    }, 2000);
+  }, []);
 
   const closeTranslateDialog = () => {
     setShowTranslateDialog(false);
@@ -683,6 +719,43 @@ export default function Home() {
   };
 
   const isBookmarked = store.bookmarks.some(b => b.url === store.currentUrl);
+  const normalizedToolbarOrder = (store.toolbarIconOrder?.length ? store.toolbarIconOrder : ['downloads', 'clipboard', 'cart', 'translate', 'extensions', 'quick-search']).filter((id, index, order) => order.indexOf(id) === index) as ToolbarActionId[];
+  const toolbarOrder = [...normalizedToolbarOrder, ...(['downloads', 'clipboard', 'cart', 'translate', 'extensions', 'quick-search'] as ToolbarActionId[]).filter((id) => !normalizedToolbarOrder.includes(id))];
+  const hasSideTabs = store.browserTabLayout === 'left' || store.browserTabLayout === 'right' || store.browserTabLayout === 'both';
+  const sideTabsOnRight = store.browserTabLayout === 'right';
+  const topTabsHeight = 0;
+  const sideTabsWidth = hasSideTabs ? 220 : 0;
+
+  const isToolbarActionVisible = (id: ToolbarActionId) => {
+    switch (id) {
+      case 'downloads': return store.showDownloadsIcon;
+      case 'clipboard': return store.showClipboardIcon;
+      case 'cart': return store.showCartIcon;
+      case 'translate': return store.showTranslateIcon;
+      case 'extensions': return store.showExtensionsIcon;
+      case 'quick-search': return true;
+      default: return true;
+    }
+  };
+
+  const setToolbarActionVisible = (id: ToolbarActionId, visible: boolean) => {
+    switch (id) {
+      case 'downloads': store.setShowDownloadsIcon(visible); break;
+      case 'clipboard': store.setShowClipboardIcon(visible); break;
+      case 'cart': store.setShowCartIcon(visible); break;
+      case 'translate': store.setShowTranslateIcon(visible); break;
+      case 'extensions': store.setShowExtensionsIcon(visible); break;
+    }
+  };
+
+  const reorderToolbarAction = (targetId: ToolbarActionId) => {
+    if (!draggedToolbarAction || draggedToolbarAction === targetId) return;
+    const nextOrder = toolbarOrder.filter((id) => id !== draggedToolbarAction);
+    const targetIndex = nextOrder.indexOf(targetId);
+    nextOrder.splice(Math.max(0, targetIndex), 0, draggedToolbarAction);
+    store.setToolbarIconOrder(nextOrder);
+    setDraggedToolbarAction(null);
+  };
 
   const handleBookmark = () => {
     const activeTab = store.tabs.find(t => t.id === store.activeTabId);
@@ -702,7 +775,7 @@ export default function Home() {
         // Close all panels and return to browser view when ESC is pressed
         let panelWasOpen = false;
         
-        if (showSettings) { setShowSettings(false); panelWasOpen = true; }
+        if (showSettings) { handleSettingsClose(); panelWasOpen = true; }
         if (showDownloads) { setShowDownloads(false); panelWasOpen = true; }
         if (showCart) { setShowCart(false); panelWasOpen = true; }
         if (showExtensionsPopup) { setShowExtensionsPopup(false); panelWasOpen = true; }
@@ -898,14 +971,14 @@ export default function Home() {
   // ─────────────────────────────────────────────────────────────────────────
   // APPLY THEME
   // Resolves 'system' → OS preference, then applies the correct CSS class.
-  // 'vibrant' adds a .vibrant class (defined in globals.css) in addition to
-  // removing dark/light so the browser chrome picks up the purple colour ramp.
+  // 'vibrant' and 'minimal' add dedicated CSS classes (defined in globals.css) so
+  // browser chrome can pick up its own surface and accent tokens.
   // ─────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const root = window.document.documentElement;
 
     // Remove all theme classes first
-    root.classList.remove('light', 'dark', 'vibrant', 'custom');
+    root.classList.remove('light', 'dark', 'vibrant', 'custom', 'minimal');
 
     let resolved: AppTheme = store.theme as AppTheme;
 
@@ -915,6 +988,9 @@ export default function Home() {
 
     root.style.setProperty('--custom-primary', store.customThemePrimary || '#ff6b6b');
     root.style.setProperty('--custom-secondary', store.customThemeSecondary || '#22d3ee');
+    const accentPreset = BROWSER_ACCENT_PRESETS.find((preset) => preset.id === store.browserAccentPreset) || BROWSER_ACCENT_PRESETS[0];
+    root.style.setProperty('--browser-accent-1', accentPreset.primary);
+    root.style.setProperty('--browser-accent-2', accentPreset.secondary);
 
     // Apply the resolved class
     root.classList.add(resolved);
@@ -929,7 +1005,7 @@ export default function Home() {
     window.electronAPI?.setNativeThemeSource?.(browserThemeSource).catch((error: unknown) => {
       console.warn('[Theme] Failed to sync native theme source:', error instanceof Error ? error.message : error);
     });
-  }, [store.theme, store.customThemePrimary, store.customThemeSecondary]);
+  }, [store.theme, store.customThemePrimary, store.customThemeSecondary, store.browserAccentPreset]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // THEME CYCLE HELPER  (dark → light → vibrant → dark → …)
@@ -1356,14 +1432,20 @@ export default function Home() {
   };
 
   const calculateBounds = useCallback(() => {
-    // Only resize/enable BrowserView if it's actually intended to be showing
     if (!store.hasCompletedStartupSetup || !store.hasSeenWelcomePage || store.activeView !== 'browser') {
+      return { x: 0, y: 0, width: 0, height: 0 };
+    }
+
+    const hasActiveOverlay = showSettings || activeManager !== null || showCamera || showDownloads || showCart || showExtensionsPopup || showClipboard || showSpotlightSearch || aiOverview || showTranslateDialog || showSchedulingModal;
+    if (hasActiveOverlay) {
       return { x: 0, y: 0, width: 0, height: 0 };
     }
 
     const railWidth = railVisible ? 70 : 0;
     const aiSidebarWidth = !store.sidebarOpen ? 0 : (store.isSidebarCollapsed ? 70 : store.sidebarWidth);
-    const headerHeight = 40 + 56;
+    const isCompactMode = store.theme === 'minimal' && store.minimalCompactMode;
+    const headerHeight = isCompactMode ? 0 : (40 + 56 + topTabsHeight);
+    const effectiveSideTabsWidth = isCompactMode ? 0 : sideTabsWidth;
 
     let x = 0;
     if (store.sidebarSide === 'left') {
@@ -1372,7 +1454,11 @@ export default function Home() {
       x = railWidth;
     }
 
-    const width = window.innerWidth - railWidth - aiSidebarWidth;
+    if (hasSideTabs && !sideTabsOnRight) {
+      x += effectiveSideTabsWidth;
+    }
+
+    const width = window.innerWidth - railWidth - aiSidebarWidth - effectiveSideTabsWidth;
     const height = window.innerHeight - headerHeight;
 
     return {
@@ -1381,7 +1467,7 @@ export default function Home() {
       width: Math.max(0, Math.round(width)),
       height: Math.max(0, Math.round(height))
     };
-  }, [store.sidebarOpen, store.isSidebarCollapsed, store.sidebarWidth, store.sidebarSide, railVisible, store.hasCompletedStartupSetup, store.hasSeenWelcomePage, store.activeView]);
+  }, [store.sidebarOpen, store.isSidebarCollapsed, store.sidebarWidth, store.sidebarSide, railVisible, store.hasCompletedStartupSetup, store.hasSeenWelcomePage, store.activeView, topTabsHeight, hasSideTabs, sideTabsOnRight, sideTabsWidth, store.theme, store.minimalCompactMode, showSettings, activeManager, showCamera, showDownloads, showCart, showExtensionsPopup, showClipboard, showSpotlightSearch, aiOverview, showTranslateDialog, showSchedulingModal]);
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -1723,6 +1809,12 @@ export default function Home() {
     }
   }, [store.user, store.hasSeenWelcomePage, store.clientId]);
 
+  useEffect(() => {
+    return () => {
+      if (compactHideTimerRef.current) clearTimeout(compactHideTimerRef.current);
+    };
+  }, []);
+
   // ── Early return for standalone popup windows (unchanged) ──
   if (isPopupWindow) {
     const params = new URLSearchParams(window.location.search);
@@ -1809,8 +1901,198 @@ export default function Home() {
     });
   }, [downloads, store.clipboard]);
 
+  const renderToolbarAction = (id: ToolbarActionId) => {
+    if (!isToolbarActionVisible(id)) return null;
+
+    const baseClass = 'p-1.5 rounded-lg transition-all hover:bg-white/5 cursor-grab active:cursor-grabbing';
+    const dragProps = {
+      draggable: true,
+      onDragStart: () => setDraggedToolbarAction(id),
+      onDragOver: (event: React.DragEvent) => event.preventDefault(),
+      onDrop: () => reorderToolbarAction(id),
+      onDragEnd: () => setDraggedToolbarAction(null),
+    };
+
+    switch (id) {
+      case 'downloads':
+        return (
+          <button
+            key={id}
+            {...dragProps}
+            onClick={() => {
+              if (isMacOS && useAppStore.getState().macNativeUtilityPanelMode === 'swiftui') {
+                window.electronAPI?.hideAllViews();
+                window.electronAPI?.showMacNativePanel?.('downloads');
+              } else {
+                setShowDownloads(!showDownloads);
+              }
+            }}
+            className={`${baseClass} ${isDownloading ? 'text-accent animate-pulse' : ''} ${downloadStatus === 'completed' ? 'text-green-400' : ''} ${downloadStatus === 'failed' ? 'text-red-400' : ''} ${downloadStatus === 'idle' ? 'text-secondary-text hover:text-sky-400' : ''} ${showDownloads ? 'bg-sky-500/10 text-sky-400' : ''}`}
+            title="Downloads"
+          >
+            <DownloadCloud size={14} />
+          </button>
+        );
+      case 'clipboard':
+        return (
+          <button
+            key={id}
+            {...dragProps}
+            onClick={() => {
+              if (isMacOS && useAppStore.getState().macNativeUtilityPanelMode === 'swiftui') {
+                window.electronAPI?.hideAllViews();
+                window.electronAPI?.showMacNativePanel?.('clipboard');
+              } else {
+                setShowClipboard(!showClipboard);
+              }
+            }}
+            className={`${baseClass} ${showClipboard ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'}`}
+            title="Clipboard"
+          >
+            <CopyIcon size={14} />
+          </button>
+        );
+      case 'cart':
+        return (
+          <button
+            key={id}
+            {...dragProps}
+            onClick={() => setShowCart(!showCart)}
+            className={`${baseClass} ${showCart ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'}`}
+            title="Unified Cart"
+          >
+            <ShoppingCart size={14} />
+          </button>
+        );
+      case 'translate':
+        return (
+          <button
+            key={id}
+            {...dragProps}
+            onClick={() => setShowTranslateDialog(true)}
+            className={`${baseClass} ${showTranslateDialog ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'}`}
+            title="Translate Page"
+          >
+            <Languages size={14} />
+          </button>
+        );
+      case 'extensions':
+        return (
+          <button
+            key={id}
+            {...dragProps}
+            onClick={() => setShowExtensionsPopup(!showExtensionsPopup)}
+            className={`${baseClass} ${showExtensionsPopup ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'}`}
+            title="Extensions"
+          >
+            <Puzzle size={14} />
+          </button>
+        );
+      case 'quick-search':
+        return (
+          <button
+            key={id}
+            {...dragProps}
+            onClick={handlePopSearch}
+            className={`${baseClass} text-secondary-text/70 hover:text-sky-400`}
+            title="Quick Search"
+          >
+            <Search size={12} />
+          </button>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const renderSideTabs = () => {
+    if (!hasSideTabs || store.activeView !== 'browser') return null;
+
+    return (
+      <aside
+        className={`h-full w-[220px] flex-shrink-0 border-border-color/70 minimal-browser-chrome no-drag-region ${sideTabsOnRight ? 'border-l order-last' : 'border-r order-first'}`}
+      >
+        <div className="h-10 px-3 flex items-center justify-between border-b border-border-color/60">
+          <span className="text-[10px] font-black uppercase tracking-[0.22em] text-secondary-text">Tabs</span>
+          <button onClick={() => store.addTab()} className="p-1.5 rounded-lg hover:bg-accent/10 text-secondary-text hover:text-accent transition-all" title="New Tab">
+            <Plus size={14} />
+          </button>
+        </div>
+        <Reorder.Group
+          as="div"
+          axis="y"
+          values={store.tabs}
+          onReorder={(nextTabs) => store.setTabs(nextTabs as any)}
+          className="h-[calc(100%-2.5rem)] overflow-y-auto p-2 space-y-1 custom-scrollbar"
+        >
+          {store.tabs.map((tab) => {
+            const active = tab.id === store.activeTabId;
+            return (
+              <Reorder.Item key={tab.id} value={tab} className="list-none">
+                <button
+                  onClick={() => store.setActiveTab(tab.id)}
+                  className={`group w-full min-h-10 px-2.5 py-2 rounded-lg border flex items-center gap-2 text-left transition-all ${active ? 'minimal-tab-active text-primary-text' : 'border-transparent text-secondary-text hover:bg-white/[0.04] hover:text-primary-text'}`}
+                  title={tab.title || tab.url}
+                >
+                  {tab.url?.startsWith('http') ? (
+                    <img
+                      src={`https://www.google.com/s2/favicons?sz=64&domain=${(() => {
+                        try { return new URL(tab.url).hostname; } catch { return 'google.com'; }
+                      })()}`}
+                      className="w-4 h-4 flex-shrink-0"
+                      alt=""
+                    />
+                  ) : (
+                    <Globe size={14} className="flex-shrink-0" />
+                  )}
+                  <span className="flex-1 truncate text-[11px] font-semibold">{tab.title || 'New Tab'}</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      store.removeTab(tab.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        store.removeTab(tab.id);
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-white/10"
+                    title="Close Tab"
+                  >
+                    <X size={12} />
+                  </span>
+                </button>
+              </Reorder.Item>
+            );
+          })}
+        </Reorder.Group>
+      </aside>
+    );
+  };
+
   return (
-    <div className={`flex flex-col h-screen w-full bg-deep-space overflow-hidden relative font-sans text-primary-text transition-all duration-700`}>
+      <div
+        className={`flex flex-col h-screen w-full bg-deep-space overflow-hidden relative font-sans text-primary-text${store.theme === 'minimal' && store.minimalCompactMode && !compactRevealed ? ' minimal-compact-active' : ''}${store.theme === 'minimal' && store.minimalAnimations ? ' minimal-animations-enabled' : ''}${store.theme === 'minimal' && !store.minimalAnimations ? ' minimal-animations-disabled' : ''}`}
+        onMouseMove={(e) => {
+          if (store.theme === 'minimal' && store.minimalCompactMode) {
+            if (e.clientY < 100) {
+              revealCompact();
+            } else if (compactRevealed && e.clientY > 200) {
+              scheduleHideCompact();
+            }
+          }
+        }}
+      >
+      {store.theme === 'minimal' && store.minimalCompactMode && !compactRevealed && (
+        <div
+          className="fixed top-0 left-0 right-0 h-2 z-[9999] cursor-default"
+          onMouseEnter={revealCompact}
+        />
+      )}
       <TitleBar
         onToggleSpotlightSearch={() => setShowSpotlightSearch(prev => !prev)}
         onOpenSettings={() => openSettingsPanel()}
@@ -2049,57 +2331,7 @@ export default function Home() {
                     </div>
                   )}
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 no-drag-region z-20 flex items-center gap-1.5">
-                    {store.showDownloadsIcon && (
-                      <button
-                        onClick={() => {
-                          if (isMacOS && useAppStore.getState().macNativeUtilityPanelMode === 'swiftui') {
-                            window.electronAPI?.showMacNativePanel?.('downloads');
-                          } else {
-                            setShowDownloads(!showDownloads);
-                          }
-                        }}
-                        className={`p-1.5 rounded-lg transition-all 
-                                     ${isDownloading ? 'text-accent animate-pulse' : ''}
-                                     ${downloadStatus === 'completed' ? 'text-green-400' : ''}
-                                     ${downloadStatus === 'failed' ? 'text-red-400' : ''}
-                                     ${downloadStatus === 'idle' ? 'text-secondary-text hover:text-sky-400' : ''}
-                                     ${showDownloads ? 'bg-sky-500/10 text-sky-400' : ''}
-                                     hover:bg-white/5`}
-                        title="Downloads"
-                      >
-                        <DownloadCloud size={14} />
-                      </button>
-                    )}
-                    {store.showClipboardIcon && (
-                      <button onClick={() => {
-                        if (isMacOS && useAppStore.getState().macNativeUtilityPanelMode === 'swiftui') {
-                          window.electronAPI?.showMacNativePanel?.('clipboard');
-                        } else {
-                          setShowClipboard(!showClipboard);
-                        }
-                      }} className={`p-1.5 rounded-lg transition-all ${showClipboard ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'} hover:bg-white/5`} title="Clipboard">
-                        <CopyIcon size={14} />
-                      </button>
-                    )}
-                    {store.showCartIcon && (
-                      <button onClick={() => setShowCart(!showCart)} className={`p-1.5 rounded-lg transition-all ${showCart ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'} hover:bg-white/5`} title="Unified Cart">
-                        <ShoppingCart size={14} />
-                      </button>
-                    )}
-                    {store.showTranslateIcon && (
-                      <button onClick={() => setShowTranslateDialog(true)} className={`p-1.5 rounded-lg transition-all ${showTranslateDialog ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'} hover:bg-white/5`} title="Translate Page">
-                        <Languages size={14} />
-                      </button>
-                    )}
-                    {store.showExtensionsIcon && (
-                      <button onClick={() => setShowExtensionsPopup(!showExtensionsPopup)} className={`p-1.5 rounded-lg transition-all ${showExtensionsPopup ? 'text-accent bg-sky-500/10' : 'text-secondary-text hover:text-sky-400'} hover:bg-white/5`} title="Extensions">
-                        <Puzzle size={14} />
-                      </button>
-                    )}
-                    <div className="w-[1px] h-3 bg-white/10 mx-0.5" />
-                    <button onClick={handlePopSearch} className="p-1.5 rounded-lg hover:bg-white/10 text-white/20 hover:text-sky-400 transition-all" title="Quick Search">
-                      <Search size={12} />
-                    </button>
+                    {toolbarOrder.filter((id) => store.theme !== 'minimal' || id === 'downloads' || id === 'quick-search').map((id) => renderToolbarAction(id))}
                   </div>
                   {isTyping && suggestions.length > 0 && (
                     <div
@@ -2134,18 +2366,130 @@ export default function Home() {
                   {isReadingAloud ? <Square size={14} /> : <Volume2 size={14} />}
                 </button>
 
-                {/* ── THEME CYCLE BUTTON (NEW) ────────────────────────────────────
-                    Cycles: dark → light → vibrant → dark → …
-                    Icon and title update to reflect the CURRENT active theme.
-                    Sits naturally in the existing right-side button cluster.
-                ─────────────────────────────────────────────────────────────────── */}
-                <button
-                  onClick={cycleTheme}
-                  className="p-1.5 rounded-lg text-secondary-text hover:text-primary-text transition-all"
-                  title={`Theme: ${store.theme} — click to switch`}
-                >
-                  <ThemeIcon theme={store.theme as AppTheme} />
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowChromeCustomizer((value) => !value)}
+                    onDoubleClick={cycleTheme}
+                    className={`p-1.5 rounded-lg transition-all ${showChromeCustomizer ? 'bg-accent/10 text-accent' : 'text-secondary-text hover:text-primary-text'}`}
+                    title={`Theme: ${store.theme} - double-click to switch`}
+                  >
+                    <ThemeIcon theme={store.theme as AppTheme} />
+                  </button>
+                  <AnimatePresence>
+                    {showChromeCustomizer && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                        className="absolute right-0 top-full mt-3 w-[330px] rounded-2xl border shadow-2xl p-4 z-[200] minimal-browser-chrome backdrop-blur-3xl"
+                        style={{ boxShadow: '0 20px 70px var(--shadow-color)' }}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary-text">Clean Theme</p>
+                            <p className="text-[10px] text-secondary-text mt-1">Minimal chrome, tabs, and icon order</p>
+                          </div>
+                          <button onClick={() => setShowChromeCustomizer(false)} className="p-1.5 rounded-lg text-secondary-text hover:text-primary-text hover:bg-white/5">
+                            <X size={14} />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                          {(['minimal', 'light', 'dark', 'vibrant', 'custom', 'system'] as AppTheme[]).map((themeId) => (
+                            <button
+                              key={themeId}
+                              onClick={() => store.setTheme(themeId)}
+                              className={`px-3 py-2 rounded-lg border text-[10px] font-black uppercase tracking-wider transition-all ${store.theme === themeId ? 'border-accent/50 bg-accent/12 text-primary-text' : 'border-border-color/70 text-secondary-text hover:text-primary-text hover:bg-white/[0.04]'}`}
+                            >
+                              {themeId}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mb-4">
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-secondary-text mb-2">Tab placement</p>
+                          <div className="grid grid-cols-4 gap-2">
+                            {TAB_LAYOUTS.map((layout) => (
+                              <button
+                                key={layout.id}
+                                onClick={() => {
+                                  store.setBrowserTabLayout(layout.id);
+                                  requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+                                }}
+                                className={`px-2 py-2 rounded-lg border text-[10px] font-bold transition-all ${store.browserTabLayout === layout.id ? 'border-accent/50 bg-accent/12 text-primary-text' : 'border-border-color/70 text-secondary-text hover:text-primary-text hover:bg-white/[0.04]'}`}
+                              >
+                                {layout.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mb-4">
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-secondary-text mb-2">Color accents</p>
+                          <div className="grid grid-cols-6 gap-2">
+                            {BROWSER_ACCENT_PRESETS.map((preset) => (
+                              <button
+                                key={preset.id}
+                                onClick={() => store.setBrowserAccentPreset(preset.id)}
+                                className={`h-9 rounded-lg border transition-all ${store.browserAccentPreset === preset.id ? 'border-primary-text scale-105' : 'border-border-color/70 hover:border-primary-text/50'}`}
+                                style={{ background: `linear-gradient(135deg, ${preset.primary}, ${preset.secondary})` }}
+                                title={preset.label}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="mb-4">
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-secondary-text mb-2">Compact mode</p>
+                          <button
+                            onClick={() => {
+                              store.setMinimalCompactMode(!store.minimalCompactMode);
+                              requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+                            }}
+                            className={`w-full px-3 py-2 rounded-lg border text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-between ${store.minimalCompactMode ? 'border-accent/50 bg-accent/12 text-primary-text' : 'border-border-color/70 text-secondary-text hover:text-primary-text hover:bg-white/[0.04]'}`}
+                          >
+                            <span>{store.minimalCompactMode ? '⏺ Auto-hide' : '⊟ Auto-hide UI'}</span>
+                            <span className={`w-2 h-2 rounded-full ${store.minimalCompactMode ? 'bg-accent' : 'bg-secondary-text/30'}`} />
+                          </button>
+                          <p className="text-[7px] text-secondary-text/50 mt-1">Hide chrome on idle, reveal on hover — like Minimal Browser</p>
+                        </div>
+
+                        <div className="mb-4">
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-secondary-text mb-2">Animations</p>
+                          <button
+                            onClick={() => store.setMinimalAnimations(!store.minimalAnimations)}
+                            className={`w-full px-3 py-2 rounded-lg border text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-between ${store.minimalAnimations ? 'border-accent/50 bg-accent/12 text-primary-text' : 'border-border-color/70 text-secondary-text hover:text-primary-text hover:bg-white/[0.04]'}`}
+                          >
+                            <span>{store.minimalAnimations ? '✦ Smooth animations' : '⊟ Reduced motion'}</span>
+                            <span className={`w-2 h-2 rounded-full ${store.minimalAnimations ? 'bg-accent' : 'bg-secondary-text/30'}`} />
+                          </button>
+                          <p className="text-[7px] text-secondary-text/50 mt-1">Fluid transitions for tabs, chrome reveal, and UI interactions</p>
+                        </div>
+
+                        <div>
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-secondary-text mb-2">Toolbar icons</p>
+                          <div className="space-y-1.5">
+                            {toolbarOrder.filter((id) => id !== 'quick-search').map((id) => (
+                              <button
+                                key={id}
+                                draggable
+                                onDragStart={() => setDraggedToolbarAction(id)}
+                                onDragOver={(event) => event.preventDefault()}
+                                onDrop={() => reorderToolbarAction(id)}
+                                onDragEnd={() => setDraggedToolbarAction(null)}
+                                onClick={() => setToolbarActionVisible(id, !isToolbarActionVisible(id))}
+                                className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-border-color/70 text-secondary-text hover:text-primary-text hover:bg-white/[0.04] transition-all cursor-grab active:cursor-grabbing"
+                              >
+                                <span className="text-[10px] font-bold uppercase tracking-wider">{id.replace('-', ' ')}</span>
+                                <span className={`w-2 h-2 rounded-full ${isToolbarActionVisible(id) ? 'bg-accent' : 'bg-secondary-text/30'}`} />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
                 <div className="w-[1px] h-6 bg-border-color mx-1" />
 
@@ -2187,6 +2531,7 @@ export default function Home() {
             )}
             {store.activeView === 'browser' && (
               <div className={`h-full flex ${store.studentMode ? 'p-4 gap-4' : 'p-2'}`}>
+                {renderSideTabs()}
                 <div className={`flex-[3] relative bg-[var(--primary-bg)] ${store.studentMode ? 'rounded-3xl' : 'rounded-2xl'} overflow-hidden border border-[var(--border-color)]`} style={{ boxShadow: '0 8px 32px var(--shadow-color)' }}>
                   {!store.isOnline && (
                     <div className="absolute inset-0 z-[100] bg-[var(--primary-bg)]">
@@ -2513,10 +2858,10 @@ export default function Home() {
         {showSettings && (
           <div
             className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-md p-10"
-            onPointerDown={() => setShowSettings(false)}
+            onPointerDown={handleSettingsClose}
           >
             <div className="w-full max-w-4xl" onPointerDown={(event) => event.stopPropagation()}>
-              <SettingsPanel onClose={() => setShowSettings(false)} defaultSection={settingsSection} />
+              <SettingsPanel onClose={handleSettingsClose} defaultSection={settingsSection} />
             </div>
           </div>
         )}

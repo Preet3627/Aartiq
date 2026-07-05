@@ -232,13 +232,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                         ))}
                     </div>
 
-                    <div className="mt-6 space-y-4">
-                        <button
-                            className="w-full flex items-center justify-center gap-2 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white/60 transition-all"
-                        >
-                            <Download size={14} />
-                            Install PWA
-                        </button>
+                    <div className="mt-6">
                         <div className="p-4 bg-deep-space-accent-neon/5 rounded-2xl border border-deep-space-accent-neon/10 text-[10px] font-medium text-deep-space-accent-neon/60 text-center leading-relaxed">
                             Version {versionLabel} Stable <br /> (Enhancement Update)
                         </div>
@@ -432,8 +426,11 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                                         </button>
                                                     </div>
                                                     <button
-                                                        onClick={() => window.electronAPI?.showMacNativePanel?.('sidebar')}
-                                                        className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
+                                                    onClick={() => {
+                                                        window.electronAPI?.hideAllViews?.();
+                                                        window.electronAPI?.showMacNativePanel?.('sidebar');
+                                                    }}
+                                                    className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
                                                     >
                                                         Open Detached AI Sidebar
                                                     </button>
@@ -459,8 +456,11 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                                         ))}
                                                     </div>
                                                     <button
-                                                        onClick={() => window.electronAPI?.showMacNativePanel?.('action-chain')}
-                                                        className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
+                                                    onClick={() => {
+                                                        window.electronAPI?.hideAllViews?.();
+                                                        window.electronAPI?.showMacNativePanel?.('action-chain');
+                                                    }}
+                                                    className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
                                                     >
                                                         Open Detached Action Chain
                                                     </button>
@@ -487,28 +487,40 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-2">
                                                         <button
-                                                            onClick={() => window.electronAPI?.showMacNativePanel?.('menu')}
-                                                            className="px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
-                                                        >
-                                                            Open Menu
+                                                    onClick={() => {
+                                                        window.electronAPI?.hideAllViews?.();
+                                                        window.electronAPI?.showMacNativePanel?.('menu');
+                                                    }}
+                                                    className="px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
+                                                    >
+                                                        Open Menu
                                                         </button>
                                                         <button
-                                                            onClick={() => window.electronAPI?.showMacNativePanel?.('settings')}
-                                                            className="px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
-                                                        >
-                                                            Open Settings
+                                                    onClick={() => {
+                                                        window.electronAPI?.hideAllViews?.();
+                                                        window.electronAPI?.showMacNativePanel?.('settings');
+                                                    }}
+                                                    className="px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
+                                                    >
+                                                        Open Settings
                                                         </button>
                                                         <button
-                                                            onClick={() => window.electronAPI?.showMacNativePanel?.('downloads')}
-                                                            className="px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
-                                                        >
-                                                            Open Downloads
+                                                    onClick={() => {
+                                                        window.electronAPI?.hideAllViews?.();
+                                                        window.electronAPI?.showMacNativePanel?.('downloads');
+                                                    }}
+                                                    className="px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
+                                                    >
+                                                        Open Downloads
                                                         </button>
                                                         <button
-                                                            onClick={() => window.electronAPI?.showMacNativePanel?.('clipboard')}
-                                                            className="px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
-                                                        >
-                                                            Open Clipboard
+                                                    onClick={() => {
+                                                        window.electronAPI?.hideAllViews?.();
+                                                        window.electronAPI?.showMacNativePanel?.('clipboard');
+                                                    }}
+                                                    className="px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
+                                                    >
+                                                        Open Clipboard
                                                         </button>
                                                     </div>
                                                 </div>
@@ -533,8 +545,11 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                                         ))}
                                                     </div>
                                                     <button
-                                                        onClick={() => window.electronAPI?.showMacNativePanel?.('permissions')}
-                                                        className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
+                                                    onClick={() => {
+                                                        window.electronAPI?.hideAllViews?.();
+                                                        window.electronAPI?.showMacNativePanel?.('permissions');
+                                                    }}
+                                                    className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
                                                     >
                                                         Preview Native Approval Panel
                                                     </button>
@@ -567,6 +582,23 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                             ))}
                                         </div>
                                     </div>
+                                    {store.theme === 'minimal' && (
+                                        <div className="pt-6 border-t border-white/5 space-y-4">
+                                            <div>
+                                                <h3 className="font-bold text-white mb-1">Minimal Theme Animations</h3>
+                                                <p className="text-xs text-white/30">Fluid transitions for tabs, chrome reveal, and UI interactions.</p>
+                                            </div>
+                                            <div className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-white/5">
+                                                <span className="text-xs text-white/70">Smooth Motion</span>
+                                                <button
+                                                    onClick={() => store.setMinimalAnimations(!store.minimalAnimations)}
+                                                    className={`relative w-10 h-5 rounded-full border transition-all ${store.minimalAnimations ? 'bg-deep-space-accent-neon/20 border-deep-space-accent-neon shadow-[0_0_10px_rgba(56,189,248,0.3)]' : 'bg-white/5 border-white/10'}`}
+                                                >
+                                                    <span className={`absolute top-[1px] left-[2px] w-[16px] h-[16px] rounded-full bg-white transition-transform ${store.minimalAnimations ? 'translate-x-[18px] bg-deep-space-accent-neon text-black' : 'translate-x-0'}`} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}

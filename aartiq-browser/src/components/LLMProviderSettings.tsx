@@ -15,8 +15,8 @@ import { getGeminiModelMetadata, getRecommendedGeminiModel } from '@/lib/modelRe
 interface LLMProviderSettingsProps {
   selectedEngine: string;
   setSelectedEngine: (engine: string) => void;
-  theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom';
-  setTheme: (theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom') => void;
+  theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom' | 'minimal';
+  setTheme: (theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom' | 'minimal') => void;
   backgroundImage: string;
   setBackgroundImage: (imageUrl: string) => void;
   backend: 'firebase' | 'mysql';

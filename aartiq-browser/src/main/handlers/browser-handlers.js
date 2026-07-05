@@ -124,7 +124,7 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
     tabViews.set(tabId, view);
     if (mainWindow) {
       mainWindow.addBrowserView(view);
-      view.webContents.loadURL(url);
+      view.webContents.loadURL(url || 'https://www.google.com');
     }
   });
 

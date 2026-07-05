@@ -101,8 +101,8 @@ interface AIChatSidebarProps {
   toggleCollapse: () => void;
   selectedEngine: string;
   setSelectedEngine: (engine: string) => void;
-  theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom';
-  setTheme: (theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom') => void;
+  theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom' | 'minimal';
+  setTheme: (theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom' | 'minimal') => void;
   backgroundImage: string;
   setBackgroundImage: (imageUrl: string) => void;
   backend: 'firebase' | 'mysql';
@@ -137,29 +137,7 @@ const parseSearchResultEntry = (result: any): SearchResultEntry | null => {
     };
   }
 
-  if (typeof result !== 'string') return null;
-
-  const trimmed = result.trim();
-  if (!trimmed) return null;
-
-  const markdownMatch = trimmed.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)\s*([\s\S]*)$/);
-  if (markdownMatch) {
-    return {
-      title: markdownMatch[1].trim(),
-      url: markdownMatch[2].trim(),
-      snippet: markdownMatch[3].trim(),
-    };
-  }
-
-  const lines = trimmed.split('\n').map(line => line.trim()).filter(Boolean);
-  const urlLine = lines.find(line => /^https?:\/\//i.test(line) || /^URL:\s*https?:\/\//i.test(line));
-  const normalizedUrl = urlLine?.replace(/^URL:\s*/i, '').trim() || '';
-
-  return {
-    title: lines[0] || 'Untitled result',
-    url: normalizedUrl,
-    snippet: lines.slice(normalizedUrl ? 2 : 1).join(' ').trim(),
-  };
+  return null;
 };
 
 const normalizeSearchResults = (results: any[]): SearchResultEntry[] => (
@@ -172,14 +150,17 @@ const formatSearchResultsForLLM = (query: string, results: SearchResultEntry[]):
   if (results.length === 0) return '';
 
   return [
-    `WEB SEARCH RESULTS FOR: ${query}`,
-    'These URLs were injected automatically. Reuse them directly instead of scraping the search results page DOM again.',
+    `🔍 LIVE WEB SEARCH: "${query}"`,
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    'You MUST navigate to the URLs below and read the full page content.',
+    'Do NOT rely only on snippets — snippets are brief summaries.',
+    'For each result you want to use, emit: [NAVIGATE: URL] then [READ_PAGE_CONTENT]',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
     '',
     ...results.map((entry, index) => [
-      `[Result ${index + 1}]`,
-      `Title: ${entry.title}`,
-      `URL: ${entry.url}`,
-      `Snippet: ${entry.snippet || 'No snippet available.'}`,
+      `**${index + 1}. ${entry.title}**`,
+      `🔗 ${entry.url}`,
+      `📝 ${entry.snippet || 'No snippet available.'}`,
     ].join('\n')),
   ].join('\n\n');
 };
@@ -273,7 +254,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const appVersion = useAppVersion();
   const versionLabel = `v${appVersion}`;
   const gradientPreset = useUIStore((state) => state.gradientPreset);
-  const resolvedTheme = useMemo<'dark' | 'light' | 'vibrant' | 'custom'>(() => {
+  const resolvedTheme = useMemo<'dark' | 'light' | 'vibrant' | 'custom' | 'minimal'>(() => {
     if (props.theme === 'system') {
       if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         return 'dark';
@@ -634,7 +615,11 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     if (!state.activeTabId) {
       return null;
     }
-    return waitForTabNavigation(state.activeTabId, state.currentUrl || undefined, timeoutMs);
+    try {
+      return await waitForTabNavigation(state.activeTabId, state.currentUrl || undefined, timeoutMs);
+    } catch {
+      return null;
+    }
   }, [waitForTabNavigation]);
 
   const appendTerminalLog = useCallback((commandName: string, output: string, success = true) => {
@@ -1684,14 +1669,48 @@ I couldn't schedule the task. The background service may not be running. Please 
             });
             searchContextStore.addWebSearch(originalQuery, fullSnippet);
 
-            output = `Search results for "${originalQuery}":\n${injectedResults
-              .map((entry, index) => `${index + 1}. ${entry.title}\n${entry.url}\n${entry.snippet}`)
-              .join('\n\n')}`;
+            // Auto-navigate to the top result and read its content
+            let pageContent = '';
+            const topUrl = injectedResults[0]?.url;
+            if (topUrl) {
+              try {
+                const navResult = await openTabAndWaitForLoad(topUrl, 'ai-session');
+                const activeTabId = useAppStore.getState().activeTabId;
+                const contentRes = await window.electronAPI.extractPageContent(activeTabId || undefined);
+                if (contentRes?.content) {
+                  pageContent = scrubbedContent(contentRes.content).substring(0, 8000);
+                  await BrowserAI.addToVectorMemory(pageContent, { type: 'page_content', url: topUrl, query: originalQuery });
+                  searchContextStore.addPageContent(topUrl, injectedResults[0].title, pageContent);
+                }
+              } catch (navErr) {
+                console.warn('[WebSearch] Auto-navigate to top result failed:', navErr);
+              }
+            }
+
+            let outputLines = [
+              `🔍 **Search results for "${originalQuery}"**:`,
+              '',
+              ...injectedResults.map((entry, index) =>
+                `${index + 1}. **${entry.title}**\n   🔗 ${entry.url}\n   📝 ${entry.snippet}`
+              ),
+            ];
+            if (topUrl) {
+              outputLines.push(
+                '',
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                `📄 **Auto-read from top result:**`,
+                `🔗 ${topUrl}`,
+                pageContent
+                  ? `\`\`\`\n${pageContent.substring(0, 4000)}${pageContent.length > 4000 ? '\n...[truncated]' : ''}\n\`\`\``
+                  : '*Could not read page content.*'
+              );
+            }
+            output = outputLines.join('\n');
           } else {
             // Fallback: wait for the search page to load slightly and try DOM / OCR extraction
             await new Promise(resolve => setTimeout(resolve, 1500));
             try {
-              const domRes = await window.electronAPI.extractPageContent();
+              const domRes = await window.electronAPI.extractPageContent(useAppStore.getState().activeTabId || undefined);
               if (domRes && domRes.content && domRes.content.length > 100) {
                 const scrubbed = scrubbedContent(domRes.content).substring(0, 1000); // 🚀 Truncate fallback DOM
                 output = `Search results for "${query}" (search page DOM snapshot):\n${scrubbed}...`;
@@ -1750,7 +1769,8 @@ I couldn't schedule the task. The background service may not be running. Please 
         case 'READ_PAGE_CONTENT': {
           try {
             await waitForActiveTabToSettle(20000);
-            const res = await window.electronAPI.extractPageContent();
+            const activeTabId = useAppStore.getState().activeTabId;
+            const res = await window.electronAPI.extractPageContent(activeTabId || undefined);
             if (res.content) {
               const scrubbed = scrubbedContent(res.content);
               output = `Page content read (${scrubbed.length} chars):\n${scrubbed.substring(0, 4000)}...`;
@@ -2054,7 +2074,7 @@ I couldn't schedule the task. The background service may not be running. Please 
 
             // Use DOM for faster/better summary if no specific text provided
             if (!textToSummarize) {
-              const domRes = await window.electronAPI.extractPageContent();
+              const domRes = await window.electronAPI.extractPageContent(useAppStore.getState().activeTabId || undefined);
               textToSummarize = domRes.content || '';
               if (!textToSummarize) {
                 resolveThinkingStep(sumId, 'error', 'No page content found to summarize.');
@@ -3406,7 +3426,7 @@ I've successfully executed the following real tasks:
         case 'EXTRACT_DATA': {
           const selector = command.value.split('|')[0].trim();
           try {
-            const res = await window.electronAPI.extractPageContent();
+            const res = await window.electronAPI.extractPageContent(useAppStore.getState().activeTabId || undefined);
             if (res && res.content) {
               const scrubbed = scrubbedContent(res.content);
               output = `Extracted data from page (${scrubbed.length} chars):\n${scrubbed.substring(0, 4000)}...`;
@@ -4518,17 +4538,17 @@ I've successfully executed the following real tasks:
                 <div className="my-1 border-t border-white/10" />
                 <button
                   onClick={() => {
-                    const cycle: Array<'dark' | 'light' | 'vibrant' | 'custom'> = ['dark', 'light', 'vibrant', 'custom'];
-                    const cur = props.theme === 'system' ? 'dark' : (props.theme as 'dark' | 'light' | 'vibrant' | 'custom');
+                    const cycle: Array<'dark' | 'light' | 'minimal' | 'vibrant' | 'custom'> = ['dark', 'light', 'minimal', 'vibrant', 'custom'];
+                    const cur = props.theme === 'system' ? 'dark' : (props.theme as 'dark' | 'light' | 'minimal' | 'vibrant' | 'custom');
                     const idx = cycle.indexOf(cur);
                     props.setTheme(cycle[(idx + 1) % cycle.length]);
                   }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all"
                 >
                   <span className="text-base leading-none">
-                    {props.theme === 'light' ? '☀️' : props.theme === 'vibrant' ? '🔮' : props.theme === 'custom' ? '🎨' : '🌑'}
+                    {props.theme === 'light' ? '☀️' : props.theme === 'minimal' ? '◐' : props.theme === 'vibrant' ? '🔮' : props.theme === 'custom' ? '🎨' : '🌑'}
                   </span>
-                  Theme: {props.theme === 'light' ? 'Light' : props.theme === 'vibrant' ? 'Vibrant' : props.theme === 'custom' ? 'Custom' : 'Dark'}
+                  Theme: {props.theme === 'light' ? 'Light' : props.theme === 'minimal' ? 'Minimal' : props.theme === 'vibrant' ? 'Vibrant' : props.theme === 'custom' ? 'Custom' : 'Dark'}
                 </button>
                 <button onClick={() => setShowLLMProviderSettings(!showLLMProviderSettings)} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
                   <Cpu size={14} className="text-green-400" /> Intelligence Settings

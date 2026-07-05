@@ -4,15 +4,15 @@ import React from 'react';
 import { useAppStore } from '@/store/useAppStore';
 
 interface ThemeSettingsProps {
-  theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom';
-  setTheme: (theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom') => void;
+  theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom' | 'minimal';
+  setTheme: (theme: 'dark' | 'light' | 'system' | 'vibrant' | 'custom' | 'minimal') => void;
   backgroundImage: string;
   setBackgroundImage: (imageUrl: string) => void;
   showCanvasOverlay?: boolean;
 }
 
 const THEMES: {
-  id: 'dark' | 'light' | 'system' | 'vibrant' | 'custom';
+  id: 'dark' | 'light' | 'system' | 'vibrant' | 'custom' | 'minimal';
   label: string;
   emoji: string;
   preview: string; // Tailwind-compatible inline style gradient
@@ -21,6 +21,16 @@ const THEMES: {
   activeBg: string;
   desc: string;
 }[] = [
+  {
+    id: 'minimal',
+    label: 'Minimal',
+    emoji: '◐',
+    preview: 'linear-gradient(135deg, #0D0F12 0%, #15191E 100%)',
+    accent: 'text-indigo-300',
+    border: 'border-indigo-300/35',
+    activeBg: 'bg-indigo-300/10',
+    desc: 'Minimal browser chrome',
+  },
   {
     id: 'dark',
     label: 'Dark',
