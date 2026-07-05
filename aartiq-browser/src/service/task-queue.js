@@ -192,7 +192,7 @@ class TaskQueue extends EventEmitter {
             const isOllamaAvailable = await ollama.checkHealth();
             if (isOllamaAvailable) {
                 response = await ollama.generate({
-                    model: model.model || 'deepseek-r1:8b',
+                    model: model.model || '',
                     prompt: config.prompt,
                     options: {
                         temperature: model.temperature,

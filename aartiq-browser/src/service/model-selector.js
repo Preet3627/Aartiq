@@ -182,7 +182,7 @@ class ModelSelector {
         const recommendations = {
             'ai-prompt': { provider: 'gemini', model: 'gemini-2.0-flash' },
             'web-scrape': { provider: 'gemini', model: 'gemini-2.0-flash' },
-            'pdf-generate': { provider: 'ollama', model: 'deepseek-r1:8b' },
+            'pdf-generate': { provider: 'ollama', model: '' },
             'shell': { provider: 'gemini', model: 'gemini-2.0-flash' },
             'workflow': { provider: 'gemini', model: 'gemini-2.0-flash' },
             'daily-brief': { provider: 'gemini', model: 'gemini-2.0-flash' }
@@ -190,7 +190,7 @@ class ModelSelector {
 
         // Check if Ollama is preferred and available
         if (this.preferences?.preferLocal && this.ollamaStatus?.available) {
-            return { provider: 'ollama', model: 'deepseek-r1:8b' };
+            return { provider: 'ollama', model: '' };
         }
 
         return recommendations[taskType] || recommendations['ai-prompt'];

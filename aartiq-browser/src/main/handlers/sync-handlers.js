@@ -163,7 +163,7 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
       
       if (action === 'send-prompt') {
         if (mainWindow) mainWindow.webContents.send('remote-ai-prompt', { prompt, commandId: promptId, streamToMobile: true });
-        const targetModel = args.model || store.get('ollama_model') || 'deepseek-r1:8b';
+        const targetModel = args.model || store.get('ollama_model') || '';
         const provider = (targetModel.includes('gemini') || targetModel.includes('google')) ? 'google-flash' : 'ollama';
         try {
           if (streamPromptToMobile) await streamPromptToMobile(promptId, prompt, targetModel, provider);
@@ -211,7 +211,7 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
       const { llmGenerateHandler } = handlers;
       if (llmGenerateHandler) {
         try {
-          const targetModel = store.get('ollama_model') || 'deepseek-r1:8b';
+          const targetModel = store.get('ollama_model') || '';
           const provider = (targetModel.includes('gemini') || targetModel.includes('google')) ? 'google-flash' : 'ollama';
           const streamEvent = {
             sender: {

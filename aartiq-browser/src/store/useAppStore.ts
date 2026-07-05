@@ -418,7 +418,7 @@ export const useAppStore = create<BrowserState>()(
             xaiModel: 'grok-4-fast-reasoning',
             aiProvider: 'ollama',
             ollamaBaseUrl: 'http://127.0.0.1:11434',
-            ollamaModel: 'deepseek-r1:1.5b',
+            ollamaModel: '',
             localLLMBaseUrl: '',
             localLLMModel: '',
             localLlmMode: 'normal',
