@@ -5246,27 +5246,34 @@ ipcMain.handle('extract-page-content', async (_event, tabId) => {
   // Small delay to let page settle before reading
   await new Promise(resolve => setTimeout(resolve, 500));
 
-  try {
-    const content = await view.webContents.executeJavaScript(`
-      (() => {
-        try {
-          const clone = document.body.cloneNode(true);
-          const elementsToRemove = clone.querySelectorAll('script, style, nav, footer, header, noscript, svg');
-          elementsToRemove.forEach(e => e.remove());
-          
-          return clone.innerText
-            .replace(/\\s+/g, ' ')
-            .replace(/[\\r\\n]+/g, '\\n')
-            .trim() || document.body.innerText;
-        } catch(e) {
-          return document.body ? document.body.innerText : "";
-        }
-      })()
-    `);
-    return { content };
-  } catch (e) {
-    return { error: e.message };
+  // Retry up to 3 times if content is empty
+  let content = '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      content = await view.webContents.executeJavaScript(`
+        (() => {
+          try {
+            const clone = document.body.cloneNode(true);
+            const elementsToRemove = clone.querySelectorAll('script, style, nav, footer, header, noscript, svg');
+            elementsToRemove.forEach(e => e.remove());
+            
+            return clone.innerText
+              .replace(/\\s+/g, ' ')
+              .replace(/[\\r\\n]+/g, '\\n')
+              .trim() || document.body.innerText;
+          } catch(e) {
+            return document.body ? document.body.innerText : "";
+          }
+        })()
+      `);
+      if (content && content.length > 50) break;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (e) {
+      if (attempt === 2) return { error: e.message };
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
   }
+  return { content };
 });
 
 // Secure DOM Extraction with filtering and injection detection

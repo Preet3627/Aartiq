@@ -525,45 +525,8 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     return trimmed;
   }, []);
 
-  const waitForTabNavigation = useCallback(async (tabId: string, expectedUrl?: string, timeoutMs = 20000) => {
-    const normalizeUrlForCompare = (url?: string) => {
-      if (!url) return '';
-      const trimmed = url.trim();
-      return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
-    };
-
-    const urlsRoughlyMatch = (actualUrl?: string, expected?: string) => {
-      const normalizedActual = normalizeUrlForCompare(actualUrl);
-      const normalizedExpected = normalizeUrlForCompare(expected);
-
-      if (!normalizedExpected) return Boolean(normalizedActual);
-      if (!normalizedActual) return false;
-      if (normalizedActual === normalizedExpected || normalizedActual.startsWith(normalizedExpected)) {
-        return true;
-      }
-
-      try {
-        const actual = new URL(normalizedActual);
-        const wanted = new URL(normalizedExpected);
-        if (actual.origin !== wanted.origin || actual.pathname !== wanted.pathname) {
-          return false;
-        }
-
-        const expectedParams = new URLSearchParams(wanted.search);
-        for (const [key, value] of expectedParams.entries()) {
-          if (actual.searchParams.get(key) !== value) {
-            return false;
-          }
-        }
-
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
+  const waitForTabNavigation = useCallback(async (tabId: string, expectedUrl?: string, timeoutMs = 30000) => {
     const deadline = Date.now() + timeoutMs;
-    let sawLoading = false;
     let lastSeenUrl = '';
 
     while (Date.now() < deadline) {
@@ -572,16 +535,9 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
 
       if (tab) {
         const actualUrl = `${tab.url || ''}`.trim();
-        const matchesExpected = !expectedUrl || urlsRoughlyMatch(actualUrl, expectedUrl);
+        if (actualUrl) lastSeenUrl = actualUrl;
 
-        if (tab.isLoading) {
-          sawLoading = true;
-        }
-        if (actualUrl) {
-          lastSeenUrl = actualUrl;
-        }
-
-        if ((matchesExpected || sawLoading) && !tab.isLoading && actualUrl && actualUrl !== 'about:blank') {
+        if (actualUrl && actualUrl !== 'about:blank' && !tab.isLoading) {
           return {
             url: actualUrl,
             title: tab.title || 'New Tab',
@@ -589,10 +545,10 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
         }
       }
 
-      await new Promise(resolve => setTimeout(resolve, 250));
+      await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    throw new Error(`Timed out waiting for navigation${lastSeenUrl ? ` (${lastSeenUrl})` : ''}`);
+    throw new Error(`Navigation timed out${lastSeenUrl ? ` — last URL: ${lastSeenUrl}` : ''}`);
   }, []);
 
   const openTabAndWaitForLoad = useCallback(async (url: string, groupId?: string) => {
@@ -610,7 +566,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     return waitForTabNavigation(createdTab.id, normalizedUrl);
   }, [normalizeNavigationTarget, store, waitForTabNavigation]);
 
-  const waitForActiveTabToSettle = useCallback(async (timeoutMs = 20000) => {
+  const waitForActiveTabToSettle = useCallback(async (timeoutMs = 15000) => {
     const state = useAppStore.getState();
     if (!state.activeTabId) {
       return null;
@@ -1768,7 +1724,11 @@ I couldn't schedule the task. The background service may not be running. Please 
 
         case 'READ_PAGE_CONTENT': {
           try {
-            await waitForActiveTabToSettle(20000);
+            const settled = await waitForActiveTabToSettle(15000);
+            if (!settled) {
+              output = 'Error reading page: page did not finish loading';
+              break;
+            }
             const activeTabId = useAppStore.getState().activeTabId;
             const res = await window.electronAPI.extractPageContent(activeTabId || undefined);
             if (res.content) {
