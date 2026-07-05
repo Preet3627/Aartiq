@@ -84,6 +84,11 @@ See the [releases page](https://github.com/Preet3627/Aartiq/releases) for pre-bu
 | Android | .apk |
 | iOS | .ipa (beta) |
 
+If macOS blocks the app, run:
+```bash
+xattr -cr /Applications/Aartiq.app
+```
+
 ## Documentation
 
 Full documentation at [browser.ponsrischool.in](https://browser.ponsrischool.in)

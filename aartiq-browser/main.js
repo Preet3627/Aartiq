@@ -3181,6 +3181,8 @@ mainWindow = new BrowserWindow({
     }
   }
 
+  registerAppFileProtocol();
+
   mainWindow.loadURL(url).catch(err => {
     console.error('[Main] Failed to load URL:', err);
     // Still show window even if load fails
@@ -4442,6 +4444,7 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
+      partition: 'persist:browserview',
     },
   });
   newView.webContents.setUserAgent(chromeUserAgent);
