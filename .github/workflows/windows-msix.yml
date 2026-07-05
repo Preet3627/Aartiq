@@ -22,6 +22,8 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       is_stable: ${{ steps.version.outputs.is_stable }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Parse version
         id: version
         run: |
@@ -73,6 +75,33 @@ jobs:
         with:
           path: aartiq-browser/.next/cache
           key: ${{ runner.os }}-nextjs-${{ hashFiles('aartiq-browser/package-lock.json') }}
+
+      - name: Inject Microsoft Store Identities
+        shell: pwsh
+        working-directory: aartiq-browser
+        env:
+          PKG_NAME: ${{ secrets.STORE_PACKAGE_NAME }}
+          PKG_PUB: ${{ secrets.STORE_PUBLISHER_ID }}
+          PKG_PUB_DISPLAY: ${{ secrets.STORE_PUBLISHER_DISPLAY_NAME }}
+        run: |
+          $jsonPath = "package.json"
+          $json = Get-Content $jsonPath -Raw | ConvertFrom-Json
+
+          if ($env:PKG_NAME) {
+            $json.build.appx.identityName = $env:PKG_NAME
+            Write-Host "Set identityName: $env:PKG_NAME"
+          }
+          if ($env:PKG_PUB) {
+            $json.build.appx.publisher = $env:PKG_PUB
+            Write-Host "Set publisher: $env:PKG_PUB"
+          }
+          if ($env:PKG_PUB_DISPLAY) {
+            $json.build.appx.publisherDisplayName = $env:PKG_PUB_DISPLAY
+            Write-Host "Set publisherDisplayName: $env:PKG_PUB_DISPLAY"
+          }
+
+          $json | ConvertTo-Json -Depth 10 | Set-Content $jsonPath
+          Write-Host "Successfully injected Store Identities into $jsonPath"
 
       - name: Build MSIX (AppX) Target
         working-directory: aartiq-browser

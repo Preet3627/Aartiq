@@ -521,8 +521,8 @@ export const useAppStore = create<BrowserState>()(
 
             // Settings
             shortcuts: defaultShortcuts,
-            hasSeenWelcomePage: true,
-            hasCompletedStartupSetup: true,
+            hasSeenWelcomePage: false,
+            hasCompletedStartupSetup: false,
             appName: 'Aartiq',
             backendStrategy: 'firebase',
             customFirebaseConfig: null,

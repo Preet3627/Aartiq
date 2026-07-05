@@ -4,7 +4,9 @@ An open-source, AI-native browser with permission-gated OS automation.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blue)]()
-[![Version](https://img.shields.io/badge/Version-0.2.97-blue)]()
+[![Version](https://img.shields.io/badge/Version-0.2.98-blue)]()
+[![Downloads](https://img.shields.io/github/downloads/Preet3627/Aartiq/total?color=success&label=Total%20Downloads)](https://github.com/Preet3627/Aartiq/releases)
+[![Downloads Latest](https://img.shields.io/github/downloads/Preet3627/Aartiq/v0.2.98/total?color=blue&label=Downloads%20(v0.2.98))](https://github.com/Preet3627/Aartiq/releases/tag/v0.2.98)
 
 
 
