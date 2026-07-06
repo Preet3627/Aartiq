@@ -101,7 +101,7 @@ xattr -cr /Applications/Aartiq.app
 
 ## Documentation
 
-Full documentation at [browser.ponsrischool.in](https://browser.ponsrischool.in)
+Full documentation at [Official Site](https://aartiq.ponsrischool.in)
 
 ## Development Status
 
