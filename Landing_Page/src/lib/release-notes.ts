@@ -17,6 +17,33 @@ export interface ReleaseEntry {
 
 export const releases: ReleaseEntry[] = [
   {
+    version: '0.2.99',
+    date: '2026-07-06',
+    codename: 'Nebula',
+    channel: 'alpha',
+    changes: {
+      change: [
+        'Official rebrand from Comet-AI to Aartiq across Landing_Page',
+        'Updated all product names, URLs, logos, and branding references',
+        'Migrated domain references: browser.ponsrischool.in → aartiq.vercel.app',
+        'Updated deep link schemes: comet-browser:// → aartiq-browser://, comet-ai:// → aartiq://',
+        'Updated API headers: X-Comet-App-Token → X-Aartiq-App-Token',
+        'Replaced logo from /icon.png to /logo-transparent.png',
+        'Added Google Search Console verification tag for aartiq.vercel.app',
+        'Expanded SEO keywords and JSON-LD structured data for maximum search visibility',
+        'Updated AI-GUIDE.md with new project structure and branding',
+        'Removed deprecated REFACTOR ATTEMPT entry from release notes',
+        'Ran component scanner and synced component-data.json',
+        'Set up Landing_Page as standalone git repository for Vercel deployment',
+      ],
+      docs: [
+        'Updated AI-GUIDE.md with Aartiq project structure, URLs, and repository references',
+        'Cleaned up release-notes.ts changelog (removed stale REFACTOR ATTEMPT entry)',
+        'Synced component scanner data with Landing_Page'
+      ]
+    }
+  },
+  {
     version: '0.2.98',
     date: '2026-06-27',
     codename: 'Nebula',
@@ -28,7 +55,7 @@ export const releases: ReleaseEntry[] = [
         'Added migrateToNewFormat() to transparently upgrade legacy blobs to PBKDF2-based E2EE2: format',
         'Added runtime DOMPurify guard: gracefully degrades when window/document unavailable (main process safety)',
         'Removed dead checkCSSAttacks() — CSS safety is handled by DOMPurify or style stripping',
-        'Audited Security.js vs Security.ts — Security.js is compiled output from Security.ts, used by CloudSyncService.js at runtime',
+        'Audited Security.ts vs Security.js — Security.js does not exist in this repo; all callers import Security.ts directly',
         'Audited 31 AI-action IPC channels: 22 gated, 9 monitoring-only — documented in docs-audit/action-inventory.md',
       ],
       change: [
@@ -123,7 +150,7 @@ export const releases: ReleaseEntry[] = [
     channel: 'stable',
     changes: {
       new: [
-        'Aartiq CLI - Powerful terminal-based browser control (aartiq ask, aartiq search)',
+        'Aartiq CLI - Powerful terminal-based browser control (comet ask, comet search)',
         'Automatic Response Continuation - Fixed AI interruptions with seamless "Keep-Alive" stitching',
         'Finalized Siri & Apple Shortcuts - Zero-setup AppIntents for hands-free automation',
         'Secure CLI Authentication - Token-based authorization via ~/.aartiq-token',
@@ -168,7 +195,7 @@ export const releases: ReleaseEntry[] = [
         'Native Click Alternatives - Platform-specific automation (macOS steve, Windows nut.js/xa11y)',
         'Native OCR Alternatives - uniOCR, RustO! (PaddleOCR) with 99.3% accuracy',
         'Cross-Platform Automation Fallback Chain - nut.js → xa11y → robotjs',
-        'Cross-Platform OCR Fallback Chain - Platform Native → uniOCR → RustO! → Tesseract'
+        'Cross-Platform OCR Fallback Chain - uniOCR → RustO! → Platform Native → Tesseract'
       ],
       fix: [
         'Removed Protected Ecosystem footer from PDF generation',
@@ -176,7 +203,7 @@ export const releases: ReleaseEntry[] = [
         'Fixed GitHub Actions build error: empty password for code signing'
       ],
       change: [
-        'Main.js: 11,083 lines (base), Preload.js: 682 lines',
+        'Main.js: 8,290 lines (current), Preload.js: 682 lines',
         'Robot-service.js: 292 lines, Tesseract-service.js: 1,125 lines',
         'Automation index.js: 147 lines',
         'Linux integration.js: 495 lines, Windows integration.js: 385 lines',
@@ -218,11 +245,11 @@ export const releases: ReleaseEntry[] = [
         'Fixed hasSeenWelcomePage/hasCompletedStartupSetup defaults blocking BrowserView bounds'
       ],
       change: [
-        'REFACTOR ATTEMPT: main.js partially split from ~11,000 to ~3,900 lines, but handlers accumulated back to ~8,300 lines in subsequent releases',
+
         'Modular IPC Handlers: Moved all handlers to src/main/handlers/ modules (14+ modules)',
         'Lazy Service Loading: Services now load on-demand for faster startup',
         'Removed landing page from default startup - app now opens directly to browser',
-        'Added Sidebar Version selector to macOS menu (Aartiq > Sidebar Version)',
+        'Added Sidebar Version selector to macOS menu (Comet > Sidebar Version)',
         'Added Sidebar Version toggle in settings panel'
       ],
       docs: [
