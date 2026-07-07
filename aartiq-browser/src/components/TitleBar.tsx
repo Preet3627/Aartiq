@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState, useEffect } from 'react';
-import { Minus, Square, X, Maximize2, Settings, Search, LogIn } from 'lucide-react'; // Import Settings icon and Search icon
+import { Minus, Square, X, Settings, Search, LogIn } from 'lucide-react'; // Import Settings icon and Search icon
 import { VirtualizedTabBar } from './VirtualizedTabBar';
 import { useAppStore } from '@/store/useAppStore';
 import { useRouter } from 'next/navigation'; // Import useRouter
@@ -100,19 +100,31 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
             }}
         >
             {!isMac ? (
-                <div className="flex items-center gap-2 no-drag-region">
-                    <button onClick={handleClose} className="h-3 w-3 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center group">
-                        <X size={8} className="text-black opacity-0 group-hover:opacity-100" />
+                <div className="flex items-center no-drag-region h-full">
+                    <button
+                        onClick={handleMinimize}
+                        className="h-full w-11 flex items-center justify-center text-secondary-text hover:text-primary-text hover:bg-white/10 active:bg-white/15 transition-colors"
+                        title="Minimize"
+                    >
+                        <Minus size={14} />
                     </button>
-                    <button onClick={handleMinimize} className="h-3 w-3 rounded-full bg-yellow-500 hover:bg-yellow-600 flex items-center justify-center group">
-                        <Minus size={8} className="text-black opacity-0 group-hover:opacity-100" />
+                    <button
+                        onClick={handleMaximize}
+                        className="h-full w-11 flex items-center justify-center text-secondary-text hover:text-primary-text hover:bg-white/10 active:bg-white/15 transition-colors"
+                        title="Maximize"
+                    >
+                        <Square size={11} />
                     </button>
-                    <button onClick={handleMaximize} className="h-3 w-3 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center group">
-                        <Maximize2 size={8} className="text-black opacity-0 group-hover:opacity-100" />
+                    <button
+                        onClick={handleClose}
+                        className="h-full w-11 flex items-center justify-center text-secondary-text hover:text-white hover:bg-red-500/80 active:bg-red-500 transition-colors"
+                        title="Close"
+                    >
+                        <X size={15} />
                     </button>
                 </div>
             ) : (
-                <div className="w-[60px]" /> // Spacer to prevent overlap with native macOS traffic lights
+                <div className="w-[60px]" />
             )}
             {/* Aartiq Logo and Text */}
             <div className="flex items-center gap-2 px-3 drag-region">

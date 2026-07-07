@@ -9,6 +9,7 @@ An open-source, AI-native browser with permission-gated OS automation.
 [![Version](https://img.shields.io/badge/Version-0.2.98-blue)]()
 [![Downloads](https://img.shields.io/github/downloads/Preet3627/Aartiq/total?color=success&label=Total%20Downloads)](https://github.com/Preet3627/Aartiq/releases)
 [![Downloads Latest](https://img.shields.io/github/downloads/Preet3627/Aartiq/v0.2.98/total?color=blue&label=Downloads%20(v0.2.98))](https://github.com/Preet3627/Aartiq/releases/tag/v0.2.98)
+[![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Download-blue?logo=microsoft)](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN)
 
 
 
@@ -88,6 +89,7 @@ See the [releases page](https://github.com/Preet3627/Aartiq/releases) for pre-bu
 | Platform | Format |
 |----------|--------|
 | Windows | .exe / .msix |
+| Windows | [Microsoft Store](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN) |
 | macOS (ARM64) | .dmg |
 | macOS (x64) | .dmg |
 | Linux | .AppImage |

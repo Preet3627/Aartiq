@@ -176,8 +176,8 @@ const UpdatesSettings = () => {
   };
 
   const isNewerVersion = (releaseTag: string) => {
-    const release = releaseTag.replace(/^v/, '').split('.').map(Number);
-    const current = (currentVersion || '0.0.0').split('.').map(Number);
+    const release = String(releaseTag).replace(/^v/, '').split('.').map(Number);
+    const current = String(currentVersion || '0.0.0').split('.').map(Number);
     
     for (let i = 0; i < 3; i++) {
       if ((release[i] || 0) > (current[i] || 0)) return true;

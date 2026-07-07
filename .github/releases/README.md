@@ -24,6 +24,7 @@
 | macOS (Intel) | [Aartiq-0.2.9.3.dmg](https://github.com/Preet3627/Aartiq/releases/latest/download/Aartiq-0.2.9.3.dmg) |
 | macOS (Apple Silicon) | [Aartiq-0.2.9.3-arm64.dmg](https://github.com/Preet3627/Aartiq/releases/latest/download/Aartiq-0.2.9.3-arm64.dmg) |
 | Windows | [Aartiq-0.2.9.3.exe](https://github.com/Preet3627/Aartiq/releases/latest/download/Aartiq-0.2.9.3.exe) |
+| Windows (Microsoft Store) | [Install from Store](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN) |
 | Linux | [Aartiq-0.2.9.3.AppImage](https://github.com/Preet3627/Aartiq/releases/latest/download/Aartiq-0.2.9.3.AppImage) |
 
 ---

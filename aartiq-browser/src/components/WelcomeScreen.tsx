@@ -10,9 +10,11 @@ import {
   Globe,
   KeyRound,
   LogIn,
+  Minus,
   MonitorSmartphone,
   ShieldCheck,
   Sparkles,
+  Square,
   User,
   X,
 } from 'lucide-react';
@@ -69,6 +71,15 @@ export default function WelcomeScreen() {
   const { setHasSeenWelcomePage, setGuestMode } = useAppStore();
   const versionLabel = `v${useAppVersion()}`;
   const [activeHighlight, setActiveHighlight] = useState(0);
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    setIsMac(navigator.userAgent.toLowerCase().includes('mac'));
+  }, []);
+
+  const handleMinimize = () => window.electronAPI?.minimizeWindow();
+  const handleMaximize = () => window.electronAPI?.maximizeWindow();
+  const handleClose = () => window.electronAPI?.closeWindow();
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -138,6 +149,31 @@ export default function WelcomeScreen() {
           className="flex items-center justify-between px-8 py-6"
         >
           <div className="flex items-center gap-4">
+            {!isMac && (
+              <div className="flex items-center gap-1 mr-3 py-2">
+                <button
+                  onClick={handleMinimize}
+                  className="h-8 w-10 flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/10 active:bg-white/15 transition-colors rounded"
+                  title="Minimize"
+                >
+                  <Minus size={14} />
+                </button>
+                <button
+                  onClick={handleMaximize}
+                  className="h-8 w-10 flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/10 active:bg-white/15 transition-colors rounded"
+                  title="Maximize"
+                >
+                  <Square size={11} />
+                </button>
+                <button
+                  onClick={handleClose}
+                  className="h-8 w-10 flex items-center justify-center text-white/50 hover:text-white hover:bg-red-500/80 active:bg-red-500 transition-colors rounded"
+                  title="Close"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/6 shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
               <img src="/logo-transparent.png" alt="Aartiq" className="h-9 w-9 object-contain" />
             </div>

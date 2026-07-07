@@ -441,6 +441,7 @@ jobs:
             | Platform | File |
             |----------|------|
             | Windows | `Aartiq.Browser.Setup.*.exe` |
+            | Windows | [Microsoft Store](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN) |
             | macOS Apple Silicon | `*-arm64.dmg` |
             | macOS Intel | `*-x64.dmg` |
             | Linux | `Aartiq.Browser-*.AppImage` |

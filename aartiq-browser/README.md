@@ -52,6 +52,7 @@
 [![Low Spec Optimized](https://img.shields.io/badge/Optimized-i5--U_|_8GB_RAM-success?style=for-the-badge&logo=cpu-z)](https://github.com/Preet3627/Aartiq)
 [![Security Model](https://img.shields.io/badge/Security-Triple--Lock_HITL-blueviolet?style=for-the-badge&logo=shield)](https://github.com/Preet3627/Aartiq)
 [![Low-Spec](https://img.shields.io/badge/Low-Spec_i5-U_8GB--green?style=flat&logo=electron)](https://github.com/Preet3627/Aartiq)
+[![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Download-blue?logo=microsoft)](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN)
 
 </div>
 
@@ -418,6 +419,7 @@ Comet v0.2.4 introduces a comprehensive restructuring of command parsing with de
 | Platform | Version | Status | Size |
 |----------|---------|--------|------|
 | 🪟 **Windows** | [v0.2.0 (.exe)](https://browser.ponsrischool.in/download) | ✅ Stable | ~150 MB |
+| 🪟 **Windows (Microsoft Store)** | [v0.2.0](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN) | ✅ Stable | ~150 MB |
 | 🍎 **macOS** | Coming soon | 🧪 Beta | – |
 | 🐧 **Linux** | Coming soon | 🧪 Beta | – |
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
@@ -11,11 +11,13 @@ import {
   ExternalLink,
   Key,
   Loader2,
+  Minus,
   Monitor,
   MoonStar,
   Palette,
   ShieldCheck,
   Sparkles,
+  Square,
   SunMedium,
   Wifi,
   X,
@@ -149,8 +151,18 @@ const openExternal = async (url: string) => {
 export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
   const store = useAppStore();
   const versionLabel = `v${useAppVersion()}`;
+  const [isMac, setIsMac] = useState(false);
   const [step, setStep] = useState(1);
   const [wantsAI, setWantsAI] = useState(true);
+
+  useEffect(() => {
+    setIsMac(navigator.userAgent.toLowerCase().includes('mac'));
+  }, []);
+
+  const handleMinimize = () => window.electronAPI?.minimizeWindow();
+  const handleMaximize = () => window.electronAPI?.maximizeWindow();
+  const handleClose = () => window.electronAPI?.closeWindow();
+
   const isWindows = useMemo(() => {
     if (typeof navigator === 'undefined') return false;
     return /win/i.test(navigator.userAgent) || navigator.platform.toLowerCase().includes('win');
@@ -315,6 +327,31 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#061019]/94 p-6 text-white backdrop-blur-3xl">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.14),transparent_38%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(14,165,233,0.08),transparent_24%)]" />
+      {!isMac && (
+        <div className="fixed top-0 left-0 z-20 flex items-center h-10 px-2">
+          <button
+            onClick={handleMinimize}
+            className="h-8 w-10 flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/10 active:bg-white/15 transition-colors rounded"
+            title="Minimize"
+          >
+            <Minus size={14} />
+          </button>
+          <button
+            onClick={handleMaximize}
+            className="h-8 w-10 flex items-center justify-center text-white/50 hover:text-white/80 hover:bg-white/10 active:bg-white/15 transition-colors rounded"
+            title="Maximize"
+          >
+            <Square size={11} />
+          </button>
+          <button
+            onClick={handleClose}
+            className="h-8 w-10 flex items-center justify-center text-white/50 hover:text-white hover:bg-red-500/80 active:bg-red-500 transition-colors rounded"
+            title="Close"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0, y: 16, scale: 0.98 }}
