@@ -198,7 +198,7 @@ exports.Security = {
                 { pattern: /gho_[A-Za-z0-9]{36}/g, name: "GitHub OAuth" },
                 { pattern: /xox[baprs]-[A-Za-z0-9]{10,}/g, name: "Slack Token" },
                 { pattern: /AKIA[0-9A-Z]{16}/g, name: "AWS Access Key" },
-                { pattern: /[a-zA-Z0-9_-]*:[a-zA-Z0-9_-]*@[a-zA-Z0-9._-]/g, name: "Credential URL" },
+                { pattern: /[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+@[a-zA-Z0-9._-]/g, name: "Credential URL" },
                 { pattern: /password\s*[=:]\s*['"][^'"]{8,}['"]/gi, name: "Hardcoded Password" },
                 { pattern: /api[_-]?key\s*[=:]\s*['"][^'"]{16,}['"]/gi, name: "Generic API Key" },
                 { pattern: /secret\s*[=:]\s*['"][^'"]{16,}['"]/gi, name: "Hardcoded Secret" },
@@ -293,6 +293,34 @@ exports.Security = {
                     }
                 }
             }
+            // Decode base64 strings and re-scan for hidden threats
+            var b64results = exports.Security.SecureDOMParser.extractBase64Strings(content);
+            for (var bIdx = 0; bIdx < b64results.length; bIdx++) {
+                var b64entry = b64results[bIdx];
+                var encoded = b64entry.encoded, decoded = b64entry.decoded;
+                var _layerEntries = Object.entries(exports.Security.SecureDOMParser.injectionPatterns);
+                for (var layerIdx = 0; layerIdx < _layerEntries.length; layerIdx++) {
+                    var layerEntry = _layerEntries[layerIdx];
+                    var layerName = layerEntry[0], patterns = layerEntry[1];
+                    if (Array.isArray(patterns)) {
+                        for (var patIdx = 0; patIdx < patterns.length; patIdx++) {
+                            var pattern = patterns[patIdx];
+                            var match = void 0;
+                            while ((match = pattern.exec(decoded)) !== null) {
+                                var severity = layerName === 'shellPrimitives' ? 'critical' : exports.Security.SecureDOMParser.getSeverity(layerName, match[0]);
+                                findings.push({
+                                    layer: layerName,
+                                    pattern: '[base64-decoded] ' + pattern.toString(),
+                                    match: encoded.substring(0, 100),
+                                    position: content.indexOf(encoded),
+                                    severity: severity
+                                });
+                                threatScore += exports.Security.SecureDOMParser.getThreatScore(layerName);
+                            }
+                        }
+                    }
+                }
+            }
             var threatLevel = 'none';
             if (threatScore >= 100)
                 threatLevel = 'critical';
@@ -352,7 +380,7 @@ exports.Security = {
         getSeverity: function (layer, match) {
             if (layer === 'injectionAttempts')
                 return 'critical';
-            if (layer === 'shellPrimitives' && /rm\s+-rf|sudo|del\s+\//i.test(match))
+            if (layer === 'shellPrimitives')
                 return 'critical';
             if (layer === 'privilegeEscalation')
                 return 'warning';
@@ -362,6 +390,28 @@ exports.Security = {
         },
         escapeRegex: function (string) {
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        },
+        extractBase64Strings: function (content) {
+            var results = [];
+            var base64Regex = /[A-Za-z0-9+/]{12,}={0,2}/g;
+            var match;
+            while ((match = base64Regex.exec(content)) !== null) {
+                try {
+                    var decoded = atob(match[0]);
+                    var printableCount = 0;
+                    for (var i = 0; i < decoded.length; i++) {
+                        var code = decoded.charCodeAt(i);
+                        if (code >= 32 && code <= 126) printableCount++;
+                    }
+                    if (printableCount > decoded.length * 0.7 && decoded.length > 5) {
+                        results.push({ encoded: match[0], decoded: decoded });
+                    }
+                }
+                catch (_a) {
+                    // Not valid base64
+                }
+            }
+            return results;
         },
         sanitizeHTML: function (html) {
             return (0, html_sanitizer_1.sanitizeHTML)(html);

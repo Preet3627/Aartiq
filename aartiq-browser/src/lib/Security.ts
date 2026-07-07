@@ -194,7 +194,7 @@ export const Security = {
                 { pattern: /gho_[A-Za-z0-9]{36}/g, name: "GitHub OAuth" },
                 { pattern: /xox[baprs]-[A-Za-z0-9]{10,}/g, name: "Slack Token" },
                 { pattern: /AKIA[0-9A-Z]{16}/g, name: "AWS Access Key" },
-                { pattern: /[a-zA-Z0-9_-]*:[a-zA-Z0-9_-]*@[a-zA-Z0-9._-]/g, name: "Credential URL" },
+                { pattern: /[a-zA-Z][a-zA-Z0-9+.-]*:\/\/[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+@[a-zA-Z0-9._-]/g, name: "Credential URL" },
                 { pattern: /password\s*[=:]\s*['"][^'"]{8,}['"]/gi, name: "Hardcoded Password" },
                 { pattern: /api[_-]?key\s*[=:]\s*['"][^'"]{16,}['"]/gi, name: "Generic API Key" },
                 { pattern: /secret\s*[=:]\s*['"][^'"]{16,}['"]/gi, name: "Hardcoded Secret" },
@@ -290,6 +290,28 @@ export const Security = {
                 }
             }
 
+            // Decode base64 strings and re-scan for hidden threats
+            const decodedPayloads = Security.SecureDOMParser.extractBase64Strings(content);
+            for (const {encoded, decoded} of decodedPayloads) {
+                for (const [layerName, patterns] of Object.entries(Security.SecureDOMParser.injectionPatterns)) {
+                    if (!Array.isArray(patterns)) continue;
+                    for (const pattern of (patterns as RegExp[])) {
+                        let match;
+                        while ((match = pattern.exec(decoded)) !== null) {
+                            const severity = layerName === 'shellPrimitives' ? 'critical' : Security.SecureDOMParser.getSeverity(layerName, match[0]);
+                            findings.push({
+                                layer: `${layerName}`,
+                                pattern: `[base64-decoded] ${pattern.toString()}`,
+                                match: encoded.substring(0, 100),
+                                position: content.indexOf(encoded),
+                                severity,
+                            });
+                            threatScore += Security.SecureDOMParser.getThreatScore(layerName);
+                        }
+                    }
+                }
+            }
+
             let threatLevel: ThreatLevel = 'none';
             if (threatScore >= 100) threatLevel = 'critical';
             else if (threatScore >= 50) threatLevel = 'high';
@@ -351,10 +373,32 @@ export const Security = {
 
         getSeverity(layer: string, match: string): FindingSeverity {
             if (layer === 'injectionAttempts') return 'critical';
-            if (layer === 'shellPrimitives' && /rm\s+-rf|sudo|del\s+\//i.test(match)) return 'critical';
+            if (layer === 'shellPrimitives') return 'critical';
             if (layer === 'privilegeEscalation') return 'warning';
             if (layer === 'apiKeyPatterns') return 'warning';
             return 'info';
+        },
+
+        extractBase64Strings(content: string): Array<{encoded: string; decoded: string}> {
+            const results: Array<{encoded: string; decoded: string}> = [];
+            const base64Regex = /[A-Za-z0-9+/]{12,}={0,2}/g;
+            let match;
+            while ((match = base64Regex.exec(content)) !== null) {
+                try {
+                    const decoded = atob(match[0]);
+                    let printableCount = 0;
+                    for (let i = 0; i < decoded.length; i++) {
+                        const code = decoded.charCodeAt(i);
+                        if (code >= 32 && code <= 126) printableCount++;
+                    }
+                    if (printableCount > decoded.length * 0.7 && decoded.length > 5) {
+                        results.push({ encoded: match[0], decoded });
+                    }
+                } catch {
+                    // Not valid base64
+                }
+            }
+            return results;
         },
 
         escapeRegex(string: string): string {
