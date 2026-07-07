@@ -3,7 +3,7 @@
  * Component Scanner Script
  * 
  * Automatically scans aartiq-browser/src and flutter_browser_app/lib
- * and generates line counts and metadata for documentation.
+ * and generates line counts, metadata, and rich code analysis for documentation.
  * 
  * Usage:
  *   node scripts/component-scanner.js           # Scan and output JSON
@@ -41,6 +41,124 @@ const TAG_PATTERNS = {
   'Linux': /\blinux|xdotool|xte\b/i,
   'Flutter': /\bFlutter|Dart|Widget|StatefulWidget\b/,
 };
+
+function extractCodeAnalysis(content, filename) {
+  const ext = path.extname(filename).toLowerCase();
+  const isReact = ext === '.tsx';
+
+  // 1. Imports
+  const importLines = content.match(/^import\s+.*?['"].+?['"]\s*;?\s*$/gm) || [];
+  const importsExternal = [];
+  const importsInternal = [];
+  for (const line of importLines) {
+    const match = line.match(/from\s+['"](.+)['"]/);
+    if (!match) continue;
+    const modulePath = match[1];
+    if (modulePath.startsWith('.') || modulePath.startsWith('@/')) {
+      importsInternal.push(modulePath);
+    } else {
+      importsExternal.push(modulePath);
+    }
+  }
+
+  // 2. Interfaces & Types
+  const interfaces = [];
+  const interfaceRegex = /(?:export\s+)?(?:interface|type)\s+(\w+)(?:\s+extends\s+[\w<>,\s]+)?\s*\{([^}]+)\}/g;
+  let ifMatch;
+  while ((ifMatch = interfaceRegex.exec(content)) !== null) {
+    const props = [];
+    const propLines = ifMatch[2].trim().split('\n');
+    for (const propLine of propLines) {
+      const propMatch = propLine.match(/^\s*(\w[\w?]*)\s*(:|=)\s*([^;]+?)(;|,)?\s*$/);
+      if (propMatch) {
+        props.push({
+          name: propMatch[1].replace('?', ''),
+          type: propMatch[3].trim().replace(/[;,]\s*$/, ''),
+          required: !propMatch[1].includes('?')
+        });
+      }
+    }
+    interfaces.push({ name: ifMatch[1], properties: props });
+  }
+
+  // 3. React hooks
+  const hooks = [];
+  const hookPatterns = [
+    /useState\b/g, /useEffect\b/g, /useCallback\b/g, /useRef\b/g,
+    /useMemo\b/g, /useReducer\b/g, /useContext\b/g, /useLayoutEffect\b/g,
+    /useImperativeHandle\b/g, /useDebugValue\b/g, /useTransition\b/g,
+    /useDeferredValue\b/g, /useSyncExternalStore\b/g,
+    /useId\b/g, /useShallow\b/g,
+  ];
+  for (const pattern of hookPatterns) {
+    if (pattern.test(content)) {
+      const name = pattern.source.replace(/\\b/g, '');
+      if (!hooks.includes(name)) hooks.push(name);
+    }
+  }
+
+  // 4. Component type detection
+  let componentType = 'utility';
+  if (isReact) {
+    const hasFunctionComponent = /(?:const|function)\s+\w+\s*(?:=\s*\([^)]*\)|\s*\([^)]*\))\s*(?::\s*[^{]+)?\s*=>/.test(content) ||
+      /export\s+default\s+function\s+\w+\s*\(/.test(content);
+    const hasClassComponent = /extends\s+(?:React\.)?(?:Component|PureComponent)/.test(content);
+    if (hasClassComponent) componentType = 'class-component';
+    else if (hasFunctionComponent) componentType = 'function-component';
+    else componentType = 'react-utility';
+  } else if (content.includes('export default') || content.includes('module.exports')) {
+    componentType = 'service';
+  }
+
+  // 5. Exports
+  const exports = [];
+  const defaultExport = content.match(/export\s+default\s+(?:function\s+)?(\w+)/);
+  if (defaultExport) exports.push(`default ${defaultExport[1]}`);
+  const namedExports = content.matchAll(/export\s+(?:const|function|class|interface|type)\s+(\w+)/g);
+  for (const m of namedExports) {
+    if (!exports.includes(`default ${m[1]}`)) exports.push(m[1]);
+  }
+
+  // 6. API usage detection
+  const apiUsage = [];
+  if (/\belectronAPI\b/.test(content)) apiUsage.push('electronAPI');
+  if (/\buseRouter\b|\brouter\.\b/.test(content)) apiUsage.push('router');
+  if (/\buseAppStore\b|\buseUIStore\b|\buseStore\b/.test(content)) apiUsage.push('zustand-store');
+  if (/\bfirebase\b|\bFirebaseService\b/.test(content)) apiUsage.push('firebase');
+  if (/\bframer-motion\b|\bmotion\.\b|\bAnimatePresence\b/.test(content)) apiUsage.push('framer-motion');
+  if (/\bnext\/navigation\b/.test(content)) apiUsage.push('next-navigation');
+  if (/\bDOMPurify\b/.test(content)) apiUsage.push('dompurify');
+  if (/\breact-markdown\b|\bremark-\b|\brehype-\b/.test(content)) apiUsage.push('markdown');
+  if (/\bTesseract\b|\btesseract\.js\b/.test(content)) apiUsage.push('tesseract-ocr');
+  if (/\breact-syntax-highlighter\b/.test(content)) apiUsage.push('syntax-highlight');
+  if (/\bWebSocket\b|\bws\b/.test(content)) apiUsage.push('websocket');
+  if (/\blucide-react\b/.test(content)) apiUsage.push('lucide-icons');
+
+  // 7. Key functions (named function declarations and const arrow functions)
+  const keyFunctions = [];
+  const funcMatches = content.matchAll(/(?:const|function|let|var)\s+(\w+)\s*(?:=\s*(?:\([^)]*\)|[^=])\s*(?::[^{]+)?\s*(?:=>|\{)|\([^)]*\)\s*\{)/g);
+  for (const m of funcMatches) {
+    const name = m[1];
+    if (!keyFunctions.includes(name) && !exports.includes(name) && !exports.includes(`default ${name}`)) {
+      keyFunctions.push(name);
+    }
+  }
+
+  // Deduplicate external imports
+  const uniqueExternal = [...new Set(importsExternal)];
+  const uniqueInternal = [...new Set(importsInternal)];
+
+  return {
+    importsExternal: uniqueExternal,
+    importsInternal: uniqueInternal,
+    interfaces,
+    hooks,
+    componentType,
+    exports,
+    apiUsage,
+    keyFunctions
+  };
+}
 
 function detectTags(content, filename) {
   const tags = [];
@@ -114,13 +232,16 @@ function scanDirectory(dir, baseDir = dir) {
         const tags = detectTags(content, filename);
         const description = getDescription(fullPath) || guessDescription(filename);
         
+        const codeAnalysis = extractCodeAnalysis(content, filename);
+
         results.push({
           name: filename,
           path: relativePath.replace(/\\/g, '/'),
           lines,
           description,
           tags,
-          lastModified: fs.statSync(fullPath).mtime.toISOString().split('T')[0]
+          lastModified: fs.statSync(fullPath).mtime.toISOString().split('T')[0],
+          codeAnalysis
         });
       }
     }
