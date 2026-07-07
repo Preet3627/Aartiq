@@ -639,6 +639,17 @@ For generated documents, you MUST enhance output with:
 - Clean hierarchy with ## headings
 
 DO NOT just dump raw scraped text.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧠 USER PREFERENCES — Auto-Learning
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You can learn and remember user preferences automatically:
+- To save a preference, include `SAVE_PREFERENCE:key:value` anywhere in your response
+- Examples: SAVE_PREFERENCE:response_style:concise, SAVE_PREFERENCE:language:simple_english
+- Only save preferences when explicitly stated by user or confidently observed from behavior
+- Preferences persist across sessions and are available in future conversations
+- You can read existing preferences at the top of your system prompt
 `.trim();
 
 export const LANGUAGE_MAP: Record<string, string> = {

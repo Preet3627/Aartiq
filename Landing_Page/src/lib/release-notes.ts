@@ -17,6 +17,33 @@ export interface ReleaseEntry {
 
 export const releases: ReleaseEntry[] = [
   {
+    version: '0.3.1',
+    date: '2026-07-07',
+    codename: 'Nebula',
+    channel: 'stable',
+    changes: {
+      new: [
+        'AI User Preference Auto-Learning — AI detects and remembers user preferences (response style, tone, language, behavior) across sessions',
+        'SAVE_PREFERENCE command — AI can persist preferences via SAVE_PREFERENCE:key:value in responses',
+        'Cross-session RAG persistence — past conversations are ingested into vector memory and available as RAG context in future sessions',
+        'AI user preference IPC system — persistent JSON-based storage for AI-observed preferences in userData',
+      ],
+      fix: [
+        'Fixed model/provider selection not persisting across restarts — llm-set-active-provider and llm-configure-provider handlers now use correct electron-store keys',
+        'Fixed get-stored-api-keys returning wrong data shape (boolean flags instead of actual model/API key values) — frontend can now restore all provider models on startup',
+      ],
+      change: [
+        'Bumped version to 0.3.1',
+        'Added RAG IPC handlers (ragIngest, ragRetrieve, ragContext) to preload.js for renderer-to-main RAG access',
+        'Conversations now auto-ingest into BrowserAI vector memory on save for cross-session RAG',
+      ],
+      docs: [
+        'Updated README with AI user preference and RAG persistence features',
+        'Updated Landing_Page release notes, search index, and llms.txt for v0.3.1',
+      ]
+    }
+  },
+  {
     version: '0.3.0',
     date: '2026-07-07',
     codename: 'Nebula',

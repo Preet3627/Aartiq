@@ -67,6 +67,7 @@ function registerAllHandlers(ipcMain, handlers) {
     'voice-transcribe','voice-mic-permission','workflow-start','workflow-record',
     'workflow-stop','workflow-save','workflow-list','workflow-replay','workflow-delete',
     'workflow-status',
+    'user-preference:save','user-preference:load-all','user-preference:delete',
     'pop-search-show','pop-search-show-at-cursor','pop-search-get-config',
     'pop-search-update-config','pop-search-save-config','pop-search-load-config',
   ];

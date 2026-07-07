@@ -686,6 +686,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     registerProtocol: () => ipcRenderer.invoke('windows:register-protocol'),
   },
 
+  // RAG (Retrieval Augmented Generation)
+  ragIngest: (text, source) => ipcRenderer.invoke('rag-ingest', { text, source }),
+  ragRetrieve: (query, k) => ipcRenderer.invoke('rag-retrieve', { query, k }),
+  ragContext: (query, k) => ipcRenderer.invoke('rag-context', { query, k }),
+
+  // AI User Preferences (auto-learned)
+  saveUserPreference: (key, value) => ipcRenderer.invoke('user-preference:save', { key, value }),
+  loadUserPreferences: () => ipcRenderer.invoke('user-preference:load-all'),
+  deleteUserPreference: (key) => ipcRenderer.invoke('user-preference:delete', key),
+
   // Linux Integration
   linux: {
     executeAction: (action, params) => ipcRenderer.invoke('linux:execute-action', action, params),

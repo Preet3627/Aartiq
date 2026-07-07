@@ -1,0 +1,65 @@
+name: 🔄 Sync Component Docs to Landing Page
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'aartiq-browser/src/components/**/*.tsx'
+      - 'aartiq-browser/src/components/**/*.ts'
+      - 'aartiq-browser/src/lib/**/*.ts'
+      - 'aartiq-browser/scripts/component-scanner.js'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  scan-and-sync:
+    name: Scan Components & Sync Data
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Run component scanner
+        working-directory: aartiq-browser
+        run: node scripts/component-scanner.js --update
+
+      - name: Checkout Landing Page repo
+        uses: actions/checkout@v4
+        with:
+          repository: Preet3627/Aartiq-Landing-Page
+          token: ${{ secrets.LANDING_PAGE_PAT || github.token }}
+          path: landing-page-checkout
+
+      - name: Sync component-data.json to Landing Page
+        run: |
+          cp aartiq-browser/src/components/component-data.json landing-page-checkout/src/data/component-data.json
+
+      - name: Commit and push to Landing Page repo
+        working-directory: landing-page-checkout
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          if ! git diff --quiet; then
+            git add src/data/component-data.json
+            git commit -m "chore: sync component-data.json from main repo [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
+
+      - name: Trigger Vercel redeploy
+        if: ${{ vars.VERCEL_DEPLOY_HOOK_URL != '' }}
+        run: |
+          curl -X POST "${{ vars.VERCEL_DEPLOY_HOOK_URL }}"

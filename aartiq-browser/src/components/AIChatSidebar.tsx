@@ -352,6 +352,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [userPreferences, setUserPreferences] = useState<Record<string, { value: any; updatedAt: number }>>({});
   const [ollamaModels, setOllamaModels] = useState<{ name: string; modified_at: string }[]>([]);
   const [groqSpeed, setGroqSpeed] = useState<string | null>(null);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -1076,10 +1077,14 @@ I couldn't schedule the task. The background service may not be running. Please 
           : '',
       ].filter(Boolean).join('\n\n');
 
+      const userPrefsBlock = Object.keys(userPreferences).length > 0
+        ? `\n[USER PREFERENCES — Learned from past interactions]\n${Object.entries(userPreferences).map(([k, v]) => `  - ${k}: ${JSON.stringify(v.value)}`).join('\n')}\n[PREFERENCE COMMAND — To save a new preference, include in your response:\nSAVE_PREFERENCE:key:value\nExample: SAVE_PREFERENCE:response_style:concise\nExample: SAVE_PREFERENCE:language:simple_english\nOnly save when explicitly stated by user or confidently observed.]`
+        : '';
+
       let currentHistory: ChatMessage[] = [
         {
           role: 'system',
-          content: `${SYSTEM_INSTRUCTIONS}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
+          content: `${SYSTEM_INSTRUCTIONS}${userPrefsBlock}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
         },
         ...messages.map(m => ({ role: m.role, content: m.content })),
         {
@@ -1148,6 +1153,18 @@ I couldn't schedule the task. The background service may not be running. Please 
 
         // Also strip any remaining command tags/JSON for display
         responseText = stripAllCommands(responseText);
+
+        // Extract user preference commands (SAVE_PREFERENCE:key:value)
+        const prefRegex = /SAVE_PREFERENCE:\s*([^:]+?)\s*:\s*(.+?)(?:\n|$)/gi;
+        let prefMatch;
+        while ((prefMatch = prefRegex.exec(response.text)) !== null) {
+          const key = prefMatch[1].trim().toLowerCase().replace(/\s+/g, '_');
+          const val = prefMatch[2].trim();
+          if (key && val && window.electronAPI?.saveUserPreference) {
+            window.electronAPI.saveUserPreference(key, val).catch(() => {});
+            setUserPreferences(prev => ({ ...prev, [key]: { value: val, updatedAt: Date.now() } }));
+          }
+        }
 
         const skippedCommands: string[] = [];
         const duplicatePreventedCommands: string[] = [];
@@ -3735,6 +3752,14 @@ I've successfully executed the following real tasks:
       return truncated;
     });
 
+    const conversationText = storedMessages
+      .filter(m => m.content && m.content.length > 20)
+      .map(m => `[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`)
+      .join('\n');
+    if (conversationText.length > 50) {
+      BrowserAI.addToVectorMemory(conversationText, { type: 'chat_conversation', conversationId, timestamp: now }).catch(() => {});
+    }
+
     if (conversationId !== activeConversationId) {
       setActiveConversationId(conversationId);
     }
@@ -3894,12 +3919,24 @@ I've successfully executed the following real tasks:
 
     const savedConversations = lsGet<Conversation[]>('conversations_list', []);
     setConversations(savedConversations);
-    // Start with new chat on app restart - uncomment below to restore previous conversation
-    // if (savedConversations.length > 0) {
-    //   const latest = savedConversations[0];
-    //   setActiveConversationId(latest.id);
-    //   setMessages(latest.messages as ExtendedChatMessage[]);
-    // }
+
+    if (window.electronAPI?.loadUserPreferences) {
+      window.electronAPI.loadUserPreferences().then((prefs: any) => {
+        if (prefs && typeof prefs === 'object') setUserPreferences(prefs);
+      }).catch(() => {});
+    }
+
+    BrowserAI.loadVectorMemory().then(() => {
+      savedConversations.forEach(conv => {
+        const convText = conv.messages
+          .filter((m: any) => m.content && m.content.length > 20)
+          .map((m: any) => `[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`)
+          .join('\n');
+        if (convText.length > 50) {
+          BrowserAI.addToVectorMemory(convText, { type: 'chat_conversation', conversationId: conv.id, timestamp: conv.updatedAt || conv.createdAt }).catch(() => {});
+        }
+      });
+    });
 
     return () => {
       window.removeEventListener('online', hOnline);

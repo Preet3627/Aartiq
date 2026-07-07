@@ -559,6 +559,11 @@ declare global {
 
         };
 
+        // User Preferences (AI auto-learned)
+        saveUserPreference: (key: string, value: any) => Promise<{ success: boolean }>;
+        loadUserPreferences: () => Promise<Record<string, { value: any; updatedAt: number }>>;
+        deleteUserPreference: (key: string) => Promise<{ success: boolean }>;
+
     }
 }
 

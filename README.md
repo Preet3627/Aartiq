@@ -6,9 +6,9 @@ An open-source, AI-native browser with permission-gated OS automation.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blue)]()
-[![Version](https://img.shields.io/badge/Version-0.3.0-blue)]()
+[![Version](https://img.shields.io/badge/Version-0.3.1-blue)]()
 [![Downloads](https://img.shields.io/github/downloads/Preet3627/Aartiq/total?color=success&label=Total%20Downloads)](https://github.com/Preet3627/Aartiq/releases)
-[![Downloads Latest](https://img.shields.io/github/downloads/Preet3627/Aartiq/v0.3.0/total?color=blue&label=Downloads%20(v0.3.0))](https://github.com/Preet3627/Aartiq/releases/tag/v0.3.0)
+[![Downloads Latest](https://img.shields.io/github/downloads/Preet3627/Aartiq/v0.3.1/total?color=blue&label=Downloads%20(v0.3.1))](https://github.com/Preet3627/Aartiq/releases/tag/v0.3.1)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Download-blue?logo=microsoft)](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN)
 
 
@@ -21,8 +21,10 @@ An open-source, AI-native browser with permission-gated OS automation.
 
 ### AI Agent
 - Multi-step autonomous task execution via chained commands
-- RAG using local vector memory
-- Hybrid context: browser history + live web search
+- RAG using local vector memory with **cross-session persistence**
+- **AI User Preference Auto-Learning** — AI detects and remembers user preferences (response style, language, behavior)
+- **SAVE_PREFERENCE** command for AI-driven preference storage
+- Hybrid context: browser history + live web search + past conversation RAG
 - `<think>` tag parsing for chain-of-thought models
 - Agentic control: CLICK, FILL_FORM, SCROLL, COORDINATE interaction
 - Multi-format command parsing (JSON, bracket `[CMD]:`, HTML comments)
