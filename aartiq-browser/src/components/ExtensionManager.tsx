@@ -32,15 +32,14 @@ const ExtensionManager = () => {
 
   const handleToggleExtension = async (id: string) => {
     if (window.electronAPI) {
-      const success = await window.electronAPI.toggleExtension(id);
-      if (success !== undefined) {
+      const result = await window.electronAPI.toggleExtension(id);
+      if (result?.success) {
         setExtensions((prev) =>
           prev.map((ext) =>
-            ext.id === id ? { ...ext, enabled: success } : ext
+            ext.id === id ? { ...ext, enabled: result.enabled ?? true } : ext
           )
         );
       } else {
-        // Fallback if return is void or error
         fetchExtensions();
       }
     }

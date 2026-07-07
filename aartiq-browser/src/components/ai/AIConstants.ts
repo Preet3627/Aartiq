@@ -645,7 +645,7 @@ DO NOT just dump raw scraped text.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 You can learn and remember user preferences automatically:
-- To save a preference, include `SAVE_PREFERENCE:key:value` anywhere in your response
+- To save a preference, include SAVE_PREFERENCE:key:value anywhere in your response
 - Examples: SAVE_PREFERENCE:response_style:concise, SAVE_PREFERENCE:language:simple_english
 - Only save preferences when explicitly stated by user or confidently observed from behavior
 - Preferences persist across sessions and are available in future conversations
