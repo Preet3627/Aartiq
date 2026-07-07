@@ -374,8 +374,43 @@ class PluginManager extends EventEmitter {
     return cmds;
   }
 
+  seedBuiltinPlugins() {
+    const builtinDir = path.resolve(__dirname, '..', '..', 'plugins');
+    if (!fs.existsSync(builtinDir)) return;
+
+    const entries = fs.readdirSync(builtinDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const srcManifest = path.join(builtinDir, entry.name, 'manifest.json');
+      if (!fs.existsSync(srcManifest)) continue;
+
+      const manifest = JSON.parse(fs.readFileSync(srcManifest, 'utf-8'));
+      const targetPath = path.join(this.pluginsDir, manifest.id || entry.name);
+
+      if (!fs.existsSync(targetPath)) {
+        fs.mkdirSync(targetPath, { recursive: true });
+        const copyDir = (src, dest) => {
+          fs.readdirSync(src).forEach(item => {
+            const s = path.join(src, item);
+            const d = path.join(dest, item);
+            if (fs.statSync(s).isDirectory()) {
+              fs.mkdirSync(d, { recursive: true });
+              copyDir(s, d);
+            } else {
+              fs.copyFileSync(s, d);
+            }
+          });
+        };
+        copyDir(path.join(builtinDir, entry.name), targetPath);
+        console.log(`[PluginManager] Seeded built-in plugin: ${manifest.name || entry.name}`);
+      }
+    }
+  }
+
   async loadAllPlugins() {
     console.log('[PluginManager] Loading all plugins...');
+
+    this.seedBuiltinPlugins();
 
     if (!fs.existsSync(this.pluginsDir)) {
       fs.mkdirSync(this.pluginsDir, { recursive: true });

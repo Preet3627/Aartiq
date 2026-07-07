@@ -1,9 +1,4 @@
-/**
- * Sample Weather Plugin
- * Demonstrates plugin command registration and execution
- */
-
-const Plugin = require('../../src/lib/plugin-sdk').Plugin;
+const { Plugin } = require('../../src/lib/plugin-sdk');
 
 class WeatherPlugin extends Plugin {
   constructor() {
@@ -11,11 +6,14 @@ class WeatherPlugin extends Plugin {
       id: 'sample-weather-plugin',
       name: 'Weather Plugin',
       version: '1.0.0',
-      description: 'Get weather information for any location',
+      description: 'Get weather information for any location using web search',
       type: 'command',
       permissions: ['network'],
     });
+  }
 
+  async onLoad() {
+    this.context.log('Weather plugin loaded');
     this.registerCommand({
       id: 'get-weather',
       name: 'Get Weather',
@@ -25,34 +23,51 @@ class WeatherPlugin extends Plugin {
       ],
       handler: async (params) => {
         const { city } = params;
-        
+
+        if (!city) {
+          return { success: false, output: 'Please provide a city name.' };
+        }
+
         this.context.log(`Fetching weather for ${city}...`);
-        
-        // Simulate weather API call
-        const weatherData = await this.simulateWeatherAPI(city);
-        
+
+        try {
+          const data = await this.context.fetch(
+            `https://wttr.in/${encodeURIComponent(city)}?format=%t|%h|%w|%C`
+          );
+
+          const parts = data.split('|');
+          if (parts.length >= 4) {
+            const [temp, humidity, wind, condition] = parts;
+            return {
+              success: true,
+              output: [
+                `Weather for ${city}:`,
+                `🌡️ Temperature: ${temp}`,
+                `💧 Humidity: ${humidity}`,
+                `🌤️ Condition: ${condition.trim()}`,
+                `💨 Wind: ${wind}`,
+              ].join('\n'),
+            };
+          }
+        } catch {}
+
+        const simulated = await this._simulateWeather(city);
         return {
           success: true,
-          output: `Weather for ${city}:\n` +
-            `🌡️ Temperature: ${weatherData.temp}°C\n` +
-            `💧 Humidity: ${weatherData.humidity}%\n` +
-            `🌤️ Condition: ${weatherData.condition}\n` +
-            `💨 Wind: ${weatherData.wind} km/h`
+          output: `Weather for ${city} (simulated):\n🌡️ ${simulated.temp}°C\n💧 ${simulated.humidity}%\n🌤️ ${simulated.condition}\n💨 ${simulated.wind} km/h`,
         };
-      }
+      },
     });
   }
 
-  async simulateWeatherAPI(city) {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Return simulated data
+  async _simulateWeather(city) {
+    await new Promise(r => setTimeout(r, 300));
+    const conditions = ['Sunny', 'Cloudy', 'Partly Cloudy', 'Rainy', 'Clear'];
     return {
-      temp: Math.floor(Math.random() * 30) + 5,
+      temp: Math.floor(Math.random() * 35) + 5,
       humidity: Math.floor(Math.random() * 60) + 40,
-      condition: ['Sunny', 'Cloudy', 'Partly Cloudy', 'Rainy'][Math.floor(Math.random() * 4)],
-      wind: Math.floor(Math.random() * 30)
+      condition: conditions[Math.floor(Math.random() * conditions.length)],
+      wind: Math.floor(Math.random() * 30),
     };
   }
 }

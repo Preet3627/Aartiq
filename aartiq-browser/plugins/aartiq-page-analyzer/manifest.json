@@ -1,0 +1,37 @@
+{
+  "id": "aartiq-page-analyzer",
+  "name": "Page Analyzer",
+  "version": "1.0.0",
+  "description": "Analyze web page structure, SEO, accessibility, and readability",
+  "author": "Aartiq",
+  "type": "command",
+  "permissions": ["network"],
+  "hasConfig": false,
+  "main": "index.js",
+  "commands": [
+    {
+      "id": "analyze-seo",
+      "name": "Analyze SEO",
+      "description": "Analyze SEO elements of the current page",
+      "params": [
+        { "name": "url", "type": "string", "required": true, "description": "Page URL to analyze" }
+      ]
+    },
+    {
+      "id": "check-links",
+      "name": "Check Links",
+      "description": "Find all links on a page and check their status",
+      "params": [
+        { "name": "url", "type": "string", "required": true, "description": "Page URL to scan" }
+      ]
+    },
+    {
+      "id": "readability-score",
+      "name": "Readability Score",
+      "description": "Calculate the readability score of page content",
+      "params": [
+        { "name": "content", "type": "string", "required": true, "description": "Text content to analyze" }
+      ]
+    }
+  ]
+}

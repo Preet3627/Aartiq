@@ -17,31 +17,31 @@ module.exports = function registerExtensionHandlers(ipcMain, handlers) {
   ipcMain.handle('plugins:install', async (event, source, options) => {
     const { pluginManager } = handlers;
     if (!pluginManager) return { success: false, error: 'Plugin manager not initialized' };
-    return await pluginManager.install(source, options);
+    return await pluginManager.installPlugin(source, options);
   });
 
   ipcMain.handle('plugins:uninstall', async (event, pluginId) => {
     const { pluginManager } = handlers;
     if (!pluginManager) return { success: false };
-    return await pluginManager.uninstall(pluginId);
+    return await pluginManager.uninstallPlugin(pluginId);
   });
 
   ipcMain.handle('plugins:update', async (event, pluginId) => {
     const { pluginManager } = handlers;
     if (!pluginManager) return { success: false };
-    return await pluginManager.update(pluginId);
+    return await pluginManager.updatePlugin(pluginId);
   });
 
   ipcMain.handle('plugins:enable', async (event, pluginId) => {
     const { pluginManager } = handlers;
     if (!pluginManager) return { success: false };
-    return await pluginManager.enable(pluginId);
+    return await pluginManager.enablePlugin(pluginId);
   });
 
   ipcMain.handle('plugins:disable', async (event, pluginId) => {
     const { pluginManager } = handlers;
     if (!pluginManager) return { success: false };
-    return await pluginManager.disable(pluginId);
+    return await pluginManager.disablePlugin(pluginId);
   });
 
   ipcMain.handle('plugins:get-commands', async () => {
@@ -57,19 +57,19 @@ module.exports = function registerExtensionHandlers(ipcMain, handlers) {
 
   ipcMain.handle('plugins:get-dir', () => {
     const { pluginManager } = handlers;
-    return pluginManager?.getPluginsDir() || '';
+    return pluginManager?.getPluginsDirPath() || '';
   });
 
   ipcMain.handle('plugins:scan', async (event, directory) => {
     const { pluginManager } = handlers;
     if (!pluginManager) return [];
-    return await pluginManager.scan(directory);
+    return await pluginManager.scanDirectory(directory);
   });
 
   ipcMain.handle('plugins:update-config', async (event, pluginId, config) => {
     const { pluginManager } = handlers;
     if (!pluginManager) return { success: false };
-    return await pluginManager.updateConfig(pluginId, config);
+    return await pluginManager.updatePluginConfig(pluginId, config);
   });
 
   ipcMain.handle('plugin-api:log', async (event, { level, message }) => {

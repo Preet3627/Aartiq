@@ -267,7 +267,7 @@ declare global {
             setAlarm: (alarmTime: string, message: string) => Promise<{ success: boolean; error?: string }>;
             setUserId: (userId: string | null) => void;
             getExtensions: () => Promise<any[]>;
-            toggleExtension: (id: string) => Promise<boolean>;
+            toggleExtension: (id: string) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
             uninstallExtension: (id: string) => Promise<boolean>;
             openExtensionDir: () => void;
             getExtensionPath: () => Promise<string>;

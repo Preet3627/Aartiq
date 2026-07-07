@@ -3369,6 +3369,16 @@ mainWindow = new BrowserWindow({
     console.error("Error during initial extension loading:", e);
   }
 
+  // Load Plugins
+  try {
+    console.log("[Main] Loading plugins...");
+    pluginManager.loadAllPlugins().then(() => {
+      console.log(`[Main] Plugin system initialized with ${pluginManager.getPlugins().length} plugins`);
+    });
+  } catch (e) {
+    console.error("[Main] Error loading plugins:", e);
+  }
+
   // Clipboard Monitoring
   let lastClipboardText = clipboard.readText();
   clipboardCheckInterval = setInterval(() => {
@@ -5989,11 +5999,28 @@ app.whenReady().then(async () => {
     }));
   });
 
+  // Track extension paths so we can unload/reload on toggle
+  let _extensionPaths = {};
   ipcMain.handle('toggle-extension', async (event, id) => {
-    // Disabling usually requires session restart in Electron, 
-    // but we can acknowledge the request.
-    console.log(`Toggle request for extension ${id}`);
-    return true;
+    try {
+      const ext = session.defaultSession.getExtension(id);
+      if (ext) {
+        _extensionPaths[id] = ext.path;
+        session.defaultSession.removeExtension(id);
+        console.log(`[Extensions] Disabled extension: ${ext.name} (${id})`);
+        return { success: true, enabled: false };
+      }
+      if (_extensionPaths[id]) {
+        const loaded = await session.defaultSession.loadExtension(_extensionPaths[id]);
+        console.log(`[Extensions] Enabled extension: ${loaded.name} (${id})`);
+        return { success: true, enabled: true };
+      }
+      console.warn(`[Extensions] Extension not found: ${id}`);
+      return { success: false, error: 'Extension not found' };
+    } catch (e) {
+      console.error(`[Extensions] Toggle failed for ${id}:`, e);
+      return { success: false, error: e.message };
+    }
   });
 
   ipcMain.handle('uninstall-extension', async (event, id) => {
