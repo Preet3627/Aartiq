@@ -1,5 +1,52 @@
 # Aartiq Browser - Recent Changes
 
+## Version 0.3.0 - Microsoft Store & Security Hardening (2026-07-07)
+
+### Overview
+Major milestone: Aartiq is now available on the Microsoft Store. This release hardens SecureDOMParser with base64 payload decoding, fixes security severity inconsistencies, and overhauls the Windows title bar for a native experience.
+
+### Changes
+
+#### Microsoft Store
+- **Store Listing**: Aartiq is now published on the Microsoft Store — direct install link added across all READMEs.
+- **MSIX Pipeline**: Automated Windows MSIX build workflow with identity injection for Store submission.
+- **Code Signing**: Self-signed certificate generation for MSIX sideloading, upload dev-cert.cer for enterprise deployment.
+- **Windows Compliance**: MSIX MinVersion set to 10.0.17763.0 per Store requirements.
+- **Transparent Logo**: Icon switched to logo-transparent.png for clean MSIX/AppX packaging across Windows and Linux.
+
+#### Security Hardening
+- **Base64 Payload Decoding**: `SecureDOMParser.analyze()` now extracts and decodes base64 strings from content, then re-scans the decoded output against all injection patterns. Previously, only encoding *function calls* were detected — raw base64 strings containing shell commands would pass through. (Fixes the "decoding obfuscated payloads" gap.)
+- **Consistent Shell Severity**: `getSeverity()` now returns `'critical'` for *all* shellPrimitives matches — `dd if=`, `mkfs`, `shutdown`, `format C:`, `halt`, `systemctl stop`, etc. Previously these fell through to `'info'` and were never redacted from sanitized content.
+- **Credential URL Regex Fix**: The `apiKeyPatterns` entry now requires a URL scheme prefix (`https://`, `ftp://`, etc.) — previously it matched ordinary text like `foo:bar@baz`, causing false-positive over-redaction.
+- **Privacy Policy**: Added privacy policy with contact info for Store submission.
+
+#### Windows Title Bar Redesign
+- Replaced macOS-style traffic light buttons with standard minimize/maximize/close layout on non-Mac platforms.
+- Window buttons now render inline in TitleBar, WelcomeScreen, and StartupSetupUI.
+- Hover/active states, spacing, and sizing tuned for native feel.
+
+#### Fixes
+- Fixed BrowserView not preserving cookies/auth across restarts (fixed persistent partition).
+- Fixed settings page crash.
+- Fixed navigation success detection for redirect-heavy pages; added retry logic for JS-heavy page extraction.
+- Fixed deepseek-r1 model defaults not removable by user.
+- Fixed WelcomeScreen broken IPC icon load — uses /logo-transparent.png directly.
+- Fixed 16x16 icon replaced with 256x256 for Windows builder.
+- Fixed artifact upload directory flattening for CI release.
+- Fixed app:registerAppFileProtocol() not being called.
+- Fixed OCR/robot service initialization; added DOM/OCR preference toggle.
+- Fixed macOS app launch issues with ad-hoc signing.
+
+#### Technical
+- Enhanced store/selectors for better state management.
+- Refactored web search service.
+- Updated browser/file handlers.
+- Enhanced UI components (StartupSetupUI, WelcomeScreen, TitleBar, VirtualizedTabBar).
+- Updated READMEs with Microsoft Store links and website URL.
+- Setup UI now displays correctly on first run (onboarding flow).
+
+---
+
 ## Version 0.2.96 - Nexus-AI Bridge & Native Panels Update (2026-06-17)
 
 ### Overview

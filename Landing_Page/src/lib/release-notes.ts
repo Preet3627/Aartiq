@@ -17,6 +17,54 @@ export interface ReleaseEntry {
 
 export const releases: ReleaseEntry[] = [
   {
+    version: '0.3.0',
+    date: '2026-07-07',
+    codename: 'Nebula',
+    channel: 'stable',
+    changes: {
+      new: [
+        'Microsoft Store availability — Aartiq is now listed on the Microsoft Store',
+        'Windows title bar redesign — standard minimize/maximize/close layout replaces traffic lights on non-Mac',
+        'Windows MSIX build pipeline with automated identity injection for Store submission',
+        'Self-signed code signing certificate generation for MSIX sideloading',
+        'Startup onboarding flow with native window controls',
+      ],
+      fix: [
+        'Security: base64-encoded payloads now decoded and re-scanned for shell commands (was fully bypassable)',
+        'Security: all shellPrimitives now consistently treated as critical severity (dd, mkfs, shutdown, etc.)',
+        'Security: Credential URL regex fixed to require protocol prefix (eliminates false positives)',
+        'Fixed BrowserView not preserving cookies/auth across restarts (persistent partition)',
+        'Fixed settings page crash',
+        'Fixed navigation detection for redirect-heavy pages; added retry for JS-heavy extraction',
+        'Fixed deepseek-r1 model defaults not removable',
+        'Fixed WelcomeScreen broken IPC icon load',
+        'Fixed 16x16 icon → 256x256 for Windows builder',
+        'Fixed MSIX MinVersion to 10.0.17763.0 for Store compliance',
+        'Fixed artifact upload directory flattening for CI release',
+        'Fixed app:registerAppFileProtocol() not being called',
+        'Fixed OCR/robot service initialization and DOM/OCR preference toggle',
+      ],
+      change: [
+        'Bumped version to 0.3.0',
+        'Transparent logo used across Windows/Linux builds',
+        'Enhanced store/selectors for state management',
+        'Refactored web search service',
+        'Updated browser/file handlers',
+      ],
+      docs: [
+        'Added Microsoft Store links across all READMEs and landing pages',
+        'Added privacy policy with contact info for Store submission',
+        'Updated AI-GUIDE.md with current version and release checklist',
+        'Updated release notes for v0.3.0',
+      ],
+      security: [
+        'SecureDOMParser now decodes and re-scans base64 payloads against injection patterns',
+        'Consistent critical severity for all shell primitive matches',
+        'Credential URL pattern requires URI scheme prefix',
+      ]
+    }
+  },
+  {
     version: '0.2.99',
     date: '2026-07-06',
     codename: 'Nebula',
