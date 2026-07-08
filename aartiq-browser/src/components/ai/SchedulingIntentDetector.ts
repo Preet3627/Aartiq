@@ -189,8 +189,8 @@ export function detectSchedulingIntent(message: string): SchedulingIntent | null
     for (const match of matches) {
       if (pattern.toCron) {
         const extracted = pattern.extract ? pattern.extract(match) : match;
-        const cronExpr = pattern.toCron(extracted, pattern);
-        const desc = pattern.description ? pattern.description(extracted) : cronExpr;
+        const cronExpr = pattern.toCron(extracted as any, pattern);
+        const desc = pattern.description ? pattern.description(extracted as any) : cronExpr;
         
         if (cronExpr) {
           const newSpec = cronExpr.split(' ').filter(p => p !== '*').length;
