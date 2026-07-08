@@ -324,6 +324,8 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     resolve: (result: { commands: AICommand[]; timedOut: boolean }) => void;
     timeoutId: number;
   } | null>(null);
+  const skipBatchRef = useRef(0);
+  const processingBatchRef = useRef(false);
 
   // Reasoning steps
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
@@ -431,6 +433,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const {
     pendingPermission: permissionPending,
     requestPermission: requestActionPermission,
+    requestBatchPermission,
     approvalModal,
   } = useAIActionSecurityManager();
 
@@ -2216,6 +2219,76 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
 
         case 'SHELL_COMMAND': {
+          const batchCommands = [command];
+          let lookahead = currentCommandIndex + 1;
+          const queue = commandQueueRef.current;
+          while (lookahead < queue.length && queue[lookahead].type === 'SHELL_COMMAND') {
+            batchCommands.push(queue[lookahead]);
+            lookahead++;
+          }
+
+          if (batchCommands.length > 1) {
+            setCommandQueue(prev => prev.map((cmd, i) =>
+              batchCommands.some((bc) => bc.id === cmd.id) ? { ...cmd, status: 'awaiting_permission' as const } : cmd
+            ));
+
+            const batchResults = await requestBatchPermission(
+              batchCommands.map((cmd) => ({
+                actionType: 'SHELL_COMMAND',
+                action: 'Shell Command',
+                target: cmd.value,
+                what: cmd.value.length > 80 ? cmd.value.substring(0, 80) + '...' : cmd.value,
+                reason: cmd.reason || 'The AI wants to execute a shell command on the host machine.',
+                risk: getShellCommandRisk(cmd.value),
+              }))
+            );
+
+            const outputs: string[] = [];
+            for (let bIdx = 0; bIdx < batchCommands.length; bIdx++) {
+              const cmd = batchCommands[bIdx];
+              const cmdIdx = currentCommandIndex + bIdx;
+
+              if (!batchResults[bIdx]) {
+                setCommandQueue(prev => prev.map((c, i) => i === cmdIdx ? { ...c, status: 'idle' } : c));
+                outputs.push(`$ ${cmd.value}\nCommand execution denied by user.`);
+                continue;
+              }
+
+              setCommandQueue(prev => prev.map((c, i) => i === cmdIdx ? { ...c, status: 'executing' } : c));
+              const logId2 = `term-${Date.now()}-${terminalLogIdCounter.current++}`;
+              if (bIdx === 0) {
+                setShowTerminal(true);
+              }
+              setTerminalLogs(prev => [...prev, { id: logId2, command: cmd.value, output: '⏳ Running...', success: false, timestamp: Date.now() }]);
+              const res2 = await window.electronAPI.executeShellCommand({
+                rawCommand: cmd.value,
+                reason: cmd.reason,
+                riskLevel: getShellCommandRisk(cmd.value),
+              });
+              const cmdOutput2 = res2.success ? (res2.output || '(no output)') : `Error: ${res2.error}`;
+              setTerminalLogs(prev => prev.map(l => l.id === logId2
+                ? { ...l, output: cmdOutput2, success: !!res2.success }
+                : l
+              ));
+
+              if (res2.success) {
+                setCommandQueue(prev => prev.map((c, i) => i === cmdIdx ? { ...c, status: 'completed', output: cmdOutput2 } : c));
+              } else {
+                setCommandQueue(prev => prev.map((c, i) => i === cmdIdx ? { ...c, status: 'failed', error: cmdOutput2 } : c));
+              }
+
+              outputs.push(res2.success
+                ? `$ ${cmd.value}\n${cmdOutput2}`
+                : `$ ${cmd.value}\n${cmdOutput2}`);
+            }
+
+            output = outputs.join('\n');
+            commandResult = { output };
+            processingBatchRef.current = true;
+            skipBatchRef.current = batchCommands.length - 1;
+            break;
+          }
+
           setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'awaiting_permission' } : cmd));
           const shellConfirmed = await requestActionPermission({
             actionType: 'SHELL_COMMAND',
@@ -3648,12 +3721,15 @@ I've successfully executed the following real tasks:
           output = `Operation ${command.type} completed.`;
       }
 
-      if (commandResult.error) {
-        output = commandResult.error;
-        setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'failed', error: output } : cmd));
-      } else {
-        setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'completed', output } : cmd));
+      if (!processingBatchRef.current) {
+        if (commandResult.error) {
+          output = commandResult.error;
+          setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'failed', error: output } : cmd));
+        } else {
+          setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'completed', output } : cmd));
+        }
       }
+      processingBatchRef.current = false;
 
       setMessages(prev => {
         const last = prev[prev.length - 1];
@@ -3673,9 +3749,11 @@ I've successfully executed the following real tasks:
       setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'failed', error: err.message } : cmd));
     } finally {
       processingQueueRef.current = false;
-      setCurrentCommandIndex(prev => prev + 1);
+      const skip = skipBatchRef.current;
+      skipBatchRef.current = 0;
+      setCurrentCommandIndex(prev => prev + 1 + skip);
     }
-  }, [commandQueue, currentCommandIndex, activeTabId, router, storeSetTheme, setActiveView, currentUrl, requestActionPermission, preloadCometIconLocal, addThinkingStep, resolveThinkingStep, fetchRealSearchContext, openTabAndWaitForLoad, waitForActiveTabToSettle]);
+  }, [commandQueue, currentCommandIndex, activeTabId, router, storeSetTheme, setActiveView, currentUrl, requestActionPermission, requestBatchPermission, preloadCometIconLocal, addThinkingStep, resolveThinkingStep, fetchRealSearchContext, openTabAndWaitForLoad, waitForActiveTabToSettle]);
 
   const formatMessageForExport = (m: ExtendedChatMessage) => {
     let result = `${m.role.toUpperCase()}:\n`;

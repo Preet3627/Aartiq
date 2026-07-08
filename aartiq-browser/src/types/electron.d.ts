@@ -402,7 +402,7 @@ declare global {
             permCheck: (key: string) => Promise<{ granted: boolean }>;
             permList: () => Promise<Array<{ key: string; level: string; granted_at: number; expires_at: number | null; description: string }>>;
             permAuditLog: (limit?: number) => Promise<Array<{ entry: string; timestamp: number }>>;
-            getSecuritySettings: () => Promise<{ autoApproveLowRisk: boolean; autoApproveMidRisk: boolean; requireDeviceUnlockForManualApproval: boolean; requireDeviceUnlockForVaultAccess: boolean; autoApprovedCommands: string[]; autoApprovedActions: string[] }>;
+            getSecuritySettings: () => Promise<{ autoApproveLowRisk: boolean; autoApproveMidRisk: boolean; requireDeviceUnlockForManualApproval: boolean; requireDeviceUnlockForVaultAccess: boolean; requireBiometricPerSession: boolean; autoApprovedCommands: string[]; autoApprovedActions: string[] }>;
             updateSecuritySettings: (settings: { autoApproveLowRisk?: boolean; autoApproveMidRisk?: boolean; requireDeviceUnlockForManualApproval?: boolean; requireDeviceUnlockForVaultAccess?: boolean; autoApprovedActions?: string[]; autoApprovedCommands?: string[] }) => Promise<{ success: boolean; settings: { autoApproveLowRisk: boolean; autoApproveMidRisk: boolean; requireDeviceUnlockForManualApproval: boolean; requireDeviceUnlockForVaultAccess: boolean; autoApprovedCommands: string[]; autoApprovedActions: string[] } }>;
             setAutoApprovalCommand: (payload: { command: string; enabled: boolean }) => Promise<{ success: boolean; commands: string[] }>;
             getAutoApprovedCommands: () => Promise<{ commands: string[] }>;

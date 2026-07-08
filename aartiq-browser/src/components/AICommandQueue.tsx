@@ -13,7 +13,7 @@ export interface AICommand {
     id: string;
     type: string;
     value: string;
-    status: 'pending' | 'executing' | 'completed' | 'failed' | 'awaiting_permission';
+    status: 'pending' | 'executing' | 'completed' | 'failed' | 'awaiting_permission' | 'idle';
     output?: string;
     error?: string;
     context?: string;

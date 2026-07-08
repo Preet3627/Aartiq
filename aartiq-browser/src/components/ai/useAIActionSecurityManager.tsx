@@ -21,10 +21,20 @@ interface PermissionContext {
   requiresDeviceUnlock?: boolean;
 }
 
+interface BatchCommandInfo {
+  index: number;
+  command: string;
+  description: string;
+  irreversible: boolean;
+  risk: ActionRiskLevel;
+  reason: string;
+}
+
 interface PendingPermission {
   resolve: (allowed: boolean) => void;
   mobileApproved: boolean;
   context: PermissionContext;
+  batchCommands?: BatchCommandInfo[];
 }
 
 interface PermissionRequestInput {
@@ -47,6 +57,9 @@ async function getSecuritySettingsSafe() {
 
 export function useAIActionSecurityManager() {
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
+  const biometricVerifiedRef = useRef(false);
+  const batchResolveRef = useRef<((allowed: boolean[]) => void) | null>(null);
+  const batchInputsLengthRef = useRef(0);
 
   const requestPermission = useCallback(async (input: PermissionRequestInput): Promise<boolean> => {
     const actionType = normalizeActionType(input.actionType);
@@ -62,6 +75,17 @@ export function useAIActionSecurityManager() {
 
     const settings = await getSecuritySettingsSafe();
     if (isActionAutoApproved(settings, actionType, risk)) {
+      if (risk === 'low' && settings?.requireBiometricPerSession && !biometricVerifiedRef.current) {
+        if (window.electronAPI?.authenticateBiometric) {
+          const authResult = await window.electronAPI.authenticateBiometric(
+            'Verify identity for low-risk actions this session'
+          );
+          if (!authResult?.success) {
+            return false;
+          }
+        }
+        biometricVerifiedRef.current = true;
+      }
       return true;
     }
 
@@ -89,6 +113,82 @@ export function useAIActionSecurityManager() {
       });
     });
   }, []);
+
+  const requestBatchPermission = useCallback(async (inputs: PermissionRequestInput[]): Promise<boolean[]> => {
+    if (inputs.length === 0) return [];
+    if (inputs.length === 1) {
+      const result = await requestPermission(inputs[0]);
+      return [result];
+    }
+
+    const results = new Array<boolean>(inputs.length).fill(false);
+    const enriched = await Promise.all(inputs.map(async (input) => {
+      const actionType = normalizeActionType(input.actionType);
+      const risk = normalizeRiskLevel(input.risk);
+      const permissionKey = getActionPermissionKey(actionType, input.target, input.what);
+
+      if (risk !== 'high' && window.electronAPI?.permCheck) {
+        const existingPermission = await window.electronAPI.permCheck(permissionKey);
+        if (existingPermission?.granted) return { ...input, actionType, risk, autoApproved: true as const };
+      }
+
+      const settings = await getSecuritySettingsSafe();
+      if (isActionAutoApproved(settings, actionType, risk)) {
+        if (risk === 'low' && settings?.requireBiometricPerSession && !biometricVerifiedRef.current) {
+          if (window.electronAPI?.authenticateBiometric) {
+            const authResult = await window.electronAPI.authenticateBiometric(
+              'Verify identity for low-risk actions this session'
+            );
+            if (!authResult?.success) return { ...input, actionType, risk, autoApproved: false as const };
+          }
+          biometricVerifiedRef.current = true;
+        }
+        return { ...input, actionType, risk, autoApproved: true as const };
+      }
+      return { ...input, actionType, risk, autoApproved: false as const };
+    }));
+
+    const pending = enriched.filter((e) => !e.autoApproved) as (PermissionRequestInput & { actionType: string; risk: ActionRiskLevel; autoApproved: false })[];
+    if (pending.length === 0) return enriched.map(() => true);
+
+    const settings = await getSecuritySettingsSafe();
+    const requiresDeviceUnlock = settings?.requireDeviceUnlockForManualApproval !== false;
+
+    return new Promise<boolean[]>((resolve) => {
+      batchResolveRef.current = resolve;
+      batchInputsLengthRef.current = inputs.length;
+
+      setPendingPermission({
+        resolve: (approved: boolean) => {
+          batchResolveRef.current = null;
+          if (!approved) {
+            resolve(new Array<boolean>(inputs.length).fill(false));
+          } else {
+            resolve(new Array<boolean>(inputs.length).fill(true));
+          }
+        },
+        mobileApproved: false,
+        context: {
+          actionType: 'BATCH',
+          action: `Batch Shell Commands (${pending.length})`,
+          target: pending.map((p) => p.target || '').join('\n'),
+          what: pending.map((p) => p.what || p.target || '').join('\n'),
+          reason: `The AI wants to execute ${pending.length} shell commands.`,
+          risk: 'medium',
+          highRiskQr: null,
+          requiresDeviceUnlock,
+        },
+        batchCommands: pending.map((p) => ({
+          index: enriched.indexOf(p),
+          command: p.target || '',
+          description: getCommandDescription(p.target || ''),
+          irreversible: isIrreversibleCommand(p.target || ''),
+          risk: p.risk,
+          reason: p.reason,
+        })),
+      });
+    });
+  }, [requestPermission]);
 
   useEffect(() => {
     if (!window.electronAPI?.onAutomationShellApproval) {
@@ -185,47 +285,74 @@ export function useAIActionSecurityManager() {
       return null;
     }
 
+    const isBatch = !!pendingPermission.batchCommands && pendingPermission.batchCommands.length > 0;
+
     return (
       <div className="absolute inset-0 z-[10001] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md">
-        <ClickPermissionModal
-          context={pendingPermission.context}
-          highRiskApproved={pendingPermission.mobileApproved}
-          onAllow={async (alwaysAllow) => {
-            const context = pendingPermission.context;
-
-            if (context.requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
-              const authResult = await window.electronAPI.authenticateBiometric(
-                `Approve action: ${context.action}`
-              );
-              if (!authResult?.success) {
-                return;
+        {isBatch ? (
+          <ClickPermissionModal
+            context={pendingPermission.context}
+            highRiskApproved={pendingPermission.mobileApproved}
+            batchCommands={pendingPermission.batchCommands}
+            onAllowBatch={(allowedIndices) => {
+              const commands = pendingPermission.batchCommands!;
+              const result = new Array<boolean>(batchInputsLengthRef.current).fill(true);
+              const selectedSet = new Set(allowedIndices);
+              for (let i = 0; i < commands.length; i++) {
+                if (!selectedSet.has(i)) {
+                  result[commands[i].index] = false;
+                }
               }
-            }
+              batchResolveRef.current?.(result);
+              batchResolveRef.current = null;
+              setPendingPermission(null);
+            }}
+            onDeny={() => {
+              pendingPermission.resolve(false);
+              setPendingPermission(null);
+            }}
+          />
+        ) : (
+          <ClickPermissionModal
+            context={pendingPermission.context}
+            highRiskApproved={pendingPermission.mobileApproved}
+            onAllow={async (alwaysAllow) => {
+              const context = pendingPermission.context;
 
-            if (alwaysAllow && window.electronAPI?.permGrant && context.risk !== 'high') {
-              const permissionKey = getActionPermissionKey(context.actionType, context.target, context.what);
-              await window.electronAPI.permGrant(permissionKey, 'execute', context.action, false);
-
-              if (
-                context.actionType === 'SHELL_COMMAND' &&
-                window.electronAPI?.setAutoApprovalCommand &&
-                context.target
-              ) {
-                await window.electronAPI.setAutoApprovalCommand({
-                  command: context.target,
-                  enabled: true,
-                });
+              if (context.requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
+                const authResult = await window.electronAPI.authenticateBiometric(
+                  `Approve action: ${context.action}`
+                );
+                if (!authResult?.success) {
+                  return;
+                }
               }
-            }
 
-            pendingPermission.resolve(true);
-            setPendingPermission(null);
-          }}
-          onDeny={() => {
-            pendingPermission.resolve(false);
-            setPendingPermission(null);
-          }}
-        />
+              if (alwaysAllow && window.electronAPI?.permGrant && context.risk !== 'high') {
+                const permissionKey = getActionPermissionKey(context.actionType, context.target, context.what);
+                await window.electronAPI.permGrant(permissionKey, 'execute', context.action, false);
+
+                if (
+                  context.actionType === 'SHELL_COMMAND' &&
+                  window.electronAPI?.setAutoApprovalCommand &&
+                  context.target
+                ) {
+                  await window.electronAPI.setAutoApprovalCommand({
+                    command: context.target,
+                    enabled: true,
+                  });
+                }
+              }
+
+              pendingPermission.resolve(true);
+              setPendingPermission(null);
+            }}
+            onDeny={() => {
+              pendingPermission.resolve(false);
+              setPendingPermission(null);
+            }}
+          />
+        )}
       </div>
     );
   }, [pendingPermission]);
@@ -233,6 +360,7 @@ export function useAIActionSecurityManager() {
   return {
     pendingPermission,
     requestPermission,
+    requestBatchPermission,
     approvalModal,
   };
 }
