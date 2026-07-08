@@ -1,6 +1,6 @@
 # Aartiq Browser
 
-**Website:** https://aartiq.ponsrischool.in
+**Website:** https://aartiq.vercel.app
 
 An open-source, AI-native browser with permission-gated OS automation.
 
@@ -50,7 +50,7 @@ An open-source, AI-native browser with permission-gated OS automation.
 - Charts and watermarks
 
 ### Platform Integration
-- **macOS**: Siri Shortcuts, Apple Intelligence bridge, native Swift panels, Raycast extension
+- **macOS**: Siri Shortcuts native Swift bridge, Apple Intelligence bridge, native Swift panels, Raycast extension
 - **Windows**: URL scheme, voice control, Microsoft Copilot companion, Power Automate
 - **Linux**: GNOME/KDE detection, espeak TTS, desktop notifications
 
@@ -63,8 +63,12 @@ An open-source, AI-native browser with permission-gated OS automation.
 
 ### Security
 - Triple-lock architecture: visual sandbox, syntactic firewall, human-in-the-loop
+- **Biometric per-session auth** — Touch ID required once per session; subsequent low-risk actions auto-approve
+- **Batch shell command approval** — multiple consecutive shell commands shown in one modal with per-command toggles
+- **Irreversible command warnings** — red/amber banners for destructive commands (rm -rf, dd, mkfs, etc.) before approval
+- **AES-256-GCM vault** — encrypted credential storage with native OS keychain backup (macOS/Windows/Linux)
 - Prompt injection detection with strike-based banning
-- Shell commands and native clicks require explicit user approval
+- Mobile high-risk approval relay via cloud sync
 
 ## Quick Start
 
@@ -105,7 +109,7 @@ xattr -cr /Applications/Aartiq.app
 
 ## Documentation
 
-Full documentation at [Official Site](https://aartiq.ponsrischool.in)
+Full documentation at [Official Site](https://aartiq.vercel.app)
 
 ## Development Status
 

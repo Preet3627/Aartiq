@@ -18,7 +18,7 @@ export interface ReleaseEntry {
 export const releases: ReleaseEntry[] = [
   {
     version: '0.3.1',
-    date: '2026-07-07',
+    date: '2026-07-08',
     codename: 'Nebula',
     channel: 'stable',
     changes: {
@@ -27,19 +27,39 @@ export const releases: ReleaseEntry[] = [
         'SAVE_PREFERENCE command — AI can persist preferences via SAVE_PREFERENCE:key:value in responses',
         'Cross-session RAG persistence — past conversations are ingested into vector memory and available as RAG context in future sessions',
         'AI user preference IPC system — persistent JSON-based storage for AI-observed preferences in userData',
+        'Biometric per-session tracking — first low-risk shell action triggers Touch ID; subsequent ones auto-approve within the session',
+        'Batch shell command approval — consecutive shell commands shown in one combined modal with per-command toggles (Select All / Deselect All)',
+        'Irreversible command warnings — prominent red/amber banners for destructive commands (rm -rf, dd, mkfs, etc.) before approval',
+        'macOS Siri Shortcuts bridge — native Swift binary exposes Aartiq AI commands to Siri and Apple Shortcuts',
+        'Agent skill cards — new modular skill documentation files (automation, browsing, documents, scheduling, security, research, MCP, apple-intelligence, image-generation)',
+        'AES-256-GCM vault encryption with native keychain backup (macOS/Windows/Linux)',
       ],
       fix: [
         'Fixed model/provider selection not persisting across restarts — llm-set-active-provider and llm-configure-provider handlers now use correct electron-store keys',
         'Fixed get-stored-api-keys returning wrong data shape (boolean flags instead of actual model/API key values) — frontend can now restore all provider models on startup',
+        'Fixed extract-page-content race condition with webContents null check retry',
+        'Fixed Shift+Tab bypass — restricted to non-high-risk commands only',
+        'Fixed scheduling task CRUD — update, delete, toggle, run methods added to preload',
+        'Fixed webContents null/destroyed guards in browser-handlers.js IPC handlers',
       ],
       change: [
+        'Upgraded Electron to v43.1.0',
+        'Renamed CLI binary from "comet" to "aartiq" in package.json bin field',
+        'Added build-siri-bridge step to all macOS build and dist scripts',
         'Bumped version to 0.3.1',
         'Added RAG IPC handlers (ragIngest, ragRetrieve, ragContext) to preload.js for renderer-to-main RAG access',
         'Conversations now auto-ingest into BrowserAI vector memory on save for cross-session RAG',
       ],
       docs: [
-        'Updated README with AI user preference and RAG persistence features',
+        'Updated README with AI user preference, RAG persistence, biometric session, and Siri Shortcuts features',
         'Updated Landing_Page release notes, search index, and llms.txt for v0.3.1',
+        'Fixed comet-browser → aartiq-browser references in getting-started and contributing docs',
+      ],
+      security: [
+        'Session-scoped biometric authentication — Touch ID required once per session for shell commands',
+        'Batch shell approval modal with per-command granular control',
+        'AES-256-GCM vault for sensitive credential storage with OS keychain backup',
+        'Mobile high-risk approval relay via sync handlers and cloud messages',
       ]
     }
   },
