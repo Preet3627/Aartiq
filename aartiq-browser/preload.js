@@ -558,6 +558,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Scheduling & Automation
   scheduleTask: (taskData) => ipcRenderer.invoke('automation:create-task', taskData),
   getScheduledTasks: () => ipcRenderer.invoke('automation:get-tasks'),
+  updateScheduledTask: (taskId, updates) => ipcRenderer.invoke('automation:update-task', taskId, updates),
+  deleteScheduledTask: (taskId) => ipcRenderer.invoke('automation:delete-task', taskId),
+  toggleScheduledTask: (taskId) => ipcRenderer.invoke('automation:toggle-task', taskId),
+  runScheduledTask: (taskId) => ipcRenderer.invoke('automation:run-task', taskId),
   getTaskLogs: (date) => ipcRenderer.invoke('automation:get-logs', date),
   enableCLI: () => ipcRenderer.invoke('automation:enable-cli'),
   getServiceStatus: () => ipcRenderer.invoke('automation:get-service-status'),

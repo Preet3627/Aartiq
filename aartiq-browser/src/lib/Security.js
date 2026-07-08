@@ -294,29 +294,26 @@ exports.Security = {
                 }
             }
             // Decode base64 strings and re-scan for hidden threats
-            var b64results = exports.Security.SecureDOMParser.extractBase64Strings(content);
-            for (var bIdx = 0; bIdx < b64results.length; bIdx++) {
-                var b64entry = b64results[bIdx];
-                var encoded = b64entry.encoded, decoded = b64entry.decoded;
-                var _layerEntries = Object.entries(exports.Security.SecureDOMParser.injectionPatterns);
-                for (var layerIdx = 0; layerIdx < _layerEntries.length; layerIdx++) {
-                    var layerEntry = _layerEntries[layerIdx];
-                    var layerName = layerEntry[0], patterns = layerEntry[1];
-                    if (Array.isArray(patterns)) {
-                        for (var patIdx = 0; patIdx < patterns.length; patIdx++) {
-                            var pattern = patterns[patIdx];
-                            var match = void 0;
-                            while ((match = pattern.exec(decoded)) !== null) {
-                                var severity = layerName === 'shellPrimitives' ? 'critical' : exports.Security.SecureDOMParser.getSeverity(layerName, match[0]);
-                                findings.push({
-                                    layer: layerName,
-                                    pattern: '[base64-decoded] ' + pattern.toString(),
-                                    match: encoded.substring(0, 100),
-                                    position: content.indexOf(encoded),
-                                    severity: severity
-                                });
-                                threatScore += exports.Security.SecureDOMParser.getThreatScore(layerName);
-                            }
+            var decodedPayloads = exports.Security.SecureDOMParser.extractBase64Strings(content);
+            for (var _g = 0, decodedPayloads_1 = decodedPayloads; _g < decodedPayloads_1.length; _g++) {
+                var _h = decodedPayloads_1[_g], encoded = _h.encoded, decoded = _h.decoded;
+                for (var _j = 0, _k = Object.entries(exports.Security.SecureDOMParser.injectionPatterns); _j < _k.length; _j++) {
+                    var _l = _k[_j], layerName = _l[0], patterns = _l[1];
+                    if (!Array.isArray(patterns))
+                        continue;
+                    for (var _m = 0, _o = patterns; _m < _o.length; _m++) {
+                        var pattern = _o[_m];
+                        var match = void 0;
+                        while ((match = pattern.exec(decoded)) !== null) {
+                            var severity = layerName === 'shellPrimitives' ? 'critical' : exports.Security.SecureDOMParser.getSeverity(layerName, match[0]);
+                            findings.push({
+                                layer: "".concat(layerName),
+                                pattern: "[base64-decoded] ".concat(pattern.toString()),
+                                match: encoded.substring(0, 100),
+                                position: content.indexOf(encoded),
+                                severity: severity,
+                            });
+                            threatScore += exports.Security.SecureDOMParser.getThreatScore(layerName);
                         }
                     }
                 }
@@ -344,14 +341,14 @@ exports.Security = {
             }
             if (threatLevel !== 'none') {
                 console.warn('[Security Monitor] Threat patterns detected:', threatLevel, findings.length, 'findings');
-                for (var _g = 0, recommendations_1 = recommendations; _g < recommendations_1.length; _g++) {
-                    var rec = recommendations_1[_g];
+                for (var _p = 0, recommendations_1 = recommendations; _p < recommendations_1.length; _p++) {
+                    var rec = recommendations_1[_p];
                     console.warn('[Security Monitor] Recommendation:', rec);
                 }
             }
             var sanitizedContent = content;
-            for (var _h = 0, findings_1 = findings; _h < findings_1.length; _h++) {
-                var finding = findings_1[_h];
+            for (var _q = 0, findings_1 = findings; _q < findings_1.length; _q++) {
+                var finding = findings_1[_q];
                 if (finding.severity === 'critical') {
                     sanitizedContent = sanitizedContent.replace(new RegExp(exports.Security.SecureDOMParser.escapeRegex(finding.match), 'g'), "[BLOCKED: ".concat(finding.layer.toUpperCase(), "]"));
                 }
@@ -388,9 +385,6 @@ exports.Security = {
                 return 'warning';
             return 'info';
         },
-        escapeRegex: function (string) {
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        },
         extractBase64Strings: function (content) {
             var results = [];
             var base64Regex = /[A-Za-z0-9+/]{12,}={0,2}/g;
@@ -401,7 +395,8 @@ exports.Security = {
                     var printableCount = 0;
                     for (var i = 0; i < decoded.length; i++) {
                         var code = decoded.charCodeAt(i);
-                        if (code >= 32 && code <= 126) printableCount++;
+                        if (code >= 32 && code <= 126)
+                            printableCount++;
                     }
                     if (printableCount > decoded.length * 0.7 && decoded.length > 5) {
                         results.push({ encoded: match[0], decoded: decoded });
@@ -412,6 +407,9 @@ exports.Security = {
                 }
             }
             return results;
+        },
+        escapeRegex: function (string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         },
         sanitizeHTML: function (html) {
             return (0, html_sanitizer_1.sanitizeHTML)(html);

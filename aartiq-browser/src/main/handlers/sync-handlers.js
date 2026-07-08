@@ -181,6 +181,14 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
         exec(args.command, { timeout: 30000 }, (err, stdout, stderr) => {
           sendResponse(err ? { success: false, error: err.message } : { success: true, output: stdout || stderr });
         });
+      } else if (action === 'high-risk-approve') {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('mobile-approve-high-risk', {
+            pin: args.pin,
+            id: args.id || args.token,
+          });
+        }
+        sendResponse({ success: true });
       } else if (action === 'get-clipboard') {
         const { clipboard } = require('electron');
         sendResponse({ success: true, clipboard: clipboard.readText() });
@@ -229,6 +237,15 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
 
     cloudSyncService.on('cloud-file-sync', ({ files, fromDeviceId }) => {
       if (mainWindow) mainWindow.webContents.send('cloud-files-received', { files, fromDeviceId });
+    });
+
+    cloudSyncService.on('cloud-message', (data) => {
+      if (data?.action === 'high-risk-approve' && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('mobile-approve-high-risk', {
+          pin: data.args?.pin,
+          id: data.args?.id || data.args?.token,
+        });
+      }
     });
   }
 

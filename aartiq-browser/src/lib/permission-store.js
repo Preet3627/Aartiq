@@ -15,6 +15,7 @@ class PermissionStore {
       autoApproveMidRisk: false,
       requireDeviceUnlockForManualApproval: true,
       requireDeviceUnlockForVaultAccess: true,
+      requireBiometricPerSession: true,
       autoApprovedCommands: [],
       autoApprovedActions: [],
     };

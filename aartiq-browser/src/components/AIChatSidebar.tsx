@@ -30,6 +30,7 @@ import CollapsibleOCRMessage from './ai/CollapsibleOCRMessage';
 import MessageActions from './ai/MessageActions';
 import ConversationHistoryPanel, { type Conversation, type ChatMessage } from './ai/ConversationHistoryPanel';
 import { useAIActionSecurityManager } from './ai/useAIActionSecurityManager';
+import { getShellCommandRisk } from '@/lib/ai-action-security';
 import {
   robustJSONParse,
   extractAIReasoning,
@@ -2215,6 +2216,20 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
 
         case 'SHELL_COMMAND': {
+          setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'awaiting_permission' } : cmd));
+          const shellConfirmed = await requestActionPermission({
+            actionType: 'SHELL_COMMAND',
+            action: 'Shell Command',
+            target: command.value,
+            what: command.value.length > 80 ? command.value.substring(0, 80) + '...' : command.value,
+            reason: command.reason || 'The AI wants to execute a shell command on the host machine.',
+            risk: getShellCommandRisk(command.value),
+          });
+          if (!shellConfirmed) {
+            setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'idle' } : cmd));
+            output = 'Command execution denied by user.';
+            break;
+          }
           setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing' } : cmd));
           const logId = `term-${Date.now()}-${terminalLogIdCounter.current++}`;
           const logEntry = { id: logId, command: command.value, output: '', success: false, timestamp: Date.now() };
@@ -2223,7 +2238,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           const res = await window.electronAPI.executeShellCommand({
             rawCommand: command.value,
             reason: command.reason,
-            riskLevel: command.riskLevel || 'medium'
+            riskLevel: getShellCommandRisk(command.value)
           });
           const cmdOutput = res.success ? (res.output || '(no output)') : `Error: ${res.error}`;
           setTerminalLogs(prev => prev.map(l => l.id === logId

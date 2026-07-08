@@ -202,7 +202,9 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
     const view = tabViews.get(handlers.activeTabId);
     if (!view) return { error: 'No active view' };
     try {
-      return await view.webContents.executeJavaScript(code);
+      const wc = view.webContents;
+      if (!wc || wc.isDestroyed()) return { error: 'No active view' };
+      return await wc.executeJavaScript(code);
     } catch (e) {
       return { error: e.message };
     }
@@ -210,19 +212,25 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
 
   ipcMain.handle('get-browser-view-url', () => {
     const view = tabViews.get(handlers.activeTabId);
-    return view ? view.webContents.getURL() : '';
+    if (!view) return '';
+    const wc = view.webContents;
+    return wc && !wc.isDestroyed() ? wc.getURL() : '';
   });
 
   ipcMain.handle('capture-page-html', async () => {
     const view = tabViews.get(handlers.activeTabId);
     if (!view) return '';
-    return await view.webContents.executeJavaScript('document.documentElement.outerHTML');
+    const wc = view.webContents;
+    if (!wc || wc.isDestroyed()) return '';
+    return await wc.executeJavaScript('document.documentElement.outerHTML');
   });
 
   ipcMain.handle('capture-browser-view-screenshot', async () => {
     const view = tabViews.get(handlers.activeTabId);
     if (!view) return null;
-    const image = await view.webContents.capturePage();
+    const wc = view.webContents;
+    if (!wc || wc.isDestroyed()) return null;
+    const image = await wc.capturePage();
     return image.toDataURL();
   });
 

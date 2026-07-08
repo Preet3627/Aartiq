@@ -66,6 +66,7 @@ type SecuritySettings = {
   autoApproveMidRisk: boolean;
   requireDeviceUnlockForManualApproval: boolean;
   requireDeviceUnlockForVaultAccess: boolean;
+  requireBiometricPerSession: boolean;
   autoApprovedCommands: string[];
   autoApprovedActions: string[];
 };
@@ -75,6 +76,7 @@ const DEFAULT_SETTINGS: SecuritySettings = {
   autoApproveMidRisk: false,
   requireDeviceUnlockForManualApproval: true,
   requireDeviceUnlockForVaultAccess: true,
+  requireBiometricPerSession: true,
   autoApprovedCommands: [],
   autoApprovedActions: [],
 };
@@ -118,6 +120,8 @@ const PermissionSettings = () => {
             nextSettings.requireDeviceUnlockForManualApproval !== false,
           requireDeviceUnlockForVaultAccess:
             nextSettings.requireDeviceUnlockForVaultAccess !== false,
+          requireBiometricPerSession:
+            nextSettings.requireBiometricPerSession !== false,
           autoApprovedCommands: Array.isArray(nextSettings.autoApprovedCommands)
             ? nextSettings.autoApprovedCommands.map((command) => normalizeCommandKey(command))
             : [],
@@ -138,7 +142,7 @@ const PermissionSettings = () => {
   }, []);
 
   const updateSetting = async (
-    key: 'autoApproveLowRisk' | 'autoApproveMidRisk' | 'requireDeviceUnlockForManualApproval' | 'requireDeviceUnlockForVaultAccess',
+    key: 'autoApproveLowRisk' | 'autoApproveMidRisk' | 'requireDeviceUnlockForManualApproval' | 'requireDeviceUnlockForVaultAccess' | 'requireBiometricPerSession',
     value: boolean
   ) => {
     const previous = settings;
@@ -440,6 +444,26 @@ const PermissionSettings = () => {
                 className={`relative w-14 h-8 rounded-full transition-all duration-300 ${settings.requireDeviceUnlockForVaultAccess ? 'bg-violet-500' : 'bg-white/10'}`}
               >
                 <div className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-lg transition-all duration-300 ${settings.requireDeviceUnlockForVaultAccess ? 'left-7' : 'left-1'}`} />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 bg-purple-500/5 rounded-2xl border border-purple-500/20">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                  <Lock size={20} className="text-purple-400" />
+                </div>
+                <div>
+                  <h5 className="text-white font-bold">Biometric Per Session</h5>
+                  <p className="text-white/50 text-xs">Require Touch ID / Windows Hello once per session before auto-approving low risk actions.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => void updateSetting('requireBiometricPerSession', !settings.requireBiometricPerSession)}
+                className={`relative w-14 h-8 rounded-full transition-all duration-300 ${settings.requireBiometricPerSession ? 'bg-purple-500' : 'bg-white/10'}`}
+              >
+                <div className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-lg transition-all duration-300 ${settings.requireBiometricPerSession ? 'left-7' : 'left-1'}`} />
               </button>
             </div>
           </div>

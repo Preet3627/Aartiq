@@ -67,17 +67,35 @@ module.exports = function registerPermissionHandlers(ipcMain, handlers) {
     return { success: true };
   });
 
-  ipcMain.handle('security-settings-get', async () => ({
-    autoApproveLow: permissionStore?.getAutoApprovedActions()?.includes('low') || false,
-    autoApproveMid: permissionStore?.getAutoApprovedActions()?.includes('medium') || false,
-  }));
+  ipcMain.handle('security-settings-get', async () => {
+    const storeSettings = permissionStore?.getSettings?.() || {};
+    return {
+      autoApproveLowRisk: !!storeSettings.autoApproveLowRisk,
+      autoApproveMidRisk: !!storeSettings.autoApproveMidRisk,
+      requireDeviceUnlockForManualApproval: storeSettings.requireDeviceUnlockForManualApproval !== false,
+      requireDeviceUnlockForVaultAccess: storeSettings.requireDeviceUnlockForVaultAccess !== false,
+      requireBiometricPerSession: storeSettings.requireBiometricPerSession !== false,
+      autoApprovedCommands: Array.isArray(storeSettings.autoApprovedCommands) ? storeSettings.autoApprovedCommands : [],
+      autoApprovedActions: Array.isArray(storeSettings.autoApprovedActions) ? storeSettings.autoApprovedActions : [],
+    };
+  });
 
   ipcMain.handle('security-settings-update', async (event, settings) => {
-    if (settings.autoApproveLow !== undefined) {
-      permissionStore.setAutoAction('low', settings.autoApproveLow);
+    const updates = {};
+    if (settings.autoApproveLowRisk !== undefined) {
+      updates.autoApproveLowRisk = !!settings.autoApproveLowRisk;
     }
-    if (settings.autoApproveMid !== undefined) {
-      permissionStore.setAutoAction('medium', settings.autoApproveMid);
+    if (settings.autoApproveMidRisk !== undefined) {
+      updates.autoApproveMidRisk = !!settings.autoApproveMidRisk;
+    }
+    if (settings.requireDeviceUnlockForManualApproval !== undefined) {
+      updates.requireDeviceUnlockForManualApproval = !!settings.requireDeviceUnlockForManualApproval;
+    }
+    if (settings.requireDeviceUnlockForVaultAccess !== undefined) {
+      updates.requireDeviceUnlockForVaultAccess = !!settings.requireDeviceUnlockForVaultAccess;
+    }
+    if (Object.keys(updates).length > 0) {
+      permissionStore.updateSettings(updates);
     }
     return { success: true };
   });

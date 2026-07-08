@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ClickPermissionModal from './ClickPermissionModal';
 import {
   getActionPermissionKey,
   isActionAutoApproved,
+  isIrreversibleCommand,
+  getCommandDescription,
   normalizeActionType,
   normalizeRiskLevel,
   type ActionRiskLevel,
@@ -63,6 +65,8 @@ export function useAIActionSecurityManager() {
       return true;
     }
 
+    const requiresDeviceUnlock = settings?.requireDeviceUnlockForManualApproval !== false;
+
     let highRiskQr: string | null = null;
     if (risk === 'high' && window.electronAPI?.generateHighRiskQr) {
       highRiskQr = await window.electronAPI.generateHighRiskQr(`${actionType}-${Date.now()}`);
@@ -80,6 +84,7 @@ export function useAIActionSecurityManager() {
           reason: input.reason,
           risk,
           highRiskQr,
+          requiresDeviceUnlock: requiresDeviceUnlock && risk !== 'low',
         },
       });
     });
@@ -90,9 +95,20 @@ export function useAIActionSecurityManager() {
       return;
     }
 
-    const cleanup = window.electronAPI.onAutomationShellApproval((payload) => {
+    const cleanup = window.electronAPI.onAutomationShellApproval(async (payload) => {
+      const settings = await getSecuritySettingsSafe();
+      const requiresDeviceUnlock = settings?.requireDeviceUnlockForManualApproval !== false;
       setPendingPermission({
-        resolve: (allowed: boolean) => {
+        resolve: async (allowed: boolean) => {
+          if (allowed && requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
+            const authResult = await window.electronAPI.authenticateBiometric(
+              `Approve shell command: ${payload.command}`
+            );
+            if (!authResult?.success) {
+              return;
+            }
+          }
+
           if (window.electronAPI?.respondAutomationShellApproval) {
             window.electronAPI.respondAutomationShellApproval({
               requestId: payload.requestId,
@@ -112,7 +128,7 @@ export function useAIActionSecurityManager() {
           reason: payload.reason || 'An automated task needs to execute this shell command.',
           risk: normalizeRiskLevel(payload.risk),
           highRiskQr: payload.highRiskQr,
-          requiresDeviceUnlock: !!payload.requiresDeviceUnlock,
+          requiresDeviceUnlock,
         },
       });
     });
@@ -176,6 +192,15 @@ export function useAIActionSecurityManager() {
           highRiskApproved={pendingPermission.mobileApproved}
           onAllow={async (alwaysAllow) => {
             const context = pendingPermission.context;
+
+            if (context.requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
+              const authResult = await window.electronAPI.authenticateBiometric(
+                `Approve action: ${context.action}`
+              );
+              if (!authResult?.success) {
+                return;
+              }
+            }
 
             if (alwaysAllow && window.electronAPI?.permGrant && context.risk !== 'high') {
               const permissionKey = getActionPermissionKey(context.actionType, context.target, context.what);

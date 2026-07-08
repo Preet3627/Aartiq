@@ -72,7 +72,7 @@ const {
 const path = require('path');
 const os = require('os');
 const { spawn, exec, execSync, spawnSync } = require('child_process');
-const { randomBytes } = require('crypto');
+const { randomBytes, createCipheriv, createDecipheriv, randomUUID } = require('crypto');
 const Store = require('electron-store');
 const store = new Store();
 const { createWorker } = require('tesseract.js');
@@ -3608,6 +3608,131 @@ if (!fs.existsSync(persistentDataPath)) {
 const VAULT_FILE_NAME = 'user-passwords.json';
 const VAULT_UNLOCK_TTL_MS = 5 * 60 * 1000;
 let vaultUnlockExpiresAt = 0;
+let vaultEncryptionKey = null;
+let vaultKeyStore = null;
+
+const VAULT_ENC_ALGO = 'aes-256-gcm';
+const VAULT_ENC_IV_LENGTH = 16;
+
+function getVaultEncryptionKey() {
+  if (vaultEncryptionKey) return vaultEncryptionKey;
+  if (!vaultKeyStore) vaultKeyStore = new Store({ name: 'comet-vault-key' });
+  const KEY_NAME = 'aes_key_v2';
+
+  if (process.platform === 'linux' && safeStorage.getSelectedStorageBackend) {
+    const backend = safeStorage.getSelectedStorageBackend();
+    if (backend === 'basic_text') {
+      console.warn('[Vault] WARNING: Linux keyring unavailable (basic_text fallback). Vault encryption is weakened.');
+    }
+  }
+
+  let stored = vaultKeyStore.get(KEY_NAME);
+
+  if (stored) {
+    if (safeStorage.isEncryptionAvailable()) {
+      try {
+        vaultEncryptionKey = safeStorage.decryptString(Buffer.from(stored, 'base64'));
+        return vaultEncryptionKey;
+      } catch { }
+    }
+    vaultEncryptionKey = stored;
+    return vaultEncryptionKey;
+  }
+
+  const rawKey = randomBytes(32).toString('hex');
+  if (safeStorage.isEncryptionAvailable()) {
+    try {
+      const encrypted = safeStorage.encryptString(rawKey);
+      vaultKeyStore.set(KEY_NAME, encrypted.toString('base64'));
+    } catch {
+      vaultKeyStore.set(KEY_NAME, rawKey);
+    }
+  } else {
+    vaultKeyStore.set(KEY_NAME, rawKey);
+  }
+
+  vaultEncryptionKey = rawKey;
+  return vaultEncryptionKey;
+}
+
+function encryptVaultField(value) {
+  if (value == null) return null;
+  const key = Buffer.from(getVaultEncryptionKey(), 'hex');
+  const iv = randomBytes(VAULT_ENC_IV_LENGTH);
+  const cipher = createCipheriv(VAULT_ENC_ALGO, key, iv);
+  const input = typeof value === 'string' ? value : JSON.stringify(value);
+  const encrypted = Buffer.concat([cipher.update(input, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return { e: encrypted.toString('base64'), i: iv.toString('base64'), t: authTag.toString('base64'), s: typeof value === 'string' };
+}
+
+function decryptVaultField(stored) {
+  if (!stored) return null;
+  if (typeof stored === 'string') return stored;
+  try {
+    const key = Buffer.from(getVaultEncryptionKey(), 'hex');
+    const decipher = createDecipheriv(VAULT_ENC_ALGO, key, Buffer.from(stored.i, 'base64'));
+    decipher.setAuthTag(Buffer.from(stored.t, 'base64'));
+    const decrypted = decipher.update(Buffer.from(stored.e, 'base64')) + decipher.final('utf8');
+    return stored.s ? decrypted : JSON.parse(decrypted);
+  } catch {
+    return null;
+  }
+}
+
+function isEncryptedField(value) {
+  return value && typeof value === 'object' && value.e && value.i && value.t;
+}
+
+function encryptVaultEntry(entry) {
+  const enc = { ...entry };
+  if (entry.password != null && !isEncryptedField(entry.password)) enc.password = encryptVaultField(entry.password);
+  if (entry.formData != null && !isEncryptedField(entry.formData)) enc.formData = encryptVaultField(entry.formData);
+  return enc;
+}
+
+function decryptVaultEntry(entry) {
+  if (!entry) return entry;
+  const dec = { ...entry };
+  if (isEncryptedField(entry.password)) dec.password = decryptVaultField(entry.password) ?? entry.password;
+  if (isEncryptedField(entry.formData)) dec.formData = decryptVaultField(entry.formData) ?? entry.formData;
+  return dec;
+}
+
+function addToNativeKeychain(entry) {
+  if (!entry || !entry.password) return;
+  const label = `Aartiq: ${entry.site || 'unknown'} (${entry.username || 'default'})`;
+  const account = entry.username || 'default';
+  const service = `com.aartiq.vault.${entry.site || 'unknown'}`;
+
+  try {
+    if (process.platform === 'darwin') {
+      execSync(`security add-generic-password -a "${account.replace(/"/g, '\\"')}" -s "${service.replace(/"/g, '\\"')}" -w "${entry.password.replace(/"/g, '\\"')}" -l "${label.replace(/"/g, '\\"')}" -U 2>/dev/null`, { timeout: 5000, stdio: 'ignore' });
+    } else if (process.platform === 'win32') {
+      const psCmd = `$cred = New-Object System.Management.Automation.PSCredential('${account.replace(/'/g, "''")}', (ConvertTo-SecureString '${entry.password.replace(/'/g, "''")}' -AsPlainText -Force)); Microsoft.PowerShell.SecretManagement\Set-Secret -Name '${service.replace(/'/g, "''")}' -Secret $cred 2>$null`;
+      execSync(`powershell -Command "${psCmd.replace(/"/g, '\\"')}"`, { timeout: 5000, stdio: 'ignore' });
+    } else if (process.platform === 'linux') {
+      execSync(`secret-tool store --label="${label}" service "${service}" account "${account}" 2>/dev/null <<< "${entry.password}"`, { timeout: 5000, stdio: 'ignore' });
+    }
+  } catch {
+    // Native keychain unavailable or write failed — vault storage is sufficient
+  }
+}
+
+function removeFromNativeKeychain(entry) {
+  if (!entry || !entry.site) return;
+  const account = entry.username || 'default';
+  const service = `com.aartiq.vault.${entry.site || 'unknown'}`;
+  try {
+    if (process.platform === 'darwin') {
+      execSync(`security delete-generic-password -a "${account.replace(/"/g, '\\"')}" -s "${service.replace(/"/g, '\\"')}" 2>/dev/null`, { timeout: 5000, stdio: 'ignore' });
+    } else if (process.platform === 'win32') {
+      execSync(`powershell -Command "Microsoft.PowerShell.SecretManagement\Remove-Secret -Name '${service.replace(/'/g, "''")}' 2>$null"`, { timeout: 5000, stdio: 'ignore' });
+    } else if (process.platform === 'linux') {
+      execSync(`secret-tool clear service "${service}" account "${account}" 2>/dev/null`, { timeout: 5000, stdio: 'ignore' });
+    }
+  } catch { }
+}
 
 function getVaultFilePath() {
   return path.join(persistentDataPath, VAULT_FILE_NAME);
@@ -3629,7 +3754,8 @@ function readVaultEntries() {
 
   try {
     const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    return Array.isArray(raw) ? raw : [];
+    const entries = Array.isArray(raw) ? raw : [];
+    return entries.map(decryptVaultEntry);
   } catch (error) {
     console.warn('[Vault] Failed to read entries:', error.message);
     return [];
@@ -3637,7 +3763,8 @@ function readVaultEntries() {
 }
 
 function writeVaultEntries(entries) {
-  fs.writeFileSync(getVaultFilePath(), JSON.stringify(entries, null, 2), 'utf-8');
+  const encrypted = entries.map(encryptVaultEntry);
+  fs.writeFileSync(getVaultFilePath(), JSON.stringify(encrypted, null, 2), 'utf-8');
 }
 
 function maskVaultEntry(entry = {}) {
@@ -4068,11 +4195,14 @@ ipcMain.handle('vault-save-entry', async (event, payload = {}) => {
 
   const existingIndex = entries.findIndex((entry) => entry.id === nextEntry.id);
   if (existingIndex >= 0) {
+    const oldEntry = entries[existingIndex];
     entries[existingIndex] = { ...entries[existingIndex], ...nextEntry };
+    removeFromNativeKeychain(oldEntry);
   } else if (!entries.some((entry) => entry.site === site && entry.username === username && entry.password === password)) {
     entries.push(nextEntry);
   }
 
+  addToNativeKeychain(nextEntry);
   writeVaultEntries(entries);
   clearVaultUnlock();
 
@@ -4084,9 +4214,11 @@ ipcMain.handle('vault-save-entry', async (event, payload = {}) => {
 
 ipcMain.handle('vault-delete-entry', async (event, entryId) => {
   const entries = readVaultEntries();
+  const deletedEntry = entries.find((entry) => entry.id === entryId);
   const remainingEntries = entries.filter((entry) => entry.id !== entryId);
   writeVaultEntries(remainingEntries);
   clearVaultUnlock();
+  if (deletedEntry) removeFromNativeKeychain(deletedEntry);
   return {
     success: true,
     entries: remainingEntries.map(maskVaultEntry),
@@ -4173,15 +4305,16 @@ ipcMain.on('propose-password-save', (event, { domain, username, password, type }
 
       const passwords = readVaultEntries();
       const normalizedDomain = normalizeVaultSite(domain);
-
-      passwords.push({
+      const entry = {
         id: Date.now().toString(),
         site: normalizedDomain,
         username,
         password,
         type: type || 'login',
         created: new Date().toISOString()
-      });
+      };
+      passwords.push(entry);
+      addToNativeKeychain(entry);
       writeVaultEntries(passwords);
       clearVaultUnlock();
       console.log(`[Vault] Saved password for ${normalizedDomain}`);
@@ -5249,18 +5382,30 @@ ipcMain.handle('extract-page-content', async (_event, tabId) => {
     }
   }
 
-  if (!view || !view.webContents || view.webContents.isDestroyed()) {
-    return { error: 'No active view' };
-  }
-
   // Small delay to let page settle before reading
   await new Promise(resolve => setTimeout(resolve, 500));
 
   // Retry up to 3 times if content is empty
   let content = '';
   for (let attempt = 0; attempt < 3; attempt++) {
+    let wc;
     try {
-      content = await view.webContents.executeJavaScript(`
+      wc = view && view.webContents;
+    } catch (_) {
+      wc = null;
+    }
+    if (!wc || wc.isDestroyed()) {
+      return { error: 'No active view' };
+    }
+
+    try {
+      const pendingUrl = wc.getURL();
+      if (!pendingUrl || pendingUrl === 'about:blank') {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+
+      content = await wc.executeJavaScript(`
         (() => {
           try {
             const clone = document.body.cloneNode(true);
