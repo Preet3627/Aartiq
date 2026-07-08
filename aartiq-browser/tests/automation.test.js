@@ -48,7 +48,7 @@ describe('Automation Layer', () => {
   describe('moveMouse', () => {
     it('should not throw for valid coordinates', () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       assert.doesNotThrow(() => {
@@ -60,7 +60,7 @@ describe('Automation Layer', () => {
   describe('click', () => {
     it('should not throw for valid click', () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       assert.doesNotThrow(() => {
@@ -70,7 +70,7 @@ describe('Automation Layer', () => {
 
     it('should handle different buttons', () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       assert.doesNotThrow(() => {
@@ -80,7 +80,7 @@ describe('Automation Layer', () => {
 
     it('should handle double click', () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       assert.doesNotThrow(() => {
@@ -92,7 +92,7 @@ describe('Automation Layer', () => {
   describe('typeText', () => {
     it('should handle empty string', () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       assert.doesNotThrow(() => {
@@ -102,7 +102,7 @@ describe('Automation Layer', () => {
 
     it('should handle regular text', () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       assert.doesNotThrow(() => {
@@ -114,7 +114,7 @@ describe('Automation Layer', () => {
   describe('keyTap', () => {
     it('should handle basic keys', () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       assert.doesNotThrow(() => {
@@ -124,7 +124,7 @@ describe('Automation Layer', () => {
 
     it('should handle keys with modifiers', () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       assert.doesNotThrow(() => {
@@ -136,7 +136,7 @@ describe('Automation Layer', () => {
   describe('scroll', () => {
     it('should handle scroll directions', () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       assert.doesNotThrow(() => {
@@ -149,7 +149,7 @@ describe('Automation Layer', () => {
   describe('executeClickSequence', () => {
     it('should execute a sequence of actions', async () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       const actions = [
@@ -164,7 +164,7 @@ describe('Automation Layer', () => {
 
     it('should stop on error when configured', async () => {
       if (!automationLayer.isAvailable) {
-        console.log('Skipping: automation not available');
+        this.skip();
         return;
       }
       const actions = [
