@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * Aartiq CLI v0.2.9.4
- * A terminal-based interface to control the Comet browser and query the AI.
+ * Aartiq CLI v0.3.0
+ * A terminal-based interface to query the Aartiq browser AI.
  * 
  * Features:
  * - Chat sessions with history
- * - Live streaming output
+ * - Live streaming output (via bridge port)
  * - Model selection
  * - Action tags (--web, --local, etc.)
  * - Interactive mode
@@ -18,7 +18,7 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 
-const PORT = 3004;
+const PORT = parseInt(process.env.COMET_NATIVE_MAC_UI_PORT || '46203', 10);
 const HOST = '127.0.0.1';
 
 const CONFIG_DIR = path.join(os.homedir(), '.aartiq');
@@ -155,7 +155,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 const command = positional[0];
-const payload = positional.slice(1).join(' ').trim();
+let payload = positional.slice(1).join(' ').trim();
 
 // Get native token
 function getNativeToken() {
@@ -218,9 +218,9 @@ Usage:
   aartiq chat                       Start interactive chat mode
   aartiq models                     List configured models
   aartiq select-model              Choose model interactively
-  comet session [name]             Create or use a session
-  comet history                    Show chat history
-  comet help                       Show this help
+  aartiq session [name]            Create or use a session
+  aartiq history                   Show chat history
+  aartiq help                      Show this help
 
 Options:
   -h, --help                      Show this help menu
@@ -311,6 +311,9 @@ async function handleAsk() {
                                 if (json.textDelta) {
                                     process.stdout.write(json.textDelta);
                                     response += json.textDelta;
+                                } else if (json.text) {
+                                    process.stdout.write(json.text);
+                                    response += json.text;
                                 } else if (json.error) {
                                     console.error('\n❌ Error:', json.error);
                                 }
@@ -336,8 +339,8 @@ async function handleAsk() {
         });
 
         req.on('error', (e) => {
-            console.error(`\n❌ Error: Could not connect to Aartiq (${e.message})`);
-            console.log('Make sure Aartiq browser is running.');
+            console.error(`\n❌ Error: Could not connect to Aartiq browser (${e.message})`);
+            console.log(`Make sure Aartiq browser is running (bridge port ${PORT}).`);
             process.exit(1);
         });
 
@@ -499,6 +502,12 @@ Commands:
                                     if (json.textDelta) {
                                         process.stdout.write(json.textDelta);
                                         response += json.textDelta;
+                                    } else if (json.text) {
+                                        process.stdout.write(json.text);
+                                        response += json.text;
+                                    } else if (json.error) {
+                                        process.stdout.write(json.error);
+                                        response += json.error;
                                     }
                                 } catch (e) {
                                     process.stdout.write(data);
@@ -685,14 +694,13 @@ async function main() {
             break;
         default:
             if (!flags.help && !flags.version) {
-                // Try as direct prompt
                 const data = [...positional, ...args.filter(a => !a.startsWith('-'))].join(' ');
                 if (data) {
-                    args.unshift('ask');
+                    payload = data;
                     await handleAsk();
                 } else {
                     console.log(`Unknown command: ${command}`);
-                    console.log('Run "comet help" for usage.');
+                    console.log('Run "aartiq help" for usage.');
                     process.exit(1);
                 }
             }

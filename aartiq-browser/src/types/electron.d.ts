@@ -384,6 +384,7 @@ declare global {
             generatePDFWithMethod: (method: string, options: { title: string; content: string; subtitle?: string; author?: string; template?: string; watermark?: string; bgColor?: string; priority?: string }) => Promise<{ success: boolean; fileName?: string; filePath?: string; error?: string }>;
             openPDF: (filePath: string) => Promise<{ success: boolean; error?: string }>;
             openFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
+            showItemInFolder: (filePath: string) => Promise<{ success: boolean }>;
             getClipboardText: () => Promise<string>;
             setClipboardText: (text: string) => void;
             setVolume: (level: number) => Promise<{ success: boolean; error?: string }>;
@@ -505,7 +506,7 @@ declare global {
             scheduleTask: (taskData: {
                 name: string;
                 description?: string;
-                type: 'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell' | string;
+                type: 'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell' | 'open-url' | string;
                 cronExpression?: string;
                 schedule?: string;
                 prompt?: string;
@@ -524,6 +525,8 @@ declare global {
             deleteScheduledTask: (taskId: string) => Promise<{ success: boolean; error?: string }>;
             getTaskLogs: (date?: string) => Promise<any[]>;
             enableCLI: () => Promise<{ success: boolean; message?: string; error?: string }>;
+            checkCLIStatus: () => Promise<{ enabled: boolean; path: string; platform: string }>;
+            disableCLI: () => Promise<{ success: boolean; message?: string; error?: string }>;
             getServiceStatus: () => Promise<{ running: boolean; health?: any; platform: string; error?: string }>;
             installService: (options: { userMode?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
             uninstallService: (options: { userMode?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;

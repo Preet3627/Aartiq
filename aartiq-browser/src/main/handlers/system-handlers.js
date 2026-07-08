@@ -54,7 +54,34 @@ module.exports = function registerSystemHandlers(ipcMain, handlers) {
 
   ipcMain.handle('open-external-app', async (event, appPath) => {
     const { shell } = require('electron');
-    try { await shell.openPath(appPath); return { success: true }; }
+    const { exec } = require('child_process');
+    try {
+      if (process.platform === 'darwin') {
+        if (appPath.includes('/')) {
+          shell.openPath(appPath);
+        } else {
+          await new Promise((resolve, reject) => {
+            exec(`open -a "${appPath}"`, (err) => {
+              if (err) reject(err); else resolve(true);
+            });
+          });
+        }
+      } else if (process.platform === 'win32') {
+        await new Promise((resolve, reject) => {
+          exec(`start "" "${appPath}"`, { shell: true }, (err) => {
+            if (err) reject(err); else resolve(true);
+          });
+        });
+      } else {
+        exec(`xdg-open "${appPath}"`, { shell: true });
+      }
+      return { success: true };
+    } catch (e) { return { success: false, error: e.message }; }
+  });
+
+  ipcMain.handle('show-item-in-folder', async (event, filePath) => {
+    const { shell } = require('electron');
+    try { shell.showItemInFolder(filePath); return { success: true }; }
     catch (e) { return { success: false, error: e.message }; }
   });
 

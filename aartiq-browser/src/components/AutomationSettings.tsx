@@ -36,6 +36,7 @@ const TASK_TYPES = [
   { value: 'ai-prompt', label: 'AI Prompt', icon: '🤖' },
   { value: 'workflow', label: 'Workflow', icon: '⚡' },
   { value: 'daily-brief', label: 'Daily Brief', icon: '📋' },
+  { value: 'open-url', label: 'Open URL', icon: '🔗' },
 ];
 
 const SCHEDULE_PRESETS = [
@@ -125,6 +126,7 @@ const AutomationSettings = () => {
   const [selectedDays, setSelectedDays] = useState<string[]>(['1', '2', '3', '4', '5']);
   const [hourlyInterval, setHourlyInterval] = useState('1');
   const [serviceRunning, setServiceRunning] = useState(false);
+  const [cliEnabled, setCliEnabled] = useState(false);
 
   // Monitor service status
   useEffect(() => {
@@ -140,6 +142,23 @@ const AutomationSettings = () => {
     };
     checkService();
     const interval = setInterval(checkService, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Monitor CLI status
+  useEffect(() => {
+    const checkCLI = async () => {
+      try {
+        if (window.electronAPI?.checkCLIStatus) {
+          const status = await window.electronAPI.checkCLIStatus();
+          setCliEnabled(status.enabled);
+        }
+      } catch (e) {
+        console.error('CLI check failed:', e);
+      }
+    };
+    checkCLI();
+    const interval = setInterval(checkCLI, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -438,27 +457,41 @@ const AutomationSettings = () => {
                 <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest mt-0.5">Native Command Line Interface</p>
               </div>
             </div>
-            <button
-              onClick={async () => {
-                try {
-                  const result = await window.electronAPI.enableCLI();
-                  if (result.success) {
-                    showFeedback(result.message || 'CLI enabled');
-                  } else {
-                    alert('Failed to enable CLI: ' + result.error);
+            <div className="flex items-center gap-2">
+              <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border ${cliEnabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-white/30 border-white/10'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${cliEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-white/20'}`} />
+                <span className="text-[9px] font-black uppercase tracking-widest">{cliEnabled ? 'Active' : 'Inactive'}</span>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    const result = cliEnabled
+                      ? await window.electronAPI.disableCLI()
+                      : await window.electronAPI.enableCLI();
+                    if (result.success) {
+                      showFeedback(result.message || (cliEnabled ? 'CLI disabled' : 'CLI enabled'));
+                      const status = await window.electronAPI.checkCLIStatus();
+                      setCliEnabled(status.enabled);
+                    } else {
+                      alert('Failed: ' + result.error);
+                    }
+                  } catch (e) {
+                    console.error(e);
                   }
-                } catch (e) {
-                  console.error(e);
-                }
-              }}
-              className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-widest rounded-xl border border-amber-500/20 transition-all"
-            >
-              Enable CLI
-            </button>
+                }}
+                className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-xl border transition-all ${
+                  cliEnabled
+                    ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20'
+                    : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20'
+                }`}
+              >
+                {cliEnabled ? 'Disable' : 'Enable'}
+              </button>
+            </div>
           </div>
           <div className="mt-3 p-3 rounded-xl bg-black/40 border border-white/5 space-y-2">
             <p className="text-[10px] text-white/40 leading-relaxed font-bold uppercase tracking-wide">
-              Access Aartiq from your terminal using the <span className="text-amber-400">comet</span> command.
+              Access Aartiq from your terminal using the <span className="text-amber-400">aartiq</span> command.
             </p>
             <div className="flex items-center gap-2 text-[10px] text-amber-400/60 font-mono">
               <span className="opacity-40">$</span> aartiq ask "Summarize this page"

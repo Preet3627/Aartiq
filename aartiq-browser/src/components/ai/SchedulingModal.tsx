@@ -9,9 +9,11 @@ interface SchedulingModalProps {
   onConfirm: (config: ScheduleConfig) => void;
   taskDetails: {
     taskName: string;
-    taskType: 'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell';
+    taskType: 'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell' | 'open-url';
     schedule: string;
     description?: string;
+    url?: string;
+    command?: string;
   };
 }
 
@@ -30,6 +32,8 @@ interface ScheduleConfig {
     onError: boolean;
   };
   enabled: boolean;
+  url?: string;
+  command?: string;
 }
 
 interface ModelOption {
@@ -149,28 +153,12 @@ export default function SchedulingModal({
     setShowOutputPicker(false);
   };
 
-  const handleConfirm = async () => {
-    try {
-      if (window.electronAPI?.scheduleTask) {
-        await window.electronAPI.scheduleTask({
-          name: taskDetails.taskName,
-          description: taskDetails.description || '',
-          type: taskDetails.taskType,
-          schedule: config.schedule,
-          cronExpression: config.schedule,
-          outputPath: config.outputPath,
-          model: config.model.model,
-          provider: config.model.provider,
-          notification: config.notification,
-          enabled: config.enabled,
-        });
-        // Signal AutomationSettings to reload
-        window.dispatchEvent(new CustomEvent('automation-task-created'));
-      }
-    } catch (err) {
-      console.error('[SchedulingModal] Failed to save task:', err);
-    }
-    onConfirm(config);
+  const handleConfirm = () => {
+    onConfirm({
+      ...config,
+      url: taskDetails.url,
+      command: taskDetails.command,
+    });
     onClose();
   };
 
@@ -269,6 +257,38 @@ export default function SchedulingModal({
               </button>
             </div>
           </div>
+
+          {/* URL input - shown for open-url type */}
+          {taskDetails.taskType === 'open-url' && (
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">
+                URL to Open
+              </label>
+              <input
+                type="url"
+                defaultValue={taskDetails.url || ''}
+                onChange={(e) => { taskDetails.url = e.target.value; }}
+                placeholder="https://web.whatsapp.com"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/70 text-sm focus:outline-none focus:border-cyan-500/50"
+              />
+            </div>
+          )}
+
+          {/* Command input - shown for shell type */}
+          {taskDetails.taskType === 'shell' && (
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">
+                Shell Command
+              </label>
+              <input
+                type="text"
+                defaultValue={taskDetails.command || ''}
+                onChange={(e) => { taskDetails.command = e.target.value; }}
+                placeholder="open https://web.whatsapp.com"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/70 text-sm focus:outline-none focus:border-cyan-500/50"
+              />
+            </div>
+          )}
 
           {/* Timezone */}
           <div>

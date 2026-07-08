@@ -9,7 +9,7 @@ export interface SchedulingIntent {
   detected: boolean;
   confidence: 'high' | 'medium' | 'low';
   taskName: string;
-  taskType: 'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell';
+  taskType: 'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell' | 'open-url';
   schedule: {
     type: 'cron' | 'once' | 'interval';
     expression: string;
@@ -17,6 +17,8 @@ export interface SchedulingIntent {
   };
   timezone: string;
   outputPath?: string;
+  url?: string;
+  command?: string;
   model?: {
     provider: string;
     model: string;
@@ -186,16 +188,21 @@ export function detectSchedulingIntent(message: string): SchedulingIntent | null
     const matches = message.matchAll(pattern.regex);
     for (const match of matches) {
       if (pattern.toCron) {
-        const cronExpr = pattern.toCron(match, pattern);
-        const desc = pattern.description ? pattern.description(match) : cronExpr;
+        const extracted = pattern.extract ? pattern.extract(match) : match;
+        const cronExpr = pattern.toCron(extracted, pattern);
+        const desc = pattern.description ? pattern.description(extracted) : cronExpr;
         
         if (cronExpr) {
-          scheduleInfo = {
-            type: 'cron',
-            expression: cronExpr,
-            description: desc
-          };
-          confidence = 'high';
+          const newSpec = cronExpr.split(' ').filter(p => p !== '*').length;
+          const curSpec = scheduleInfo ? scheduleInfo.expression.split(' ').filter(p => p !== '*').length : 0;
+          if (!scheduleInfo || newSpec > curSpec) {
+            scheduleInfo = {
+              type: 'cron',
+              expression: cronExpr,
+              description: desc
+            };
+            confidence = 'high';
+          }
         }
       }
     }

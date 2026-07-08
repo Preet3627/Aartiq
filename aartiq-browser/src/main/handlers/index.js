@@ -54,7 +54,7 @@ function registerAllHandlers(ipcMain, handlers) {
     'mcp-fs-read','mcp-fs-write','mcp-fs-list','mcp-fs-approved-dirs',
     'mcp-native-applescript','mcp-native-powershell','mcp-native-active-window',
     'execute-shell-command','get-extensions','toggle-extension','uninstall-extension',
-    'get-extension-path','search-applications','open-external-app',
+    'get-extension-path','search-applications','open-external-app','show-item-in-folder',
     'set-volume','set-brightness','set-alarm','encrypt-data','decrypt-data',
     'create-desktop-shortcut','biometric-check','biometric-authenticate','biometric-execute',
     'plugins:list','plugins:get','plugins:install','plugins:uninstall','plugins:update',

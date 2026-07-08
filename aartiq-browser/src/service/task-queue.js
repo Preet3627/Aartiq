@@ -143,6 +143,9 @@ class TaskQueue extends EventEmitter {
                 case 'daily-brief':
                     result = await this.executeDailyBrief(task);
                     break;
+                case 'open-url':
+                    result = await this.executeOpenURL(task);
+                    break;
                 default:
                     throw new Error(`Unknown task type: ${task.taskType}`);
             }
@@ -280,6 +283,26 @@ class TaskQueue extends EventEmitter {
                 } else {
                     resolve({ stdout, stderr });
                 }
+            });
+        });
+    }
+
+    async executeOpenURL(task) {
+        const { url, config } = task;
+        const targetUrl = url || (config && config.url) || 'https://youtube.com';
+        const platform = process.platform;
+        let command;
+        if (platform === 'darwin') {
+            command = `open "${targetUrl}"`;
+        } else if (platform === 'win32') {
+            command = `start "" "${targetUrl}"`;
+        } else {
+            command = `xdg-open "${targetUrl}"`;
+        }
+        return new Promise((resolve, reject) => {
+            exec(command, { timeout: 10000 }, (error, stdout, stderr) => {
+                if (error) reject(error);
+                else resolve({ stdout, url: targetUrl });
             });
         });
     }

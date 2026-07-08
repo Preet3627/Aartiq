@@ -30,9 +30,13 @@ Aartiq supports three methods for generating PDFs. Use `CREATE_PDF_JSON` command
 }
 ```
 
-**Attaching screenshots to PDFs:**
-- Use `"type": "screenshot"` in images array to attach the current browser view
-- Works for PDF, DOCX, and PPTX generation
+**Attaching screenshots to PDFs (CRITICAL):**
+- `SCREENSHOT_AND_ANALYZE` only extracts TEXT via OCR — it does NOT capture the image for embedding
+- To include the actual page screenshot in a PDF, you MUST explicitly add it to the images array:
+  ```json
+  "images": [{"type": "screenshot", "caption": "Browser page at capture time"}]
+  ```
+- When the user says "with screenshot", "capture this page", or "include this page", automatically add `"type": "screenshot"` to the images array
 - Alternative: Use inline tag `[CAPTURE_SCREEN]` or `[CAPTURE_SCREEN|caption:Description]` in content
 
 ### 1. Electron printToPDF (HTML - Default)

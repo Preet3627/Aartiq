@@ -63,7 +63,7 @@ export const COMMAND_REGISTRY = {
     LIST_AUTOMATIONS: { desc: 'List scheduled automation tasks', example: '[LIST_AUTOMATIONS]' },
     DELETE_AUTOMATION: { desc: 'Delete an automation using its ID', example: '[DELETE_AUTOMATION: task-123]' },
     OPEN_SCHEDULING_MODAL: { desc: 'Open scheduling modal with optional data (JSON or pipe-separated)', example: '[OPEN_SCHEDULING_MODAL: 0 8 * * *|pdf-generate|Daily Report|Generate PDF]' },
-    SCHEDULE_TASK: { desc: 'Schedule a recurring automation task (JSON format)', example: '[SCHEDULE_TASK: {"schedule": "0 8 * * *", "type": "pdf-generate", "name": "Daily Report"}]' },
+    SCHEDULE_TASK: { desc: 'Schedule a recurring automation task (JSON format)', example: '[SCHEDULE_TASK: {"schedule": "0 8 * * *", "type": "open-url", "url": "https://example.com", "name": "Open Site"}]' },
     ORGANIZE_TABS: { desc: 'Use AI to intelligently group all open tabs', example: '[ORGANIZE_TABS]' },
     CLOSE_TAB: { desc: 'Close a specific tab by ID', example: '[CLOSE_TAB: tab-123]' },
     PLUGIN_COMMAND: { desc: 'Execute a plugin-defined command', example: '[PLUGIN_COMMAND: my-plugin.my-command | {"param": "value"}]' },

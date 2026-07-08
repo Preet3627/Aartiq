@@ -20,7 +20,7 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
     if (tabId?.startsWith('incognito')) {
       return `incognito-${tabId}`;
     }
-    return 'persist:browserview';
+    return ''; // default session — shares cookies with popups/OAuth
   };
 
   ipcMain.on('create-view', (event, { tabId, url }) => {

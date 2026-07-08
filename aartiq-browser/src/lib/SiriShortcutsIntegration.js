@@ -308,6 +308,58 @@ function handleURLSchemeEvent(url) {
   }
 }
 
+// ── macOS `shortcuts` CLI bridge (macOS 12+) ──
+
+const SHORTCUTS_CLI = '/usr/bin/shortcuts';
+
+async function shortcutsList() {
+  try {
+    const { stdout } = await execPromise(`"${SHORTCUTS_CLI}" list`);
+    return stdout.split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(name => ({ id: name, name, source: 'shortcuts-app' }));
+  } catch (error) {
+    console.warn('[SiriShortcuts] shortcuts list failed:', error.message);
+    return [];
+  }
+}
+
+async function shortcutsRun(name, input = '') {
+  if (!name || typeof name !== 'string') {
+    return { success: false, error: 'Shortcut name is required' };
+  }
+  try {
+    if (input) {
+      const escaped = input.replace(/"/g, '\\"');
+      await execPromise(`echo "${escaped}" | "${SHORTCUTS_CLI}" run "${name}"`);
+    } else {
+      await execPromise(`"${SHORTCUTS_CLI}" run "${name}"`);
+    }
+    return { success: true, name };
+  } catch (error) {
+    return { success: false, error: error.message, name };
+  }
+}
+
+async function shortcutsView(name) {
+  if (!name || typeof name !== 'string') {
+    return { success: false, error: 'Shortcut name is required' };
+  }
+  try {
+    const { stdout } = await execPromise(`"${SHORTCUTS_CLI}" view "${name}"`);
+    return { success: true, name, details: stdout.trim() || 'No details available' };
+  } catch (error) {
+    return { success: false, error: error.message, name };
+  }
+}
+
+function setupShortcutsCLIHandlers() {
+  ipcMain.handle('shortcuts:list', () => shortcutsList());
+  ipcMain.handle('shortcuts:run', (_event, name, input) => shortcutsRun(name, input));
+  ipcMain.handle('shortcuts:view', (_event, name) => shortcutsView(name));
+}
+
 exports.generateShortcutURL = generateShortcutURL;
 exports.parseCometURL = parseCometURL;
 exports.executeShortcutAction = executeShortcutAction;
@@ -316,6 +368,10 @@ exports.listenWithDictation = listenWithDictation;
 exports.setupSiriShortcutsHandlers = setupSiriShortcutsHandlers;
 exports.registerURLScheme = registerURLScheme;
 exports.handleURLSchemeEvent = handleURLSchemeEvent;
+exports.shortcutsList = shortcutsList;
+exports.shortcutsRun = shortcutsRun;
+exports.shortcutsView = shortcutsView;
+exports.setupShortcutsCLIHandlers = setupShortcutsCLIHandlers;
 exports.APP_SHORTCUTS = APP_SHORTCUTS;
 
 module.exports = {
@@ -329,4 +385,8 @@ module.exports = {
   setupSiriShortcutsHandlers,
   registerURLScheme,
   handleURLSchemeEvent,
+  shortcutsList,
+  shortcutsRun,
+  shortcutsView,
+  setupShortcutsCLIHandlers,
 };

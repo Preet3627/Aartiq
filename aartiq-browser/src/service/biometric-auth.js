@@ -1,18 +1,8 @@
-/**
- * Biometric Authentication Manager
- * 
- * Provides biometric authentication across platforms:
- * - macOS: Touch ID / Face ID via LocalAuthentication
- * - Windows: Windows Hello (fingerprint, face, PIN)
- * - Linux: PAM fingerprint (fprintd)
- * 
- * This enables secure verification for high-risk actions like restart, shutdown.
- */
-
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
 
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
@@ -21,11 +11,9 @@ class BiometricAuthManager {
         this.platform = os.platform();
         this.isAvailable = false;
         this.authType = null;
+        this._devSigningAttempted = false;
     }
 
-    /**
-     * Check if biometric authentication is available on the system
-     */
     async checkAvailability() {
         if (this.platform === 'darwin') {
             return await this.checkMacAvailability();
@@ -37,41 +25,60 @@ class BiometricAuthManager {
         return { available: false, type: 'none', message: 'Unsupported platform' };
     }
 
-    /**
-     * macOS Touch ID / Face ID availability
-     */
     async checkMacAvailability() {
         try {
-            // macOS uses LAContext via NativeMacPanels or can check via security command
-            const { stderr } = await execAsync('security authentication-available');
-            
-            if (stderr && stderr.includes('Touch ID')) {
+            const { systemPreferences, app } = require('electron');
+            if (systemPreferences && systemPreferences.canPromptTouchID()) {
                 this.isAvailable = true;
                 this.authType = 'touchid';
                 return { available: true, type: 'touchid', message: 'Touch ID available' };
             }
-            
-            // Fallback: try Keychain access
-            const result = await execAsync('security find-generic-password -a "Aartiq" -s "Aartiq-Biometric" -D "Touch ID" /Library/Keychains/System.keychain 2>&1 || echo "Not found"');
-            
-            if (!result.stdout.includes('Not found')) {
-                this.isAvailable = true;
-                this.authType = 'touchid';
-                return { available: true, type: 'touchid', message: 'Touch ID available via Keychain' };
+
+            if (!app.isPackaged && !this._devSigningAttempted) {
+                this._devSigningAttempted = true;
+                console.log('[BiometricAuth] Dev mode: attempting ad-hoc signing for Touch ID...');
+                const signed = await this.ensureDevTouchIDSigning();
+                if (signed && systemPreferences && systemPreferences.canPromptTouchID()) {
+                    this.isAvailable = true;
+                    this.authType = 'touchid';
+                    return { available: true, type: 'touchid', message: 'Touch ID available (dev mode)' };
+                }
             }
-            
-            return { available: true, type: 'password', message: 'Using password fallback' };
+
+            this.isAvailable = false;
+            this.authType = 'none';
+            return { available: false, type: 'none', message: 'Touch ID not configured' };
         } catch (error) {
             return { available: false, type: 'none', message: error.message };
         }
     }
 
-    /**
-     * Windows Hello availability check
-     */
+    async ensureDevTouchIDSigning() {
+        try {
+            const { app } = require('electron');
+            const exePath = app.getPath('exe');
+            const appPath = app.getAppPath();
+
+            const electronApp = path.resolve(exePath, '..', '..', '..');
+            const entitlementsPath = path.join(appPath, 'entitlements.mac.local.plist');
+
+            if (!fs.existsSync(entitlementsPath)) {
+                console.warn('[BiometricAuth] Local entitlements not found at:', entitlementsPath);
+                return false;
+            }
+
+            console.log('[BiometricAuth] Running: codesign --force --sign - --entitlements .../entitlements.mac.local.plist --deep .../Electron.app');
+            await execAsync(`codesign --force --sign - --entitlements "${entitlementsPath}" --deep "${electronApp}"`, { timeout: 30000 });
+            console.log('[BiometricAuth] Dev signing successful');
+            return true;
+        } catch (e) {
+            console.warn('[BiometricAuth] Dev signing failed:', e.message);
+            return false;
+        }
+    }
+
     async checkWindowsAvailability() {
         try {
-            // Check Windows Hello status via PowerShell
             const psCommand = `powershell -Command "Try { Add-Type -AssemblyName 'System.Security'; [Windows.Security.Credentials.PasswordVault]::New() | Out-Null; Write-Output 'Available' } Catch { Write-Output 'NotAvailable' }"`;
             const result = await execAsync(psCommand);
             
@@ -81,7 +88,6 @@ class BiometricAuthManager {
                 return { available: true, type: 'windows-hello', message: 'Windows Hello available' };
             }
             
-            // Additional check for biometric components
             const bioCheck = await execAsync(`powershell -Command "Get-WmiObject -Class Win32_PnPEntity | Where-Object { $_.Present -and $_.Name -match 'Fingerprint|Biometric|Hello' } | Select-Object -First 1 -ExpandProperty Name"`);
             
             if (bioCheck.stdout && bioCheck.stdout.trim().length > 0) {
@@ -96,18 +102,13 @@ class BiometricAuthManager {
         }
     }
 
-    /**
-     * Linux fingerprint availability
-     */
     async checkLinuxAvailability() {
         try {
-            // Check if fprintd is available
             const whichResult = await execAsync('which fprintd');
             if (whichResult.stderr) {
                 return { available: false, type: 'none', message: 'fprintd not installed' };
             }
             
-            // Check if fprintd service is running
             const statusResult = await execAsync('systemctl status fprintd 2>&1 || echo "Not running"');
             
             if (statusResult.stdout.includes('active (running)')) {
@@ -116,10 +117,8 @@ class BiometricAuthManager {
                 return { available: true, type: 'fingerprint', message: 'fprintd running' };
             }
             
-            // Try to start the service
             await execAsync('sudo systemctl start fprintd 2>&1 || echo "Failed"');
             
-            // Check if devices are available
             const listResult = await execAsync('fprintd-list 2>&1 || echo "No devices"');
             
             if (!listResult.stdout.includes('No devices') && !listResult.stdout.includes('error')) {
@@ -134,10 +133,6 @@ class BiometricAuthManager {
         }
     }
 
-    /**
-     * Authenticate using biometric
-     * Returns true if authentication successful, false otherwise
-     */
     async authenticate(reason = 'Authenticate to proceed') {
         const check = await this.checkAvailability();
         
@@ -157,81 +152,84 @@ class BiometricAuthManager {
         return { success: false, error: 'Unsupported platform' };
     }
 
-    /**
-     * macOS biometric authentication (Touch ID)
-     */
     async authenticateMac(reason) {
         try {
-            // Use AppleScript for Touch ID authentication
-            const script = `
-                use framework "LocalAuthentication"
-                set context to current application's LAContext's new()
-                set theError to context's、生物測定利用可能()
-                if theError is equal to missing value then
-                    set theResult to context's evaluatePolicy:"LAPolicyDeviceOwnerAuthenticationWithBiometrics"() argument:["${reason}"]
-                    return theResult as boolean
-                else
-                    return false
-                end if
-            `;
-            
-            // Simple fallback: use osascript
-            const result = await execAsync(`osascript -e 'do shell script "echo authenticate" with administrator privileges' 2>&1`);
-            
+            const { systemPreferences } = require('electron');
+            if (systemPreferences) {
+                await systemPreferences.promptTouchID(reason || 'Authenticate to proceed');
+                return { success: true, method: 'touchid', message: 'Touch ID verified' };
+            }
+        } catch (e) {
+            if (e.message?.toLowerCase().includes('cancel')) {
+                return { success: false, error: 'Authentication cancelled' };
+            }
+            console.warn('[BiometricAuth] Touch ID failed, trying password fallback:', e.message);
+        }
+
+        try {
+            const result = await execAsync(`osascript -e 'do shell script "echo authenticated" with administrator privileges' 2>&1`);
             if (result.stderr && result.stderr.includes('User canceled')) {
                 return { success: false, error: 'Authentication cancelled' };
             }
-            
             return { success: true, method: 'password', message: 'Authenticated via password fallback' };
         } catch (error) {
             return { success: false, error: error.message };
         }
     }
 
-    /**
-     * Windows Hello authentication
-     */
     async authenticateWindows(reason) {
+        const tmpScript = path.join(os.tmpdir(), `aartiq-auth-${Date.now()}.ps1`);
         try {
-            // Use PowerShell to invoke Windows Hello credential prompt
             const psScript = `
-                Add-Type -AssemblyName System.Runtime.WindowsRuntime
-                $asyncOp = [Windows.Security.Credentials.PasswordVault]::Retrieve("Aartiq", "biometric-auth")
-                if ($asyncOp) {
-                    Write-Output "Authenticated"
-                } else {
-                    # Fallback to Windows Credential UI
-                    $cred = Get-Credential -UserName "Aartiq" -Message "${reason}"
-                    if ($cred) {
-                        Write-Output "Authenticated"
-                    } else {
-                        Write-Error "Authentication failed"
-                    }
-                }
-            `;
-            
-            // Simple fallback: use runas with credential
-            const result = await execAsync(`powershell -Command "Start-Process cmd.exe -Verb RunAs" 2>&1`);
-            
-            return { success: true, method: 'credential', message: 'Windows credential prompt shown' };
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+$picker = [Windows.Security.Credentials.UI.CredentialPicker,Windows.Security.Credentials.UI.CredentialPicker,ContentType=WindowsRuntime]
+$opts = New-Object Windows.Security.Credentials.UI.CredentialPickerOptions
+$opts.Caption = "Aartiq"
+$opts.Message = "${reason.replace(/"/g, '`"')}"
+$opts.TargetName = "Aartiq"
+$opts.AuthenticationProtocol = [Windows.Security.Credentials.UI.AuthenticationProtocol]::Basic
+$opts.CallerSavesCredential = $false
+try {
+    $result = [Windows.Security.Credentials.UI.CredentialPicker]::PickAsync($opts).GetAwaiter().GetResult()
+    if ($result.ErrorCode -eq 0) { Write-Output "OK" } else { Write-Output "NO" }
+} catch {
+    Write-Output "NO"
+}
+`;
+            fs.writeFileSync(tmpScript, psScript, 'utf8');
+            const result = await execAsync(`powershell -NoProfile -File "${tmpScript}"`, { timeout: 60000 });
+
+            if (result.stdout?.includes('OK')) {
+                return { success: true, method: 'windows-hello', message: 'Windows Hello verified' };
+            }
+
+            const fallbackScript = `
+$cred = Get-Credential -UserName "Aartiq User" -Message "${reason.replace(/"/g, '`"')}"
+if ($cred) { Write-Output "OK" } else { Write-Output "NO" }
+`;
+            const fbPath = tmpScript.replace('.ps1', '-fb.ps1');
+            fs.writeFileSync(fbPath, fallbackScript, 'utf8');
+            const fbResult = await execAsync(`powershell -NoProfile -File "${fbPath}"`, { timeout: 60000 });
+            if (fbResult.stdout?.includes('OK')) {
+                return { success: true, method: 'credential', message: 'Windows credential verified' };
+            }
+            return { success: false, error: 'Authentication cancelled' };
         } catch (error) {
             return { success: false, error: error.message };
+        } finally {
+            try { if (fs.existsSync(tmpScript)) fs.unlinkSync(tmpScript); } catch {}
+            try { const fb = tmpScript.replace('.ps1', '-fb.ps1'); if (fs.existsSync(fb)) fs.unlinkSync(fb); } catch {}
         }
     }
 
-    /**
-     * Linux PAM fingerprint authentication
-     */
     async authenticateLinux(reason) {
         try {
-            // Use fprintd-inspect or PAM conversation
             const result = await execAsync(`echo "" | fprintd-verify 2>&1`);
             
             if (result.stderr && (result.stderr.includes('successfully') || result.stderr.includes('verify-success'))) {
                 return { success: true, method: 'fingerprint', message: 'Fingerprint verified' };
             }
             
-            // Fallback: prompt for password
             console.log('[BiometricAuth] Fingerprint failed, prompting for password');
             return { success: true, method: 'fallback', message: 'Password authentication' };
         } catch (error) {
@@ -239,9 +237,6 @@ class BiometricAuthManager {
         }
     }
 
-    /**
-     * Quick biometric check without full authentication (for checking availability)
-     */
     async quickCheck() {
         const availability = await this.checkAvailability();
         return {
@@ -253,24 +248,16 @@ class BiometricAuthManager {
     }
 }
 
-/**
- * Cross-platform biometric authentication interface for high-risk actions
- */
 class CrossPlatformBiometricAuth {
     constructor() {
         this.authManager = new BiometricAuthManager();
     }
 
-    /**
-     * Enforce biometric authentication for critical action
-     * Critical actions: restart, shutdown, delete, execute dangerous shell
-     */
     async requireAuth(action, reason) {
         const check = await this.authManager.quickCheck();
         
         console.log(`[CrossPlatformAuth] ${action} requested - Checking biometric auth (${check.type})`);
         
-        // If biometric is available, require authentication
         if (check.available && check.type !== 'none') {
             const result = await this.authManager.authenticate(reason);
             if (!result.success) {
@@ -278,29 +265,21 @@ class CrossPlatformBiometricAuth {
             }
             return result;
         } else {
-            // If no biometric, show warning but allow with explicit user confirmation
             console.warn('[CrossPlatformAuth] No biometric available - using fallback');
             return { success: true, method: 'fallback', warning: 'Using password fallback' };
         }
     }
 
-    /**
-     * Execute critical action with biometric protection
-     * Action chain format: [{ type: 'restart' }, { type: 'open-url', url: '...' }]
-     */
     async executeWithAuth(actions, reason = 'Execute critical action') {
         const results = [];
         
-        // Check if all actions are critical
         const criticalActions = ['restart', 'shutdown', 'lock', 'delete', 'execute'];
         const isCriticalChain = actions.every(a => criticalActions.includes(a.type));
         
         if (isCriticalChain) {
-            // Require authentication once for the entire chain
             await this.requireAuth('critical-chain', reason);
         }
         
-        // Execute each action
         for (const action of actions) {
             let result;
             
@@ -346,7 +325,6 @@ class CrossPlatformBiometricAuth {
             
             results.push(result);
             
-            // If action failed and it's critical, stop execution
             if (!result.success && result.error) {
                 console.error('[CrossPlatformAuth] Action failed:', result.error);
             }
@@ -356,5 +334,4 @@ class CrossPlatformBiometricAuth {
     }
 }
 
-// Export for use in main.js
 module.exports = { BiometricAuthManager, CrossPlatformBiometricAuth };

@@ -196,7 +196,7 @@ const LOW_RISK_COMMANDS = new Set([
 ]);
 
 const MEDIUM_RISK_COMMANDS_SET = new Set([
-  'cp', 'mv', 'mkdir', 'touch', 'rm', 'rmdir', 'ln', 'tar', 'unzip', 'zip',
+  'cp', 'mv', 'mkdir', 'touch', 'rmdir', 'ln', 'tar', 'unzip', 'zip',
   'git', 'npm', 'npx', 'node', 'python', 'python3', 'pip', 'pip3',
   'ruby', 'perl', 'php', 'curl', 'wget', 'ssh', 'scp', 'rsync',
   'open', 'xdg-open', 'gnome-open', 'kde-open',
@@ -206,7 +206,7 @@ const MEDIUM_RISK_COMMANDS_SET = new Set([
 ]);
 
 const HIGH_RISK_COMMANDS_SET = new Set([
-  'sudo', 'su', 'del', 'format', 'fdisk', 'mkfs', 'dd',
+  'sudo', 'su', 'del', 'rm', 'format', 'fdisk', 'mkfs', 'dd',
   'reboot', 'shutdown', 'halt', 'init', 'poweroff',
   'systemctl', 'launchctl', 'kill', 'killall', 'pkill',
   'iptables', 'ufw', 'firewall-cmd', 'mount', 'umount', 'eject',

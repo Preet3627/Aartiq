@@ -315,7 +315,7 @@ ipcMain.handle('apple-intelligence-genmoji', async (event, { prompt } = {}) => {
 // ============================================================================
 // SIRI & SHORTCUTS INTEGRATION
 // ============================================================================
-const { setupSiriShortcutsHandlers, registerURLScheme, handleURLSchemeEvent, executeShortcutAction, speakWithSiri } = require('./src/lib/SiriShortcutsIntegration.js');
+const { setupSiriShortcutsHandlers, setupShortcutsCLIHandlers, registerURLScheme, handleURLSchemeEvent, executeShortcutAction, speakWithSiri } = require('./src/lib/SiriShortcutsIntegration.js');
 const { setupVoiceInputHandler, speakText: voiceSpeak, listenForVoiceInput: voiceListen, getVoiceList: voiceGetVoices, parseVoiceCommand: voiceParseCommand } = require('./src/lib/voice-input-handler.js');
 const { executeAppleScriptCommand: runAppleScript, speakText: scriptSpeak, listenForSpeech: scriptListen, getAvailableVoices: scriptGetVoices } = require('./src/lib/apple-script-bridge.js');
 const { raycastIntegration, RAYCAST_SCHEMA } = require('./src/lib/raycast-integration.js');
@@ -331,6 +331,7 @@ ipcMain.handle('raycast:get-manifest', async () => {
 const COMET_URL_SCHEME = 'aartiq';
 
 setupSiriShortcutsHandlers();
+setupShortcutsCLIHandlers();
 setupVoiceInputHandler();
 
 registerURLScheme();
@@ -354,11 +355,11 @@ ipcMain.handle('automation:enable-cli', async () => {
   
   try {
     if (platform === 'darwin') {
-      const destPath = '/usr/local/bin/comet';
+      const destPath = '/usr/local/bin/aartiq';
       const command = `ln -sf "${cliPath}" "${destPath}"`;
       try {
         await execAsync(command);
-        return { success: true, message: 'CLI enabled at /usr/local/bin/comet' };
+        return { success: true, message: 'CLI enabled at /usr/local/bin/aartiq' };
       } catch (e) {
         const sudoCommand = `osascript -e 'do shell script "ln -sf \\"${cliPath}\\" \\"${destPath}\\"" with administrator privileges'`;
         await execAsync(sudoCommand);
@@ -366,7 +367,7 @@ ipcMain.handle('automation:enable-cli', async () => {
       }
     } else if (platform === 'linux') {
       const userBinDir = path.join(os.homedir(), '.local', 'bin');
-      const destPath = path.join(userBinDir, 'comet');
+      const destPath = path.join(userBinDir, 'aartiq');
       try {
         if (!fs.existsSync(userBinDir)) {
           fs.mkdirSync(userBinDir, { recursive: true });
@@ -375,14 +376,14 @@ ipcMain.handle('automation:enable-cli', async () => {
         return { success: true, message: `CLI enabled at ${destPath} (ensure ~/.local/bin is in your PATH)` };
       } catch (e) {
         // Try /usr/local/bin with sudo via pkexec
-        const systemPath = '/usr/local/bin/comet';
+        const systemPath = '/usr/local/bin/aartiq';
         await execAsync(`pkexec ln -sf "${cliPath}" "${systemPath}"`);
-        return { success: true, message: 'CLI enabled at /usr/local/bin/comet' };
+        return { success: true, message: 'CLI enabled at /usr/local/bin/aartiq' };
       }
     } else if (platform === 'win32') {
-      const userBinDir = path.join(os.homedir(), 'AppData', 'Local', 'CometAI', 'bin');
-      const destPath = path.join(userBinDir, 'comet.cmd');
-      const psPath = path.join(userBinDir, 'comet.ps1');
+      const userBinDir = path.join(os.homedir(), 'AppData', 'Local', 'Aartiq', 'bin');
+      const destPath = path.join(userBinDir, 'aartiq.cmd');
+      const psPath = path.join(userBinDir, 'aartiq.ps1');
       
       if (!fs.existsSync(userBinDir)) {
         fs.mkdirSync(userBinDir, { recursive: true });
@@ -410,6 +411,73 @@ ipcMain.handle('automation:enable-cli', async () => {
     return { success: false, error: 'Platform not supported for auto-CLI' };
   } catch (error) {
     console.error('[CLI] Activation failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('automation:check-cli-status', async () => {
+  const platform = process.platform;
+  let cliPath;
+  if (platform === 'darwin') {
+    cliPath = '/usr/local/bin/aartiq';
+  } else if (platform === 'linux') {
+    cliPath = path.join(os.homedir(), '.local', 'bin', 'aartiq');
+    if (!fs.existsSync(cliPath)) {
+      cliPath = '/usr/local/bin/aartiq';
+    }
+  } else if (platform === 'win32') {
+    cliPath = path.join(os.homedir(), 'AppData', 'Local', 'Aartiq', 'bin', 'aartiq.cmd');
+  }
+  const exists = cliPath ? fs.existsSync(cliPath) : false;
+  let isSymlink = false;
+  if (exists && cliPath) {
+    try { isSymlink = fs.lstatSync(cliPath).isSymbolicLink(); } catch (_) {}
+  }
+  const commandExists = exists && cliPath && (platform !== 'darwin' || isSymlink);
+  return { enabled: commandExists, path: cliPath || '', platform };
+});
+
+ipcMain.handle('automation:disable-cli', async () => {
+  const { exec } = require('child_process');
+  const { promisify } = require('util');
+  const execAsync = promisify(exec);
+  const platform = process.platform;
+
+  try {
+    if (platform === 'darwin') {
+      const destPath = '/usr/local/bin/aartiq';
+      if (fs.existsSync(destPath)) {
+        try {
+          fs.unlinkSync(destPath);
+        } catch (_) {
+          const sudoCommand = `osascript -e 'do shell script "rm -f \\"${destPath}\\"" with administrator privileges'`;
+          await execAsync(sudoCommand);
+        }
+      }
+      return { success: true, message: 'CLI disabled' };
+    } else if (platform === 'linux') {
+      const paths = [
+        path.join(os.homedir(), '.local', 'bin', 'aartiq'),
+        '/usr/local/bin/aartiq'
+      ];
+      for (const p of paths) {
+        if (fs.existsSync(p)) {
+          try { fs.unlinkSync(p); } catch (_) {
+            await execAsync(`pkexec rm -f "${p}"`);
+          }
+        }
+      }
+      return { success: true, message: 'CLI disabled' };
+    } else if (platform === 'win32') {
+      const userBinDir = path.join(os.homedir(), 'AppData', 'Local', 'Aartiq', 'bin');
+      const destPath = path.join(userBinDir, 'aartiq.cmd');
+      const psPath = path.join(userBinDir, 'aartiq.ps1');
+      if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+      if (fs.existsSync(psPath)) fs.unlinkSync(psPath);
+      return { success: true, message: 'CLI disabled' };
+    }
+    return { success: false, error: 'Platform not supported' };
+  } catch (error) {
     return { success: false, error: error.message };
   }
 });
@@ -1042,6 +1110,36 @@ const startNativeMacUiBridge = () => {
       }
       setMacNativeUiPreferences(updates);
       res.json({ applied: true, preferences: getMacNativeUiPreferences() });
+    });
+
+    // ── CLI endpoints (used by `aartiq` CLI) ──
+
+    bridgeApp.post('/native-mac-ui/cli/ask', async (req, res) => {
+      const { prompt, model, sessionId } = req.body || {};
+      if (!prompt) return res.status(401).json({ error: 'Missing prompt' });
+
+      const messages = [
+        { role: 'system', content: 'You are a helpful assistant. Respond to the user\'s questions concisely and directly. Do NOT use any tools, action commands, or special formatting. Just provide a plain text response.' },
+        { role: 'user', content: prompt }
+      ];
+      const options = { provider: model || activeLlmProvider || 'ollama', skipTools: true };
+      const result = await llmGenerateHandler(messages, options);
+      if (result.error) return res.json({ error: result.error });
+
+      deliverNativeMacUiEvent('cli-ask-response', { prompt, response: result.text, sessionId });
+      res.json({ text: result.text || '' });
+    });
+
+    bridgeApp.post('/native-mac-ui/cli/search', async (req, res) => {
+      const { query } = req.body || {};
+      if (!query) return res.status(401).json({ error: 'Missing query' });
+      const messages = [
+        { role: 'system', content: 'You are a helpful assistant. Respond directly to search queries without using any tools or special formatting.' },
+        { role: 'user', content: `Search the web for: ${query}` }
+      ];
+      const result = await llmGenerateHandler(messages, { provider: activeLlmProvider || 'google', skipTools: true });
+      if (result.error) return res.json({ error: result.error });
+      res.json({ results: [{ title: 'Search Result', url: '', snippet: result.text || '' }] });
     });
 
     nativeMacUiBridgeServer = bridgeApp.listen(nativeMacUiPort, '127.0.0.1', () => {
@@ -1772,7 +1870,7 @@ const PDF_TEMPLATES = {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', sans-serif; line-height: 1.8; color: #111827; background: #f8fafc; padding: 32px 42px; min-height: 100vh; overflow-x: hidden; }
+    body { font-family: 'Inter', sans-serif; line-height: 1.8; color: #111827; background: #f8fafc; padding: 32px 42px 50px; min-height: 100vh; overflow-x: hidden; }
     .cover { position: relative; background: linear-gradient(160deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%); color: #e5f3ff; padding: 60px 50px; box-shadow: 0 20px 60px rgba(0,0,0,0.35); overflow: hidden; min-height: 88vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; page-break-after: always; }
     .cover::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, rgba(56,189,248,0.25) 0%, transparent 60%); pointer-events: none; }
     .cover::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 80% 85%, rgba(129,140,248,0.15), transparent 40%); pointer-events: none; }
@@ -1785,18 +1883,18 @@ const PDF_TEMPLATES = {
     h1 { font-family: 'Outfit', sans-serif; color: #ffffff; font-size: 2.6rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; margin: 0 0 12px; word-wrap: break-word; }
     .subtitle { color: #94a3b8; font-size: 1.1rem; font-weight: 500; }
     .cover-meta { display: flex; gap: 30px; justify-content: center; z-index: 1; flex-wrap: wrap; }
-    .meta-pill { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 12px 20px; color: #e0f2fe; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+    .meta-pill { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 12px 20px; color: #e0f2fe; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; align-items: center; }
     .meta-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.18em; color: #38bdf8; font-weight: 700; }
     .page-content { background: #ffffff; padding: 30px 32px; margin-top: 0; position: relative; z-index: 1; }
     .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; justify-content: center; }
-    .tag { background: rgba(56, 189, 248, 0.14); color: #0ea5e9; padding: 5px 12px; border-radius: 18px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+    .tag { background: rgba(56, 189, 248, 0.14); color: #0ea5e9; padding: 5px 12px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
     .content { font-size: 1rem; line-height: 1.82; width: 100%; color: #111827; }
     .content h2 { margin: 32px 0 18px; color: #0f172a; font-family: 'Outfit', sans-serif; font-size: 1.55rem; font-weight: 800; border-left: 6px solid #38bdf8; padding-left: 14px; word-wrap: break-word; }
     .content h3 { margin: 26px 0 14px; color: #1f2937; font-family: 'Outfit', sans-serif; font-size: 1.18rem; font-weight: 700; }
     .content p { margin-bottom: 22px; text-align: left; word-wrap: break-word; font-size: 1.05rem; }
     .content ul, .content ol { margin: 12px 0 22px 28px; }
     .content li { margin-bottom: 12px; }
-    .table-wrapper { width: 100%; overflow: hidden; margin: 26px 0; border-radius: 14px; box-shadow: 0 6px 22px rgba(0,0,0,0.08); border: 1px solid #e5e7eb; }
+    .table-wrapper { width: 100%; overflow: hidden; margin: 26px 0; box-shadow: 0 6px 22px rgba(0,0,0,0.08); border: 1px solid #e5e7eb; }
     table { width: 100%; border-collapse: collapse; background: white; table-layout: auto; }
     thead { display: table-header-group; background: #0f172a; }
     tbody { display: table-row-group; }
@@ -1805,17 +1903,17 @@ const PDF_TEMPLATES = {
     td { padding: 16px 20px; border-bottom: 1px solid #e5e7eb; font-size: 0.95rem; word-break: break-word; }
     tr:last-child td { border-bottom: none; }
     tr:nth-child(even) td { background: #fcfdfe; }
-    hr { border: none; height: 3px; background: linear-gradient(to right, #38bdf8, transparent); margin: 40px 0; border-radius: 4px; }
-    pre { background: #0f172a; color: #e2e8f0; padding: 24px; border-radius: 14px; font-family: 'JetBrains Mono', monospace; overflow-x: auto; margin: 24px 0; font-size: 0.95rem; line-height: 1.7; border: 1px solid #1e293b; word-wrap: break-word; white-space: pre-wrap; page-break-inside: avoid; }
-    code { background: #f1f5f9; padding: 2px 8px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.88em; color: #0ea5e9; word-break: break-all; }
+    hr { border: none; height: 3px; background: linear-gradient(to right, #38bdf8, transparent); margin: 40px 0; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 24px; font-family: 'JetBrains Mono', monospace; overflow-x: auto; margin: 24px 0; font-size: 0.95rem; line-height: 1.7; border: 1px solid #1e293b; word-wrap: break-word; white-space: pre-wrap; page-break-inside: avoid; }
+    code { background: #f1f5f9; padding: 2px 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.88em; color: #0ea5e9; word-break: break-all; }
     pre code { background: none; padding: 0; color: inherit; }
-    blockquote { border-left: 8px solid #38bdf8; padding: 22px 28px; background: linear-gradient(135deg, #f0f9ff 0%, #e1effe 100%); border-radius: 0 16px 16px 0; color: #1e293b; margin: 26px 0; font-style: italic; font-size: 1.05rem; }
-    figure, img { max-width: 100%; border-radius: 16px; margin: 26px 0; box-shadow: 0 12px 36px rgba(0,0,0,0.15); page-break-inside: avoid; display: block; margin-left: auto; margin-right: auto; }
-    .footer { margin-top: 46px; padding-top: 22px; border-top: 2px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    blockquote { border-left: 8px solid #38bdf8; padding: 22px 28px; background: linear-gradient(135deg, #f0f9ff 0%, #e1effe 100%); color: #1e293b; margin: 26px 0; font-style: italic; font-size: 1.05rem; }
+    figure, img { max-width: 100%; margin: 26px 0; box-shadow: 0 12px 36px rgba(0,0,0,0.15); page-break-inside: avoid; display: block; margin-left: auto; margin-right: auto; }
+    .footer { margin-top: 46px; padding: 22px 0 20px; border-top: 2px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
     .footer-left { font-size: 0.78rem; color: #6b7280; }
     .footer-center { text-align: center; }
     .footer-right { text-align: right; font-size: 0.82rem; color: #0ea5e9; font-weight: 700; }
-    @page { margin: 14mm 14mm 16mm 14mm; size: A4; }
+    @page { margin: 14mm 14mm 22mm 14mm; size: A4; }
     @page first { margin: 0 0 0 0; }
     .cover { page-break-after: always; page-rule-first: always; }
   </style>
@@ -1825,7 +1923,7 @@ const PDF_TEMPLATES = {
   <section class="cover">
     <div class="cover-center">
       <div class="brand-icon">
-        ${iconBase64 ? `<img src="data:${iconMimeType};base64,${iconBase64}" alt="Aartiq" style="width:100px;height:100px;object-fit:contain;border-radius:20px;box-shadow:0 12px 40px rgba(56,189,248,0.4);"/>` : '<span style="font-size:4rem">🌠</span>'}
+        ${iconBase64 ? `<img src="data:${iconMimeType};base64,${iconBase64}" alt="Aartiq" style="width:100px;height:100px;object-fit:contain;box-shadow:0 12px 40px rgba(56,189,248,0.4);"/>` : '<span style="font-size:4rem">🌠</span>'}
       </div>
       <div class="brand-name">Aartiq<span>AI</span></div>
       <div class="brand-tagline">Premium AI Browser</div>
@@ -1847,7 +1945,7 @@ const PDF_TEMPLATES = {
   
   <div class="footer">
     <div class="footer-left">&copy; ${new Date().getFullYear()} Aartiq Browser</div>
-    <div class="footer-center">${iconBase64 ? `<img src="data:${iconMimeType};base64,${iconBase64}" alt="" style="width:24px;height:24px;object-fit:contain;border-radius:4px;"/>` : '🌠'}</div>
+    <div class="footer-center">${iconBase64 ? `<img src="data:${iconMimeType};base64,${iconBase64}" alt="" style="width:24px;height:24px;object-fit:contain;"/>` : '🌠'}</div>
     <div class="footer-right">AI Generated</div>
   </div>
 </body>
@@ -1876,12 +1974,12 @@ const PDF_TEMPLATES = {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600;700&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Inter', sans-serif; line-height: 1.7; color: #1a1a2e; background: #ffffff; padding: 50px 60px; }
+    body { font-family: 'Inter', sans-serif; line-height: 1.7; color: #1a1a2e; background: #ffffff; padding: 50px 60px 60px; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 60px; padding-bottom: 30px; border-bottom: 1px solid #e5e7eb; }
     .brand { display: flex; align-items: center; gap: 12px; }
     .brand-text { font-family: 'Playfair Display', serif; font-weight: 900; font-size: 1.6rem; color: #1a1a2e; }
     .brand-text span { color: #4f46e5; }
-    .priority-badge { padding: 8px 20px; border-radius: 25px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; background: ${priorityColor}15; color: ${priorityColor}; border: 2px solid ${priorityColor}; }
+    .priority-badge { padding: 8px 20px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.15em; background: ${priorityColor}15; color: ${priorityColor}; border: 2px solid ${priorityColor}; }
     h1 { font-family: 'Playfair Display', serif; font-size: 2.8rem; font-weight: 900; color: #1a1a2e; line-height: 1.1; margin-bottom: 30px; letter-spacing: -0.02em; word-wrap: break-word; }
     .meta-bar { display: flex; flex-wrap: wrap; gap: 30px; padding: 20px 0; margin-bottom: 40px; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
     .meta-item { display: flex; flex-direction: column; gap: 4px; min-width: 100px; }
@@ -1891,17 +1989,17 @@ const PDF_TEMPLATES = {
     .content h2 { margin: 40px 0 20px; font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 700; color: #4f46e5; }
     .content h3 { margin: 30px 0 15px; font-size: 1.2rem; font-weight: 700; color: #1a1a2e; }
     .content p { margin-bottom: 22px; word-wrap: break-word; font-size: 1.05rem; }
-    .table-wrapper { width: 100%; overflow: hidden; margin: 30px 0; border-radius: 12px; border: 1px solid #e5e7eb; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+    .table-wrapper { width: 100%; overflow: hidden; margin: 30px 0; border: 1px solid #e5e7eb; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
     table { width: 100%; border-collapse: collapse; background: white; table-layout: auto; }
     thead { display: table-header-group; background: #4f46e5; }
     th { color: white; padding: 16px 20px; text-align: left; font-weight: 600; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; }
     td { padding: 14px 20px; border-bottom: 1px solid #e5e7eb; font-size: 0.95rem; word-break: break-word; }
     tr:nth-child(even) td { background: #fcfdfe; }
-    blockquote { border-left: 6px solid #4f46e5; padding: 22px 28px; background: #f9fafb; margin: 26px 0; font-style: italic; border-radius: 0 12px 12px 0; }
-    .footer { margin-top: 60px; padding-top: 25px; border-top: 2px solid #1a1a2e; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
+    blockquote { border-left: 6px solid #4f46e5; padding: 22px 28px; background: #f9fafb; margin: 26px 0; font-style: italic; }
+    .footer { margin-top: 60px; padding: 25px 0 20px; border-top: 2px solid #1a1a2e; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; }
     .footer-text { font-size: 0.75rem; color: #6b7280; }
     .confidential { font-size: 0.8rem; font-weight: 700; color: #4f46e5; text-transform: uppercase; letter-spacing: 0.1em; }
-    @page { margin: 12mm; size: A4; }
+    @page { margin: 12mm 12mm 22mm; size: A4; }
   </style>
 </head>
 <body>
@@ -1943,7 +2041,7 @@ const PDF_TEMPLATES = {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700;900&family=Source+Sans+3:wght@400;600;700&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Source Sans 3', sans-serif; line-height: 1.8; color: #333333; background: #ffffff; padding: 50px 60px; min-height: 100vh; overflow-x: hidden; }
+    body { font-family: 'Source Sans 3', sans-serif; line-height: 1.8; color: #333333; background: #ffffff; padding: 50px 60px 60px; min-height: 100vh; overflow-x: hidden; }
     /* Watermark that works with Electron printToPDF */
     .watermark-container { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; overflow: hidden; z-index: 9999; }
     .watermark { position: absolute; top: 50%; left: 50%; width: 200%; height: 200%; text-align: center; vertical-align: middle; line-height: 200px; transform: translate(-50%, -50%) rotate(-45deg); font-size: 60px; color: rgba(0,0,0,0.015); font-weight: 900; white-space: nowrap; font-family: 'Merriweather', serif; pointer-events: none; }
@@ -1973,8 +2071,8 @@ const PDF_TEMPLATES = {
     .references { margin-top: 50px; padding-top: 25px; border-top: 2px solid #333; }
     .references h2 { border: none; margin-bottom: 25px; }
     .ref-item { margin-bottom: 12px; font-size: 0.9rem; text-indent: -30px; padding-left: 30px; }
-    .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; font-size: 0.8rem; color: #666; }
-    @page { margin: 15mm; size: A4; }
+    .footer { margin-top: 50px; padding: 20px 0 30px; border-top: 1px solid #ddd; text-align: center; font-size: 0.8rem; color: #666; }
+    @page { margin: 15mm 15mm 22mm; size: A4; }
   </style>
 </head>
 <body>
@@ -2015,7 +2113,7 @@ const PDF_TEMPLATES = {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Space Grotesk', sans-serif; line-height: 1.8; color: #111; background: ${bgColor}; padding: 60px 60px; min-height: 100vh; overflow-x: hidden; max-width: 800px; margin: 0 auto; }
+    body { font-family: 'Space Grotesk', sans-serif; line-height: 1.8; color: #111; background: ${bgColor}; padding: 60px 60px 80px; min-height: 100vh; overflow-x: hidden; max-width: 800px; margin: 0 auto; }
     /* Watermark that works with Electron printToPDF */
     .watermark-container { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; overflow: hidden; z-index: 9999; }
     .watermark { position: absolute; top: 50%; left: 50%; width: 200%; height: 200%; text-align: center; vertical-align: middle; line-height: 200px; transform: translate(-50%, -50%) rotate(-45deg); font-size: 70px; color: rgba(0,0,0,0.01); font-weight: 700; white-space: nowrap; font-family: 'Space Grotesk', sans-serif; pointer-events: none; }
@@ -2036,8 +2134,8 @@ const PDF_TEMPLATES = {
     th { color: white; padding: 14px 18px; text-align: left; font-weight: 600; font-size: 0.85rem; }
     td { padding: 12px 18px; border-bottom: 1px solid #eee; font-size: 0.92rem; }
     blockquote { border-left: 3px solid #111; padding-left: 20px; margin: 25px 0; font-style: italic; opacity: 0.8; }
-    .footer { margin-top: 60px; padding-top: 25px; border-top: 1px solid #eee; font-size: 0.75rem; opacity: 0.5; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-    @page { margin: 15mm; size: A4; }
+    .footer { margin-top: 60px; padding: 25px 0 20px; border-top: 1px solid #eee; font-size: 0.75rem; opacity: 0.5; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+    @page { margin: 15mm 15mm 22mm; size: A4; }
   </style>
 </head>
 <body>
@@ -2066,7 +2164,7 @@ const PDF_TEMPLATES = {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&family=Share+Tech+Mono&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Oxanium', sans-serif; line-height: 1.8; color: #e0e0e0; background: ${bgColor}; padding: 50px 60px; min-height: 100vh; overflow-x: hidden; }
+    body { font-family: 'Oxanium', sans-serif; line-height: 1.8; color: #e0e0e0; background: ${bgColor}; padding: 50px 60px 70px; min-height: 100vh; overflow-x: hidden; }
     /* Watermark that works with Electron printToPDF - uses opacity for dark mode */
     .watermark-container { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; overflow: hidden; z-index: 9999; }
     .watermark { position: absolute; top: 50%; left: 50%; width: 200%; height: 200%; text-align: center; vertical-align: middle; line-height: 200px; transform: translate(-50%, -50%) rotate(-45deg); font-size: 80px; color: rgba(255,255,255,0.015); font-weight: 700; white-space: nowrap; font-family: 'Oxanium', sans-serif; pointer-events: none; }
@@ -2075,9 +2173,9 @@ const PDF_TEMPLATES = {
     .brand { display: flex; align-items: center; gap: 15px; }
     .brand-name { font-weight: 700; font-size: 1.4rem; color: #22d3ee; }
     .brand-name span { color: #e0e0e0; }
-    .category { background: #22d3ee20; color: #22d3ee; padding: 6px 14px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; border: 1px solid #22d3ee40; }
+    .category { background: #22d3ee20; color: #22d3ee; padding: 6px 14px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; border: 1px solid #22d3ee40; }
     h1 { font-size: 2.2rem; font-weight: 700; color: #ffffff; line-height: 1.1; margin-bottom: 25px; text-shadow: 0 0 30px rgba(34,211,238,0.3); word-wrap: break-word; }
-    .meta-grid { display: flex; flex-wrap: wrap; gap: 25px; margin-bottom: 35px; padding: 18px; background: #1a1a1a; border-radius: 12px; border: 1px solid #333; }
+    .meta-grid { display: flex; flex-wrap: wrap; gap: 25px; margin-bottom: 35px; padding: 18px; background: #1a1a1a; border: 1px solid #333; }
     .meta-item { display: flex; flex-direction: column; gap: 4px; min-width: 100px; }
     .meta-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.15em; color: #666; font-weight: 600; }
     .meta-value { font-size: 0.9rem; color: #22d3ee; word-break: break-word; }
@@ -2087,17 +2185,17 @@ const PDF_TEMPLATES = {
     .content p { margin-bottom: 24px; word-wrap: break-word; font-size: 1.05rem; }
     .content ul, .content ol { margin: 15px 0 24px 28px; }
     .content li { margin-bottom: 14px; }
-    .table-wrapper { width: 100%; overflow: hidden; margin: 30px 0; border-radius: 12px; border: 1px solid #333; background: #161616; }
+    .table-wrapper { width: 100%; overflow: hidden; margin: 30px 0; border: 1px solid #333; background: #161616; }
     table { width: 100%; border-collapse: collapse; table-layout: auto; }
     thead { display: table-header-group; background: #22d3ee; }
     th { color: #000; padding: 16px 20px; text-align: left; font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; }
     td { padding: 14px 20px; border-bottom: 1px solid #333; font-size: 0.95rem; word-break: break-word; }
     tr:nth-child(even) td { background: #1e1e1e; }
     blockquote { border-left: 4px solid #22d3ee; padding: 18px 25px; background: #1a1a1a; margin: 25px 0; color: #22d3ee; }
-    .accent { background: linear-gradient(135deg, #22d3ee20 0%, #6366f120 100%); padding: 20px; border-radius: 12px; border: 1px solid #22d3ee30; margin: 25px 0; }
-    .footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #666; flex-wrap: wrap; gap: 15px; }
+    .accent { background: linear-gradient(135deg, #22d3ee20 0%, #6366f120 100%); padding: 20px; border: 1px solid #22d3ee30; margin: 25px 0; }
+    .footer { margin-top: 60px; padding: 20px 0 30px; border-top: 1px solid #333; display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #666; flex-wrap: wrap; gap: 15px; }
     .cyber-badge { color: #22d3ee; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
-    @page { margin: 15mm; size: A4; }
+    @page { margin: 15mm 15mm 22mm; size: A4; }
   </style>
 </head>
 <body>
@@ -2764,7 +2862,7 @@ const llmGenerateHandler = async (messages, options = {}) => {
       return llmCache.get(cacheKey);
     }
 
-    const mcpTools = await mcpManager.getTools(permissionStore);
+    const mcpTools = !options.skipTools ? await mcpManager.getTools(permissionStore) : {};
 
     console.log(`[LLM-Generate] Starting generation with model: ${modelInstance.modelId} and ${Object.keys(mcpTools).length} MCP tools.`);
 
@@ -2775,8 +2873,7 @@ const llmGenerateHandler = async (messages, options = {}) => {
       messages: chatMessages,
       temperature: 0.7,
       maxTokens: 8192,
-      tools: mcpTools,
-      maxSteps: 5, // Allow tool usage steps
+      ...(options.skipTools ? {} : { tools: mcpTools, maxSteps: 5 }),
       providerOptions: {
         ...providerOptions,
       }
@@ -4587,7 +4684,6 @@ ipcMain.on('create-view', (event, { tabId, url }) => {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false,
-      partition: 'persist:browserview',
     },
   });
   newView.webContents.setUserAgent(chromeUserAgent);

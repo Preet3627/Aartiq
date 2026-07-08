@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternalApp: (appNameOrPath) => ipcRenderer.invoke('open-external-app', appNameOrPath),
   openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
   searchApplications: (query) => ipcRenderer.invoke('search-applications', query),
+  loadSkill: (skillId) => ipcRenderer.invoke('load-skill', skillId),
   getSuggestions: (query) => ipcRenderer.invoke('get-suggestions', query),
   onAudioStatusChanged: (callback) => {
     const subscription = (event, isPlaying) => callback(isPlaying);
@@ -227,6 +228,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateXLSX: (payload) => ipcRenderer.invoke('generate-xlsx', payload),
   openPDF: (filePath) => ipcRenderer.invoke('open-pdf', filePath),
   openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
+  showItemInFolder: (filePath) => ipcRenderer.invoke('show-item-in-folder', filePath),
   checkPythonAvailable: () => ipcRenderer.invoke('check-python-available'),
 
   // Utils
@@ -564,6 +566,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   runScheduledTask: (taskId) => ipcRenderer.invoke('automation:run-task', taskId),
   getTaskLogs: (date) => ipcRenderer.invoke('automation:get-logs', date),
   enableCLI: () => ipcRenderer.invoke('automation:enable-cli'),
+  checkCLIStatus: () => ipcRenderer.invoke('automation:check-cli-status'),
+  disableCLI: () => ipcRenderer.invoke('automation:disable-cli'),
   getServiceStatus: () => ipcRenderer.invoke('automation:get-service-status'),
   installService: (options) => ipcRenderer.invoke('automation:install-background-service', options),
   uninstallService: (options) => ipcRenderer.invoke('automation:uninstall-background-service', options),
@@ -715,5 +719,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     installGnomeShortcut: (name, action, params) => ipcRenderer.invoke('linux:install-gnome-shortcut', name, action, params),
     createLauncher: () => ipcRenderer.invoke('linux:create-launcher'),
     registerProtocol: () => ipcRenderer.invoke('linux:register-protocol'),
+  },
+
+  // macOS Shortcuts.app CLI bridge (shortcuts list/run/view)
+  shortcuts: {
+    list: () => ipcRenderer.invoke('shortcuts:list'),
+    run: (name, input) => ipcRenderer.invoke('shortcuts:run', name, input),
+    view: (name) => ipcRenderer.invoke('shortcuts:view', name),
   },
 });
