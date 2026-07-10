@@ -2,7 +2,7 @@
 
 **Website:** https://aartiq.vercel.app
 
-An open-source, AI-native browser with permission-gated OS automation.
+Aartiq is an AI-native browser that can browse the web, understand your context, automate desktop tasks, and safely interact with your operating system through permission-gated actions.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blue)]()
