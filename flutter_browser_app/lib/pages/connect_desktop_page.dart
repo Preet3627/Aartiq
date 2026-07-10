@@ -626,6 +626,64 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
                       letterSpacing: 1.5,
                     ),
                   ),
+                  Spacer(),
+                  // Clear all saved devices – useful when stale port data
+                  // causes recurring connection failures.
+                  GestureDetector(
+                    onTap: () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: Color(0xFF121212),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                          title: Text('Clear saved devices?',
+                              style: TextStyle(color: Colors.white)),
+                          content: Text(
+                            'This removes all saved device data (IP, port, trust). '  
+                            'Use this if connections keep failing with wrong port errors.',
+                            style: TextStyle(color: Colors.white60, fontSize: 13),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: Text('Cancel',
+                                  style: TextStyle(color: Colors.white38)),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.redAccent,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10))),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: Text('Clear All',
+                                  style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        await SyncService().forgetAllDevices();
+                        _refreshSavedDevices();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('All saved devices cleared'),
+                              backgroundColor: Colors.orange,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: Text(
+                      'Clear All',
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -639,51 +697,71 @@ class _ConnectDesktopPageState extends State<ConnectDesktopPage> {
                 final bool isTrusted = device['trusted'] == true;
                 final String? savedIp = device['ip'] as String?;
                 final int savedPort = (device['port'] as int?) ?? 3004;
-                return Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15),
-                    child: Material(
-                      color: Colors.white.withOpacity(0.05),
-                      child: ListTile(
-                        onTap: (savedIp != null && savedIp.isNotEmpty)
-                            ? () =>
-                                _connect(savedIp, savedPort, device['deviceId'])
-                            : null,
-                        leading: Container(
-                          padding: EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: isOnline
-                                ? Color(0xFF00E5FF).withOpacity(0.12)
-                                : Colors.white.withOpacity(0.05),
-                            shape: BoxShape.circle,
+                final String deviceId = device['deviceId'] as String? ?? '';
+                return Dismissible(
+                  key: Key(deviceId),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    margin: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    alignment: Alignment.centerRight,
+                    padding: EdgeInsets.only(right: 20),
+                    child: Icon(Icons.delete_outline, color: Colors.white),
+                  ),
+                  confirmDismiss: (_) async {
+                    await SyncService().removeDeviceFromMemory(deviceId);
+                    _refreshSavedDevices();
+                    return false; // list already refreshed via setState
+                  },
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(15),
+                      child: Material(
+                        color: Colors.white.withOpacity(0.05),
+                        child: ListTile(
+                          onTap: (savedIp != null && savedIp.isNotEmpty)
+                              ? () =>
+                                  _connect(savedIp, savedPort, deviceId)
+                              : null,
+                          leading: Container(
+                            padding: EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isOnline
+                                  ? Color(0xFF00E5FF).withOpacity(0.12)
+                                  : Colors.white.withOpacity(0.05),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.desktop_windows,
+                              color:
+                                  isOnline ? Color(0xFF00E5FF) : Colors.white30,
+                            ),
                           ),
-                          child: Icon(
-                            Icons.desktop_windows,
-                            color:
-                                isOnline ? Color(0xFF00E5FF) : Colors.white30,
+                          title: Text(
+                            device['deviceName'] ?? 'Saved Desktop',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        title: Text(
-                          device['deviceName'] ?? 'Saved Desktop',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                          subtitle: Text(
+                            isOnline
+                                ? '${savedIp ?? 'Online'}:$savedPort${isTrusted ? ' • trusted' : ''}'
+                                : '${savedIp != null ? '$savedIp:$savedPort' : 'Offline'}${isTrusted ? ' • trusted' : ''}',
+                            style: TextStyle(
+                              color:
+                                  isOnline ? Colors.greenAccent : Colors.white38,
+                            ),
                           ),
-                        ),
-                        subtitle: Text(
-                          isOnline
-                              ? '${savedIp ?? 'Online'}${isTrusted ? ' • trusted' : ''}'
-                              : 'Offline${isTrusted ? ' • trusted' : ''}',
-                          style: TextStyle(
-                            color:
-                                isOnline ? Colors.greenAccent : Colors.white38,
+                          trailing: Icon(
+                            isOnline ? Icons.chevron_right : Icons.cloud_off,
+                            color: isOnline ? Colors.white24 : Colors.white30,
                           ),
-                        ),
-                        trailing: Icon(
-                          isOnline ? Icons.chevron_right : Icons.cloud_off,
-                          color: isOnline ? Colors.white24 : Colors.white30,
                         ),
                       ),
                     ),

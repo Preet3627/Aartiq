@@ -43,7 +43,7 @@ Unlock the full potential of Aartiq with these curated search & query examples:
 12. **Workspace Management**: "List all my open tabs and summarize them"
 
 ### 🧠 Intelligence & RAG
-*   **Perplexity-Style Answers**: Ask complex questions to your sidebar. Comet scans your current page and retrieves relevant context from your history.
+*   **Perplexity-Style Answers**: Ask complex questions to your sidebar. Aartiq scans your current page and retrieves relevant context from your history.
 *   **Local Vector DB**: Automatically indexes your browsing for offline semantic search.
 *   **Deepseek R1 Integration**: Optimized for the 1.5B model running locally via Ollama.
 *   **OCR & Vision**: Automatic screenshot analysis and text extraction via multi-tier OCR chain (uniOCR → RustO! → Platform Native → Tesseract.js).
@@ -79,7 +79,7 @@ The **AI Analyst Sidebar** is your primary interface for interacting with Aartiq
 ## 🛠️ The Story Behind Aartiq
 Building a browser is considered "impossible" for a solo dev. Doing it on a laggy i3 laptop while studying for high school exams? **Insanity.**
 
-**Comet was born out of frustration.** Modern browsers are RAM hogs that spy on you. I wanted a workspace that:
+**Aartiq was born out of frustration.** Modern browsers are RAM hogs that spy on you. I wanted a workspace that:
 1.  Loads instantly.
 2.  Understands what I'm reading.
 3.  Works offline.
@@ -223,7 +223,7 @@ const Documentation = () => {
                                 </a>
                                 <div className="w-1 h-1 rounded-full bg-white/10" />
                                 <a
-                                    href="https://browser.ponsrischool.in"
+                                    href="https://aartiq-three.vercel.app"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="flex items-center gap-2 text-white/40 hover:text-white transition-colors group"

@@ -17,6 +17,58 @@ export interface ReleaseEntry {
 
 export const releases: ReleaseEntry[] = [
   {
+    version: '0.3.2',
+    date: '2026-07-10',
+    codename: 'Nebula',
+    channel: 'stable',
+    changes: {
+      new: [
+        'Plugin & Extension System — dynamic plugin SDK with manifest-based loading, page analyzer plugin, auto-seed, toggle fix, and handler fixes',
+        'Component Scanner with Code Analysis — extracts imports, interfaces, hooks, exports, and API usage for per-component live documentation',
+        'Agent Skill Cards — modular skill documentation files for automation, browsing, documents, scheduling, security, research, MCP, apple-intelligence, and image generation',
+        'AI User Preference Auto-Learning — AI detects and remembers user preferences (response style, tone, language, behavior) across sessions',
+        'SAVE_PREFERENCE command — AI can persist preferences via SAVE_PREFERENCE:key:value in responses',
+        'Cross-session RAG persistence — past conversations ingested into vector memory and available as RAG context in future sessions',
+        'Biometric per-session tracking — first low-risk shell action triggers Touch ID; subsequent ones auto-approve within the session',
+        'Batch shell command approval — consecutive shell commands in one combined modal with per-command toggles (Select All / Deselect All)',
+        'Irreversible command warnings — red/amber banners for destructive commands (rm -rf, dd, mkfs, etc.) before approval',
+        'macOS Siri Shortcuts bridge — native Swift binary exposes Aartiq AI commands to Siri and Apple Shortcuts',
+        'AES-256-GCM vault encryption with native keychain backup (macOS/Windows/Linux)',
+      ],
+      fix: [
+        'Fixed TypeScript type error in SchedulingIntentDetector (extracted cast to any)',
+        'Fixed bare return statements in automation tests (replaced with this.skip())',
+        'Fixed model/provider selection not persisting across restarts — llm-set-active-provider and llm-configure-provider handlers now use correct electron-store keys',
+        'Fixed get-stored-api-keys returning wrong data shape — frontend can now restore all provider models on startup',
+        'Fixed extract-page-content race condition with webContents null check retry',
+        'Fixed Shift+Tab bypass — restricted to non-high-risk commands only',
+        'Fixed scheduling task CRUD — update, delete, toggle, run methods added to preload',
+        'Fixed webContents null/destroyed guards in browser-handlers.js IPC handlers',
+        'Fixed build errors — backtick in template literal, electronAPI type scope, ExtensionManager toggle type mismatch',
+      ],
+      change: [
+        'Upgraded Electron to v43.1.0',
+        'Renamed CLI binary from "comet" to "aartiq" in package.json bin field',
+        'Added build-siri-bridge step to all macOS build and dist scripts',
+        'Added RAG IPC handlers (ragIngest, ragRetrieve, ragContext) to preload.js',
+        'Conversations now auto-ingest into BrowserAI vector memory on save for cross-session RAG',
+        'Component scanner enhanced with deep code analysis (imports, interfaces, hooks, exports)',
+        'Removed stale release-optimized workflow',
+      ],
+      docs: [
+        'Updated README with v0.3.2 features — plugin system, component scanner, skill cards',
+        'Updated Landing_Page release notes, search index, and llms.txt for v0.3.2',
+        'Fixed comet-browser → aartiq-browser references in getting-started and contributing docs',
+      ],
+      security: [
+        'Session-scoped biometric authentication — Touch ID required once per session for shell commands',
+        'Batch shell approval modal with per-command granular control',
+        'AES-256-GCM vault for sensitive credential storage with OS keychain backup',
+        'Mobile high-risk approval relay via sync handlers and cloud messages',
+      ]
+    }
+  },
+  {
     version: '0.3.1',
     date: '2026-07-08',
     codename: 'Nebula',
@@ -118,11 +170,11 @@ export const releases: ReleaseEntry[] = [
     channel: 'alpha',
     changes: {
       change: [
-        'Official rebrand from Comet-AI to Aartiq across Landing_Page',
+        'Official rebrand from Aartiq-AI to Aartiq across Landing_Page',
         'Updated all product names, URLs, logos, and branding references',
         'Migrated domain references: browser.ponsrischool.in → aartiq.vercel.app',
-        'Updated deep link schemes: comet-browser:// → aartiq-browser://, comet-ai:// → aartiq://',
-        'Updated API headers: X-Comet-App-Token → X-Aartiq-App-Token',
+        'Updated deep link schemes: aartiq-browser:// → aartiq-browser://, aartiq:// → aartiq://',
+        'Updated API headers: X-Aartiq-App-Token → X-Aartiq-App-Token',
         'Replaced logo from /icon.png to /logo-transparent.png',
         'Added Google Search Console verification tag for aartiq.vercel.app',
         'Expanded SEO keywords and JSON-LD structured data for maximum search visibility',
@@ -344,7 +396,7 @@ export const releases: ReleaseEntry[] = [
         'Modular IPC Handlers: Moved all handlers to src/main/handlers/ modules (14+ modules)',
         'Lazy Service Loading: Services now load on-demand for faster startup',
         'Removed landing page from default startup - app now opens directly to browser',
-        'Added Sidebar Version selector to macOS menu (Comet > Sidebar Version)',
+        'Added Sidebar Version selector to macOS menu (Aartiq > Sidebar Version)',
         'Added Sidebar Version toggle in settings panel'
       ],
       docs: [

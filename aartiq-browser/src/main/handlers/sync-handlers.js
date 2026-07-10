@@ -157,6 +157,19 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
 
   // WiFi Sync Event Listeners
   if (wifiSyncService) {
+    wifiSyncService.on('command', async (data) => {
+      const { command, args, sendResponse } = data;
+      if (command === 'approve-high-risk') {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('mobile-approve-high-risk', {
+            pin: args.pin,
+            id: args.id || args.token,
+          });
+        }
+        sendResponse({ success: true });
+      }
+    });
+
     wifiSyncService.on('desktop-control', async (data, sendResponse) => {
       const { action, prompt, promptId, args = {} } = data;
       const { streamPromptToMobile, generateShellApprovalQR } = handlers;

@@ -44,6 +44,7 @@ import CloudSyncConsent from "@/components/CloudSyncConsent";
 import NoNetworkGame from "@/components/DinoGame";
 import AIAssistOverlay from "@/components/AIAssistOverlay";
 import InitializingOverlay from "@/components/InitializingOverlay";
+import PasswordSaveDialog from "@/components/PasswordSaveDialog";
 
 import { firebaseSyncService } from "@/lib/FirebaseSyncService";
 import firebaseService from '@/lib/FirebaseService';
@@ -292,6 +293,7 @@ export default function Home() {
   };
 
   const [translateMethod, setTranslateMethod] = useState<'google' | 'chrome-ai'>('google');
+  const [passwordSaveDialog, setPasswordSaveDialog] = useState<{ domain: string; url?: string; username: string; password: string; type: string } | null>(null);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isAmbientPlaying, setIsAmbientPlaying] = useState(false);
   const [inputValue, setInputValue] = useState(store.currentUrl);
@@ -1104,6 +1106,14 @@ export default function Home() {
     return cleanup;
   }, [clearClipboardHistory]);
 
+  useEffect(() => {
+    if (!window.electronAPI?.onShowPasswordSaveDialog) return;
+    const cleanup = window.electronAPI.onShowPasswordSaveDialog((data) => {
+      setPasswordSaveDialog(data);
+    });
+    return cleanup;
+  }, []);
+
   // Debounced Predictor and Suggestions Fetcher
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -1321,7 +1331,7 @@ export default function Home() {
     const isAuthUrl = (testUrl: string) => {
       try {
         const hostname = new URL(testUrl).hostname;
-        return hostname.includes('accounts.google.com') || hostname.includes('accounts.youtube.com') || hostname.includes('browser.ponsrischool.in');
+        return hostname.includes('accounts.google.com') || hostname.includes('accounts.youtube.com') || hostname.includes('aartiq-three.vercel.app');
       } catch {
         return false;
       }
@@ -1639,7 +1649,7 @@ export default function Home() {
           console.log('[Auth] Received OAuth code — exchanging for tokens...');
           const clientId = store.clientId || '601898745585-8g9t0k72gq4q1a4s1o4d1t6t7e5v4c4g.apps.googleusercontent.com';
           const clientSecret = store.clientSecret || '';
-          const redirectUri = store.redirectUri || 'https://browser.ponsrischool.in/oauth2callback';
+          const redirectUri = store.redirectUri || 'https://aartiq-three.vercel.app/oauth2callback';
 
           if (!clientSecret) {
             console.error('[Auth] No clientSecret available — cannot exchange code for token.');
@@ -3026,6 +3036,11 @@ export default function Home() {
           />
         </div>
       )}
+
+      <PasswordSaveDialog
+        data={passwordSaveDialog}
+        onClose={() => setPasswordSaveDialog(null)}
+      />
     </div>
   );
 }

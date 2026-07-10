@@ -47,7 +47,7 @@ const WebStore = ({ onClose }: { onClose: () => void }) => {
                     <header className="flex items-center justify-between mb-12">
                         <div>
                             <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-2">Workspace <span className="text-sky-400">Store</span></h2>
-                            <p className="text-slate-400 text-sm font-medium">Augment your Comet environment with neural modules.</p>
+                            <p className="text-slate-400 text-sm font-medium">Augment your Aartiq environment with neural modules.</p>
                         </div>
                         <button onClick={onClose} className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl transition-all text-white border border-white/5">
                             <X size={20} />

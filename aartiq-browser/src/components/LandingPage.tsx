@@ -29,7 +29,7 @@ const LandingPage = () => {
     const appVersion = useAppVersion();
     const versionLabel = `v${appVersion}`;
 
-    const COMET_README = `
+    const AARTIQ_README = `
 # ☄️ Aartiq (${versionLabel})
 ### The Future of Autonomous Web Intelligence
 
@@ -84,10 +84,10 @@ const LandingPage = () => {
         setIsLoading(true);
         if (window.electronAPI) {
             const config = firebaseConfigStorage.load() || getFirebaseConfigFromEnv();
-            const authUrl = `https://browser.ponsrischool.in/auth?client_id=desktop-app&redirect_uri=aartiq-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(config))}`;
+            const authUrl = `https://aartiq-three.vercel.app/auth?client_id=desktop-app&redirect_uri=aartiq-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(config))}`;
             window.electronAPI.openAuthWindow(authUrl);
         } else {
-            const url = `https://browser.ponsrischool.in/auth?client_id=web-app&redirect_uri=${encodeURIComponent(window.location.origin + '/auth')}`;
+            const url = `https://aartiq-three.vercel.app/auth?client_id=web-app&redirect_uri=${encodeURIComponent(window.location.origin + '/auth')}`;
             window.open(url, "_blank");
         }
     };
@@ -189,7 +189,7 @@ const LandingPage = () => {
                             prose-ul:text-white/40
                         ">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {COMET_README}
+                                {AARTIQ_README}
                             </ReactMarkdown>
                         </article>
                     </div>

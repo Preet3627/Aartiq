@@ -313,7 +313,7 @@ export function buildCleanPDFContent(
   }
 
   const headerLogoHTML = iconBase64
-    ? `<img src="${iconBase64}" alt="Comet Logo" style="width:32px;height:32px;object-fit:contain;"/>`
+    ? `<img src="${iconBase64}" alt="Aartiq Logo" style="width:32px;height:32px;object-fit:contain;"/>`
     : '🌠';
 
   const footerLogoHTML = iconBase64
@@ -697,7 +697,7 @@ export function buildPDFFromJSON(
   }
 
   const headerLogoHTML = iconBase64
-    ? `<img src="${iconBase64}" alt="Comet Logo" style="width:32px;height:32px;object-fit:contain;"/>`
+    ? `<img src="${iconBase64}" alt="Aartiq Logo" style="width:32px;height:32px;object-fit:contain;"/>`
     : '🌠';
 
   const footerLogoHTML = iconBase64
@@ -807,7 +807,7 @@ export function buildEnhancedPDFFromJSON(
   const mutedColor = data.theme === 'dark' ? '#94a3b8' : '#64748b';
   
   const headerLogoHTML = iconBase64
-    ? `<img src="${iconBase64}" alt="Comet Logo" style="width:32px;height:32px;object-fit:contain;"/>`
+    ? `<img src="${iconBase64}" alt="Aartiq Logo" style="width:32px;height:32px;object-fit:contain;"/>`
     : '🌠';
   const footerLogoHTML = iconBase64
     ? `<img src="${iconBase64}" alt="Aartiq" style="width:16px;height:16px;object-fit:contain;vertical-align:middle;margin-right:6px;"/>`
@@ -1062,7 +1062,7 @@ export function tryGetIconBase64(): string | null {
   try { return (window as any).__cometIconBase64 ?? null; } catch { return null; }
 }
 
-export async function preloadCometIcon(): Promise<void> {
+export async function preloadAartiqIcon(): Promise<void> {
   if (typeof window === 'undefined') return;
   if ((window as any).__cometIconBase64) return;
 

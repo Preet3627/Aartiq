@@ -479,7 +479,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   // WiFi Sync
-  getWifiSyncQr: () => ipcRenderer.invoke('get-wifi-sync-qr'),
+  getAutofillData: (domain) => ipcRenderer.invoke('get-autofill-data', domain),
+  getWifiSyncQr: (cloudMode) => ipcRenderer.invoke('get-wifi-sync-qr', cloudMode),
   getWifiSyncInfo: () => ipcRenderer.invoke('get-wifi-sync-info'),
   getWifiSyncDevices: () => ipcRenderer.invoke('get-wifi-sync-devices'),
   setWifiSyncDeviceTrust: (payload) => ipcRenderer.invoke('set-wifi-sync-device-trust', payload),
@@ -510,6 +511,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   syncClipboard: (text) => ipcRenderer.invoke('sync-clipboard', text),
   syncHistory: (history) => ipcRenderer.invoke('sync-history', history),
   sendDesktopControl: (targetDeviceId, action, args) => ipcRenderer.invoke('send-desktop-control', targetDeviceId, action, args),
+  proposePasswordSave: (data) => ipcRenderer.send('propose-password-save', data),
+  onShowPasswordSaveDialog: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('show-password-save-dialog', subscription);
+    return () => ipcRenderer.removeListener('show-password-save-dialog', subscription);
+  },
   onCloudSyncStatus: (callback) => {
     const subscription = (event, data) => callback(data);
     ipcRenderer.on('cloud-sync-status', subscription);
@@ -577,7 +584,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     if (appPath) return ipcRenderer.invoke('get-app-icon', appPath);
     return ipcRenderer.invoke('get-app-icon-base64');
   },
-  getCometIcon: () => ipcRenderer.invoke('get-app-icon-base64'),
+  getAartiqIcon: () => ipcRenderer.invoke('get-app-icon-base64'),
   
   getVersion: () => ipcRenderer.invoke('get-app-version'),
 

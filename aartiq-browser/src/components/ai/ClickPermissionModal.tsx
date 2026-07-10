@@ -137,7 +137,7 @@ function SingleMode({ context, onAllow, onDeny, highRiskApproved }: {
               Native Device Unlock Required
             </div>
             <p className="mt-1 text-[11px] leading-relaxed text-white/60">
-              After approval, Comet will open the OS verification prompt before this command runs.
+              After approval, Aartiq will open the OS verification prompt before this command runs.
             </p>
           </div>
         )}

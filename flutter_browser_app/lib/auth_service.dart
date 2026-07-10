@@ -36,7 +36,7 @@ class AuthService {
   bool _isInitialized = false;
 
   static const String _iosClientId =
-      '507073680966-4k6edbtnlnc0shv1knirfl436pou53e1.apps.googleusercontent.com';
+      '507073680966-l33m9ug1jgic4kmfd25itnd98s1ihke1.apps.googleusercontent.com';
   static const String _serverClientId =
       '507073680966-htnpcip4v3o5fhse7iqsdon9rqq8bhmk.apps.googleusercontent.com';
 

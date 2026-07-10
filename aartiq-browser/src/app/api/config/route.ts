@@ -6,7 +6,7 @@ export const dynamic = 'force-static';
 export async function GET() {
     return NextResponse.json({
         googleClientId: process.env.GOOGLE_CLIENT_ID || '',
-        googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || 'https://browser.ponsrischool.in/oauth2callback',
+        googleRedirectUri: process.env.GOOGLE_REDIRECT_URI || 'https://aartiq-three.vercel.app/oauth2callback',
         firebaseConfig: process.env.FIREBASE_CONFIG ? JSON.parse(process.env.FIREBASE_CONFIG) : null,
     }, {
         headers: {

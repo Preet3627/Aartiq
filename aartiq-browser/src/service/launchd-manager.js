@@ -117,7 +117,7 @@ class LaunchDaemonManager {
         
         // Set environment
         commands.push(`#!/bin/zsh`);
-        commands.push(`export COMET_HOME="${this.userHome}/Library/Application Support/Aartiq"`);
+        commands.push(`export AARTIQ_HOME="${this.userHome}/Library/Application Support/Aartiq"`);
         commands.push(`export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"`);
         commands.push(``);
         
@@ -128,22 +128,22 @@ class LaunchDaemonManager {
         // Execute based on task type
         if (task.type === 'pdf-generate') {
             commands.push(`# Generate PDF report`);
-            commands.push(`cd "$COMET_HOME"`);
+            commands.push(`cd "$AARTIQ_HOME"`);
             commands.push(`node scripts/generate-pdf.js --task-id "${task.id}"`);
         } else if (task.type === 'web-scrape') {
             commands.push(`# Web scraping task`);
-            commands.push(`cd "$COMET_HOME"`);
+            commands.push(`cd "$AARTIQ_HOME"`);
             commands.push(`node scripts/scrape-web.js --task-id "${task.id}"`);
         } else if (task.type === 'ai-prompt') {
             commands.push(`# AI prompt task`);
-            commands.push(`cd "$COMET_HOME"`);
+            commands.push(`cd "$AARTIQ_HOME"`);
             commands.push(`node scripts/execute-ai-prompt.js --task-id "${task.id}"`);
         } else if (task.type === 'shell') {
             commands.push(`# Custom shell command`);
             commands.push(task.command || 'echo "No command specified"');
         } else if (task.type === 'workflow') {
             commands.push(`# Execute workflow chain`);
-            commands.push(`cd "$COMET_HOME"`);
+            commands.push(`cd "$AARTIQ_HOME"`);
             commands.push(`node scripts/execute-workflow.js --task-id "${task.id}"`);
         } else if (task.type === 'restart') {
             commands.push(`# Restart Mac`);

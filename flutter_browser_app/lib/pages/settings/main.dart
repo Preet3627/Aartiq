@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_browser/auth_service.dart';
 import 'package:flutter_browser/models/browser_model.dart';
 import 'package:flutter_browser/pages/settings/android_settings.dart';
 import 'package:flutter_browser/pages/settings/cross_platform_settings.dart';
@@ -15,6 +16,130 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  Widget _buildGoogleProfileSection(BuildContext context, Map<String, dynamic>? user, bool isLoggedIn) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(
+          color: const Color(0xFF00E5FF).withOpacity(0.2),
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF00E5FF).withOpacity(0.05),
+            Colors.white.withOpacity(0.02),
+          ],
+        ),
+      ),
+      child: isLoggedIn
+          ? Row(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: const Color(0xFF00E5FF).withOpacity(0.1),
+                  backgroundImage: user?['photoUrl'] != null
+                      ? NetworkImage(user!['photoUrl'])
+                      : null,
+                  child: user?['photoUrl'] == null
+                      ? const Icon(Icons.person, color: Color(0xFF00E5FF), size: 30)
+                      : null,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user?['displayName'] ?? 'Aartiq User',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'Outfit',
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        user?['email'] ?? 'No email associated',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 13,
+                          fontFamily: 'Outfit',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.logout_outlined, color: Colors.redAccent),
+                  onPressed: () async {
+                    await AuthService().signOut();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Signed out successfully')),
+                      );
+                    }
+                  },
+                ),
+              ],
+            )
+          : InkWell(
+              onTap: () async {
+                final success = await AuthService().signInWithGoogle();
+                if (success && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Signed in with Google successfully')),
+                  );
+                } else if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Failed to sign in with Google')),
+                  );
+                }
+              },
+              borderRadius: BorderRadius.circular(15),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundColor: Colors.white.withOpacity(0.1),
+                    child: const Icon(Icons.login, color: Color(0xFF00E5FF), size: 28),
+                  ),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Sign in with Google',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Outfit',
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Sync your tabs, settings & history',
+                          style: TextStyle(
+                            color: Colors.white60,
+                            fontSize: 12,
+                            fontFamily: 'Outfit',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: Colors.white30),
+                ],
+              ),
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -31,104 +156,124 @@ class _SettingsPageState extends State<SettingsPage> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          _buildSectionHeader('Appearance & Theme'),
-          _buildSettingsTile(
-            context,
-            'Themes',
-            'Dark, Vibrant, Glass, Minimal',
-            Icons.palette_outlined,
-            () => _openSettingsTab(
-              context,
-              const _ThemesSettingsTab(),
-              'Themes',
-            ),
-          ),
-          _buildSettingsTile(
-            context,
-            'Layout',
-            'Default, Compact, Sidebar',
-            Icons.dashboard_customize_outlined,
-            () => _openSettingsTab(
-              context,
-              const _LayoutSettingsTab(),
-              'Layout',
-            ),
-          ),
-          const SizedBox(height: 20),
-          _buildSectionHeader('AI Models'),
-          _buildSettingsTile(
-            context,
-            'AI Model Settings',
-            'Configure Gemini, OpenAI, Groq models',
-            Icons.psychology_outlined,
-            () => _openSettingsTab(
-              context,
-              const _AIModelsSettingsTab(),
-              'AI Models',
-            ),
-          ),
-          const SizedBox(height: 20),
-          _buildSectionHeader('Sync & Connection'),
-          _buildSettingsTile(
-            context,
-            'Connect Desktop',
-            'Sync with PC browser',
-            Icons.desktop_windows_outlined,
-            () => Navigator.pushNamed(context, '/connect-desktop'),
-          ),
-          const SizedBox(height: 20),
-          _buildSectionHeader('Browser Preferences'),
-          _buildSettingsTile(
-            context,
-            'General Settings',
-            'Search engine, home page, etc.',
-            Icons.language_outlined,
-            () => _openSettingsTab(
-              context,
-              const CrossPlatformSettings(),
-              'General Settings',
-            ),
-          ),
-          _buildSettingsTile(
-            context,
-            'Android Specific',
-            'Native Android browser settings',
-            Icons.android_outlined,
-            () => _openSettingsTab(
-              context,
-              const AndroidSettings(),
-              'Android Settings',
-            ),
-          ),
-          _buildSettingsTile(
-            context,
-            'iOS Specific',
-            'Native iOS browser settings',
-            Icons.apple_outlined,
-            () =>
-                _openSettingsTab(context, const IOSSettings(), 'iOS Settings'),
-          ),
-          _buildSettingsTile(
-            context,
-            'Set as Default Browser',
-            'Make Aartiq your primary browser',
-            Icons.star_outline,
-            () => _setAsDefaultBrowser(context),
-          ),
-          const SizedBox(height: 20),
-          _buildSectionHeader('Maintenance'),
-          _buildSettingsTile(
-            context,
-            'Reset Browser Settings',
-            'Restore default settings',
-            Icons.refresh_outlined,
-            () => _showResetDialog(context),
-            isDestructive: true,
-          ),
-        ],
+      body: StreamBuilder<Map<String, dynamic>?>(
+        stream: AuthService().onAuthStateChanged,
+        initialData: AuthService().isAuthenticated
+            ? {
+                'userId': AuthService().userId,
+                'email': AuthService().userEmail,
+                'displayName': AuthService().displayName,
+                'photoUrl': AuthService().photoUrl,
+              }
+            : null,
+        builder: (context, snapshot) {
+          final user = snapshot.data;
+          final isLoggedIn = user != null &&
+              user['userId'] != null &&
+              !user['userId'].toString().startsWith('guest_');
+
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              _buildGoogleProfileSection(context, user, isLoggedIn),
+              const SizedBox(height: 25),
+              _buildSectionHeader('Appearance & Theme'),
+              _buildSettingsTile(
+                context,
+                'Themes',
+                'Dark, Vibrant, Glass, Minimal',
+                Icons.palette_outlined,
+                () => _openSettingsTab(
+                  context,
+                  const _ThemesSettingsTab(),
+                  'Themes',
+                ),
+              ),
+              _buildSettingsTile(
+                context,
+                'Layout',
+                'Default, Compact, Sidebar',
+                Icons.dashboard_customize_outlined,
+                () => _openSettingsTab(
+                  context,
+                  const _LayoutSettingsTab(),
+                  'Layout',
+                ),
+              ),
+              const SizedBox(height: 20),
+              _buildSectionHeader('AI Models'),
+              _buildSettingsTile(
+                context,
+                'AI Model Settings',
+                'Configure Gemini, OpenAI, Groq models',
+                Icons.psychology_outlined,
+                () => _openSettingsTab(
+                  context,
+                  const _AIModelsSettingsTab(),
+                  'AI Models',
+                ),
+              ),
+              const SizedBox(height: 20),
+              _buildSectionHeader('Sync & Connection'),
+              _buildSettingsTile(
+                context,
+                'Connect Desktop',
+                'Sync with PC browser',
+                Icons.desktop_windows_outlined,
+                () => Navigator.pushNamed(context, '/connect-desktop'),
+              ),
+              const SizedBox(height: 20),
+              _buildSectionHeader('Browser Preferences'),
+              _buildSettingsTile(
+                context,
+                'General Settings',
+                'Search engine, home page, etc.',
+                Icons.language_outlined,
+                () => _openSettingsTab(
+                  context,
+                  const CrossPlatformSettings(),
+                  'General Settings',
+                ),
+              ),
+              _buildSettingsTile(
+                context,
+                'Android Specific',
+                'Native Android browser settings',
+                Icons.android_outlined,
+                () => _openSettingsTab(
+                  context,
+                  const AndroidSettings(),
+                  'Android Settings',
+                ),
+              ),
+              _buildSettingsTile(
+                context,
+                'iOS Specific',
+                'Native iOS browser settings',
+                Icons.apple_outlined,
+                () =>
+                    _openSettingsTab(context, const IOSSettings(), 'iOS Settings'),
+              ),
+              _buildSettingsTile(
+                context,
+                'Set as Default Browser',
+                'Make Aartiq your primary browser',
+                Icons.star_outline,
+                () => _setAsDefaultBrowser(context),
+              ),
+              const SizedBox(height: 20),
+              _buildSectionHeader('Maintenance'),
+              _buildSettingsTile(
+                context,
+                'Reset Browser Settings',
+                'Restore default settings',
+                Icons.refresh_outlined,
+                () => _showResetDialog(context),
+                isDestructive: true,
+              ),
+            ],
+          );
+        },
       ),
     );
   }

@@ -10,7 +10,7 @@ const { exec: execAsync } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(execAsync);
 
-const COMET_URL_SCHEME = 'aartiq';
+const AARTIQ_URL_SCHEME = 'aartiq';
 let windowsIpcHandlersRegistered = false;
 
 const WindowsIntegration = {
@@ -37,7 +37,7 @@ async function registerWindowsProtocol() {
   }
 
   try {
-    app.setAsDefaultProtocolClient(COMET_URL_SCHEME);
+    app.setAsDefaultProtocolClient(AARTIQ_URL_SCHEME);
     return { success: true, message: 'Protocol registered' };
   } catch (error) {
     return { success: false, message: error.message };
@@ -76,7 +76,7 @@ async function handleChatAction(params) {
     mainWindow.webContents.send('ai:chat-message', message);
     return { success: true, message: 'Message sent to AI' };
   }
-  return { error: 'Comet not running' };
+  return { error: 'Aartiq not running' };
 }
 
 async function handleNavigateAction(params) {
@@ -86,7 +86,7 @@ async function handleNavigateAction(params) {
     mainWindow.webContents.send('browser:navigate', url);
     return { success: true };
   }
-  return { error: 'Comet not running' };
+  return { error: 'Aartiq not running' };
 }
 
 async function handleSearchAction(params) {
@@ -96,7 +96,7 @@ async function handleSearchAction(params) {
     mainWindow.webContents.send('ai:search', query);
     return { success: true };
   }
-  return { error: 'Comet not running' };
+  return { error: 'Aartiq not running' };
 }
 
 async function handleCreatePDFAction(params) {
@@ -106,7 +106,7 @@ async function handleCreatePDFAction(params) {
     mainWindow.webContents.send('ai:create-pdf', { content, title, template });
     return { success: true };
   }
-  return { error: 'Comet not running' };
+  return { error: 'Aartiq not running' };
 }
 
 async function handleShellCommandAction(params) {
@@ -119,7 +119,7 @@ async function handleShellCommandAction(params) {
     mainWindow.webContents.send('shell:execute', command);
     return { success: true };
   }
-  return { error: 'Comet not running' };
+  return { error: 'Aartiq not running' };
 }
 
 async function handleOpenAppAction(params) {
@@ -143,7 +143,7 @@ async function handleScreenshotAction(params) {
     mainWindow.webContents.send('system:screenshot');
     return { success: true };
   }
-  return { error: 'Comet not running' };
+  return { error: 'Aartiq not running' };
 }
 
 async function handleVolumeAction(params) {
@@ -165,7 +165,7 @@ async function handleScheduleAction(params) {
     mainWindow.webContents.send('ai:schedule', { task, cron, model });
     return { success: true };
   }
-  return { error: 'Comet not running' };
+  return { error: 'Aartiq not running' };
 }
 
 async function handleAskAIAction(params) {
@@ -175,7 +175,7 @@ async function handleAskAIAction(params) {
     mainWindow.webContents.send('ai:ask-speaking', { prompt, model, speak: speak === 'true' });
     return { success: true };
   }
-  return { error: 'Comet not running' };
+  return { error: 'Aartiq not running' };
 }
 
 async function handleCopilotAction(params) {
@@ -389,5 +389,5 @@ module.exports = {
   parseShortcutURL,
   setupWindowsIPCHandlers,
   handleURLSchemeEvent,
-  COMET_URL_SCHEME,
+  AARTIQ_URL_SCHEME,
 };

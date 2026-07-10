@@ -41,6 +41,7 @@
     "rebuild": "electron-rebuild",
     "rebuild:native": "electron-rebuild -f -w sharp",
     "postinstall": "electron-builder install-app-deps",
+    "generate-appx-assets": "node scripts/generate-appx-assets.js",
     "check-dups": "node check_dups.js",
     "service": "electron src/service/service-main.js",
     "service:install": "node scripts/install-service.js"
@@ -191,9 +192,9 @@
       "identityName": "Latestinssan.Aartiq",
       "publisher": "CN=CF2DF47B-A710-4E1D-8C29-FC648FFA1CAE",
       "publisherDisplayName": "Latestinssan",
-      "applicationId": "CometAI",
+      "applicationId": "Aartiq",
       "displayName": "Aartiq",
-      "backgroundColor": "#1a1a2e",
+      "backgroundColor": "transparent",
       "languages": [
         "en-US"
       ],

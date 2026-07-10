@@ -29,11 +29,11 @@ export const IntegrationService = {
         await new Promise(r => setTimeout(r, 1500));
 
         const mockMails: MailItem[] = [
-            { id: '1', subject: 'Project Comet Roadmap', sender: 'lead@simulated-corp.com', snippet: 'Review the attached Q1 goals...', date: '10:30 AM', isUnread: true, tag: 'Work' },
+            { id: '1', subject: 'Project Aartiq Roadmap', sender: 'lead@simulated-corp.com', snippet: 'Review the attached Q1 goals...', date: '10:30 AM', isUnread: true, tag: 'Work' },
             { id: '2', subject: 'Your Invoice #3049', sender: 'billing@cloud-services.io', snippet: 'Payment received for server instance...', date: 'Yesterday', isUnread: false, tag: 'Finance' },
             { id: '3', subject: 'Deployment Succeeded', sender: 'git-bot@vcs.com', snippet: 'Build #3992 passed all checks.', date: 'Yesterday', isUnread: true, tag: 'DevOps' },
             { id: '4', subject: 'Weekly Standup Notes', sender: 'pm@simulated-corp.com', snippet: 'Action items: optimized render loop...', date: '3 Days ago', isUnread: false, tag: 'Work' },
-            { id: '5', subject: 'Welcome to Comet Pro', sender: 'noreply@comet.browser', snippet: 'Thanks for upgrading your account!', date: 'Last Week', isUnread: false, tag: 'Promotions' },
+            { id: '5', subject: 'Welcome to Aartiq Pro', sender: 'noreply@comet.browser', snippet: 'Thanks for upgrading your account!', date: 'Last Week', isUnread: false, tag: 'Promotions' },
         ];
         return mockMails;
     },

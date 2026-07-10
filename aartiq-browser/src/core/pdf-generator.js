@@ -1,6 +1,6 @@
 const iconMimeType = 'image/png';
 
-const resolveCometIcon = (app, path, fs) => {
+const resolveAartiqIcon = (app, path, fs) => {
   const iconName = 'icon.png';
   const isDev = !app.isPackaged;
   const resourcesPath = app.isPackaged
@@ -53,7 +53,7 @@ const loadBrandIcon = (app, path, fs) => {
   let iconBase64 = '';
   let iconMime = iconMimeType;
   try {
-    const iconPath = resolveCometIcon(app, path, fs);
+    const iconPath = resolveAartiqIcon(app, path, fs);
     if (iconPath && fs.existsSync(iconPath)) {
       iconBase64 = fs.readFileSync(iconPath).toString('base64');
       iconMime = 'image/png';
@@ -130,7 +130,7 @@ const templatePalette = (name = 'professional') => {
 
 module.exports = {
   iconMimeType,
-  resolveCometIcon,
+  resolveAartiqIcon,
   loadBrandIcon,
   dataUrlToBuffer,
   normalizePages,

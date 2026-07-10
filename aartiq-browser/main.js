@@ -214,6 +214,7 @@ const isDev = !app.isPackaged;
 const express = require('express');
 const bodyParser = require('body-parser');
 const { getP2PSync } = require('./src/lib/P2PFileSyncService.js'); // Import the P2P service
+const { getWiFiSync } = require('./src/lib/WiFiSyncService.js');
 
 // ERROR-PROOFING: Global error handlers for uncaught exceptions
 process.on('uncaughtException', (error) => {
@@ -328,7 +329,7 @@ ipcMain.handle('raycast:get-manifest', async () => {
   return raycastIntegration.getManifest();
 });
 
-const COMET_URL_SCHEME = 'aartiq';
+const AARTIQ_URL_SCHEME = 'aartiq';
 
 setupSiriShortcutsHandlers();
 setupShortcutsCLIHandlers();
@@ -859,6 +860,9 @@ const performRobotClick = async ({ x, y, button = 'left', doubleClick = false })
 };
 let tesseractOcrService = new TesseractOcrService();
 let screenVisionService = new ScreenVisionService(cometAiEngine);
+wifiSyncService = getWiFiSync();
+wifiSyncService.start();
+p2pSyncService = getP2PSync();
 let flutterBridge = null;
 let fileSystemMcp = null;
 let nativeAppMcp = null;
@@ -913,7 +917,7 @@ const DEFAULT_MAC_NATIVE_UI_PREFERENCES = {
   sidebarShowActionChainButton: true,
 };
 // Token is declared above in the CLI PERSISTENCE section
-const nativeMacUiPort = parseInt(process.env.COMET_NATIVE_MAC_UI_PORT || '46203', 10);
+const nativeMacUiPort = parseInt(process.env.AARTIQ_NATIVE_MAC_UI_PORT || '46203', 10);
 const nativeMacUiState = {
   mode: 'sidebar',
   updatedAt: Date.now(),
@@ -934,7 +938,7 @@ const nativeMacUiState = {
 const nativeMacPanelManager = new MacNativePanelManager({
   bridgeUrlProvider: () => `http://127.0.0.1:${nativeMacUiPort}`,
   tokenProvider: () => nativeMacUiToken,
-  iconPathProvider: () => resolveCometIcon(),
+  iconPathProvider: () => resolveAartiqIcon(),
   appName: app.name || 'Aartiq',
 });
 
@@ -1351,7 +1355,7 @@ const openGuide = () => {
 };
 
 const openDocumentationPage = (slug = '') => {
-  const baseUrl = 'https://browser.ponsrischool.in';
+  const baseUrl = 'https://aartiq-three.vercel.app';
   const url = slug ? `${baseUrl}${slug}` : baseUrl;
   sendToActiveWindow('add-new-tab', url);
 };
@@ -1502,7 +1506,7 @@ const buildApplicationMenu = () => {
         { type: 'separator' },
         { role: 'togglefullscreen' },
         { type: 'separator' },
-        { label: 'Toggle Comet Sidebar', accelerator: menuAccelerator('toggle-sidebar', 'CmdOrCtrl+Shift+S'), click: () => triggerShortcut('toggle-sidebar') },
+        { label: 'Toggle Aartiq Sidebar', accelerator: menuAccelerator('toggle-sidebar', 'CmdOrCtrl+Shift+S'), click: () => triggerShortcut('toggle-sidebar') },
         {
           label: 'Cycle Theme',
           accelerator: menuAccelerator('cycle-theme', 'CmdOrCtrl+Shift+T'),
@@ -1711,7 +1715,7 @@ const iconMimeType = 'image/png';
 
 // Environment-aware icon path resolver with multiple fallbacks
 // Handles both dev (.js files next to assets/) and packaged (.app/Contents/Resources/)
-const resolveCometIcon = () => {
+const resolveAartiqIcon = () => {
   const iconName = 'icon.png';
   const isDev = !app.isPackaged;
   const resourcesPath = app.isPackaged
@@ -1770,7 +1774,7 @@ const loadBrandIcon = () => {
   let iconBase64 = '';
   let iconMime = iconMimeType;
   try {
-    const iconPath = resolveCometIcon();
+    const iconPath = resolveAartiqIcon();
     if (iconPath && fs.existsSync(iconPath)) {
       iconBase64 = fs.readFileSync(iconPath).toString('base64');
       iconMime = 'image/png';
@@ -2229,7 +2233,7 @@ const PDF_TEMPLATES = {
 
 const TEMPLATE_NAMES = Object.keys(PDF_TEMPLATES);
 
-function generateCometPDFTemplate(title, content, iconBase64, templateName = 'professional', metadata = {}) {
+function generateAartiqPDFTemplate(title, content, iconBase64, templateName = 'professional', metadata = {}) {
   const isFullHTML = /<html/i.test(content);
   if (isFullHTML) return content;
 
@@ -2369,7 +2373,7 @@ const setupContextMenu = () => {
         }
       },
       {
-        label: 'Search Comet for "{selection}"',
+        label: 'Search Aartiq for "{selection}"',
         visible: params.selectionText.trim().length > 0,
         click: () => {
           const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(params.selectionText)}`;
@@ -2766,7 +2770,7 @@ const prepareLLM = async (messages, options = {}) => {
   const systemMsgs = messages.filter(m => m.role === 'system');
   const systemPrompt = [
     ...systemMsgs.map(m => m.content),
-    `[COMET_CAPABILITIES]\n${JSON.stringify(capabilities, null, 2)}\n(You are an AGENT with full system access. Use reasoning for complex tasks.)`
+    `[AARTIQ_CAPABILITIES]\n${JSON.stringify(capabilities, null, 2)}\n(You are an AGENT with full system access. Use reasoning for complex tasks.)`
   ].join('\n\n');
 
   const chatMessages = messages.filter(m => m.role !== 'system').map(m => {
@@ -3796,38 +3800,44 @@ function decryptVaultEntry(entry) {
   return dec;
 }
 
-function addToNativeKeychain(entry) {
-  if (!entry || !entry.password) return;
-  const label = `Aartiq: ${entry.site || 'unknown'} (${entry.username || 'default'})`;
-  const account = entry.username || 'default';
-  const service = `com.aartiq.vault.${entry.site || 'unknown'}`;
+const nativeKeychain = (() => {
+  try { return require('./src/lib/native-keychain'); }
+  catch (e) { return null; }
+})();
 
+function vaultKeychainAccount(entry) {
+  return (entry && entry.username) || 'default';
+}
+
+function vaultKeychainService(entry) {
+  return `com.aartiq.vault.${(entry && entry.site) || 'unknown'}`;
+}
+
+function vaultKeychainLabel(entry) {
+  return `Aartiq: ${(entry && entry.site) || 'unknown'} (${vaultKeychainAccount(entry)})`;
+}
+
+async function addToNativeKeychain(entry) {
+  if (!nativeKeychain || !entry || !entry.password) return;
   try {
-    if (process.platform === 'darwin') {
-      execSync(`security add-generic-password -a "${account.replace(/"/g, '\\"')}" -s "${service.replace(/"/g, '\\"')}" -w "${entry.password.replace(/"/g, '\\"')}" -l "${label.replace(/"/g, '\\"')}" -U 2>/dev/null`, { timeout: 5000, stdio: 'ignore' });
-    } else if (process.platform === 'win32') {
-      const psCmd = `$cred = New-Object System.Management.Automation.PSCredential('${account.replace(/'/g, "''")}', (ConvertTo-SecureString '${entry.password.replace(/'/g, "''")}' -AsPlainText -Force)); Microsoft.PowerShell.SecretManagement\Set-Secret -Name '${service.replace(/'/g, "''")}' -Secret $cred 2>$null`;
-      execSync(`powershell -Command "${psCmd.replace(/"/g, '\\"')}"`, { timeout: 5000, stdio: 'ignore' });
-    } else if (process.platform === 'linux') {
-      execSync(`secret-tool store --label="${label}" service "${service}" account "${account}" 2>/dev/null <<< "${entry.password}"`, { timeout: 5000, stdio: 'ignore' });
-    }
+    await nativeKeychain.addPassword({
+      account: vaultKeychainAccount(entry),
+      service: vaultKeychainService(entry),
+      password: entry.password,
+      label: vaultKeychainLabel(entry),
+    });
   } catch {
     // Native keychain unavailable or write failed — vault storage is sufficient
   }
 }
 
-function removeFromNativeKeychain(entry) {
-  if (!entry || !entry.site) return;
-  const account = entry.username || 'default';
-  const service = `com.aartiq.vault.${entry.site || 'unknown'}`;
+async function removeFromNativeKeychain(entry) {
+  if (!nativeKeychain || !entry || !entry.site) return;
   try {
-    if (process.platform === 'darwin') {
-      execSync(`security delete-generic-password -a "${account.replace(/"/g, '\\"')}" -s "${service.replace(/"/g, '\\"')}" 2>/dev/null`, { timeout: 5000, stdio: 'ignore' });
-    } else if (process.platform === 'win32') {
-      execSync(`powershell -Command "Microsoft.PowerShell.SecretManagement\Remove-Secret -Name '${service.replace(/'/g, "''")}' 2>$null"`, { timeout: 5000, stdio: 'ignore' });
-    } else if (process.platform === 'linux') {
-      execSync(`secret-tool clear service "${service}" account "${account}" 2>/dev/null`, { timeout: 5000, stdio: 'ignore' });
-    }
+    await nativeKeychain.deletePassword({
+      account: vaultKeychainAccount(entry),
+      service: vaultKeychainService(entry),
+    });
   } catch { }
 }
 
@@ -3844,6 +3854,11 @@ function normalizeVaultSite(site = '') {
 }
 
 function readVaultEntries() {
+  const electronStoreEntries = store.get('vault_entries');
+  if (Array.isArray(electronStoreEntries) && electronStoreEntries.length > 0) {
+    return electronStoreEntries;
+  }
+
   const filePath = getVaultFilePath();
   if (!fs.existsSync(filePath)) {
     return [];
@@ -3851,8 +3866,12 @@ function readVaultEntries() {
 
   try {
     const raw = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const entries = Array.isArray(raw) ? raw : [];
-    return entries.map(decryptVaultEntry);
+    const entries = Array.isArray(raw) ? raw.map(decryptVaultEntry) : [];
+    if (entries.length > 0) {
+      store.set('vault_entries', entries);
+      console.log('[Vault] Migrated legacy AES vault to unified store');
+    }
+    return entries;
   } catch (error) {
     console.warn('[Vault] Failed to read entries:', error.message);
     return [];
@@ -3860,8 +3879,24 @@ function readVaultEntries() {
 }
 
 function writeVaultEntries(entries) {
+  store.set('vault_entries', entries);
   const encrypted = entries.map(encryptVaultEntry);
   fs.writeFileSync(getVaultFilePath(), JSON.stringify(encrypted, null, 2), 'utf-8');
+}
+
+async function syncAllVaultToNativeKeychain() {
+  if (!nativeKeychain) return;
+  try {
+    const entries = readVaultEntries();
+    for (const entry of entries) {
+      if (entry.password) {
+        await addToNativeKeychain(entry);
+      }
+    }
+    console.log(`[Vault] Synced ${entries.length} entries to native keychain`);
+  } catch (err) {
+    console.warn('[Vault] Native keychain bulk sync error:', err.message);
+  }
 }
 
 function maskVaultEntry(entry = {}) {
@@ -4174,296 +4209,6 @@ ipcMain.on('update-native-mac-ui-state', (event, nextState = {}) => {
   }
 });
 
-// Secure Auth Storage
-ipcMain.on('save-auth-token', (event, { token, user, ...rest }) => {
-  const currentSession = getSecureAuthSession() || {};
-  const saved = saveSecureAuthSession({
-    ...currentSession,
-    ...rest,
-    token: token || currentSession.token || null,
-    user: user || currentSession.user || null,
-    savedAt: Date.now(),
-  });
-
-  if (saved) {
-    console.log('[Auth] Auth token and user info saved to secure storage.');
-  }
-});
-
-ipcMain.on('save-auth-session', (event, sessionPayload) => {
-  const currentSession = getSecureAuthSession() || {};
-  const saved = saveSecureAuthSession({
-    ...currentSession,
-    ...(sessionPayload || {}),
-    savedAt: Date.now(),
-  });
-
-  event.reply('auth-session-saved', {
-    success: saved,
-    backend: getAuthStorageBackend(),
-  });
-});
-
-ipcMain.handle('get-auth-token', () => {
-  return getSecureAuthSession()?.token || null;
-});
-
-ipcMain.handle('get-user-info', () => {
-  return getSecureAuthSession()?.user || null;
-});
-
-ipcMain.handle('get-auth-session', () => {
-  const session = getSecureAuthSession();
-  if (!session) {
-    return null;
-  }
-
-  return {
-    ...session,
-    storageBackend: getAuthStorageBackend(),
-  };
-});
-
-ipcMain.on('clear-auth', () => {
-  clearSecureAuthSession();
-  store.delete(LEGACY_AUTH_TOKEN_KEY);
-  store.delete(LEGACY_USER_INFO_KEY);
-  console.log('[Auth] Auth data cleared');
-});
-
-// Password Manager Logic
-ipcMain.handle('get-passwords-for-site', async (event, domain) => {
-  const normalizedDomain = normalizeVaultSite(domain);
-  const entries = readVaultEntries().filter((entry) =>
-    normalizedDomain ? `${entry.site || ''}`.includes(normalizedDomain) : true
-  );
-
-  if (entries.length === 0) {
-    return [];
-  }
-
-  const verification = await verifyVaultAccess({
-    reason: 'Unlock Neural Vault to retrieve saved credentials for this site.',
-    actionText: `Site credential access for ${normalizedDomain || domain || 'current site'}`,
-  });
-
-  if (!verification.success) {
-    return [];
-  }
-
-  return entries;
-});
-
-ipcMain.handle('vault-list-entries', async () => {
-  return {
-    success: true,
-    entries: readVaultEntries().map(maskVaultEntry),
-  };
-});
-
-ipcMain.handle('vault-save-entry', async (event, payload = {}) => {
-  // REQUIRE native lock for SAVING to vault too, for maximum security as requested
-  const verification = await verifyVaultAccess({
-    reason: 'Unlock Neural Vault to save a new credential.',
-    actionText: `Save credential for ${payload.site || 'new site'}`,
-  });
-
-  if (!verification.success) {
-    return { success: false, error: verification.error };
-  }
-
-  const entries = readVaultEntries();
-  const site = normalizeVaultSite(payload.site);
-  const username = `${payload.username || ''}`.trim();
-  const password = `${payload.password || ''}`;
-
-  if (!site || !password) {
-    return { success: false, error: 'Site and password are required.' };
-  }
-
-  const incomingId = `${payload.id || ''}`.trim();
-  const nextEntry = {
-    id: incomingId || Date.now().toString(),
-    site,
-    username,
-    password,
-    created: payload.created || new Date().toISOString(),
-  };
-
-  const existingIndex = entries.findIndex((entry) => entry.id === nextEntry.id);
-  if (existingIndex >= 0) {
-    const oldEntry = entries[existingIndex];
-    entries[existingIndex] = { ...entries[existingIndex], ...nextEntry };
-    removeFromNativeKeychain(oldEntry);
-  } else if (!entries.some((entry) => entry.site === site && entry.username === username && entry.password === password)) {
-    entries.push(nextEntry);
-  }
-
-  addToNativeKeychain(nextEntry);
-  writeVaultEntries(entries);
-  clearVaultUnlock();
-
-  return {
-    success: true,
-    entries: entries.map(maskVaultEntry),
-  };
-});
-
-ipcMain.handle('vault-delete-entry', async (event, entryId) => {
-  const entries = readVaultEntries();
-  const deletedEntry = entries.find((entry) => entry.id === entryId);
-  const remainingEntries = entries.filter((entry) => entry.id !== entryId);
-  writeVaultEntries(remainingEntries);
-  clearVaultUnlock();
-  if (deletedEntry) removeFromNativeKeychain(deletedEntry);
-  return {
-    success: true,
-    entries: remainingEntries.map(maskVaultEntry),
-  };
-});
-
-ipcMain.handle('vault-read-secret', async (event, entryId) => {
-  const entry = readVaultEntries().find((item) => item.id === entryId);
-  if (!entry) {
-    return { success: false, error: 'Vault entry not found.' };
-  }
-
-  const verification = await verifyVaultAccess({
-    reason: 'Unlock Neural Vault to reveal a saved password.',
-    actionText: `Reveal password for ${getVaultEntryLabel(entry)}`,
-  });
-
-  if (!verification.success) {
-    return { success: false, error: verification.error };
-  }
-
-  return {
-    success: true,
-    password: entry.password,
-  };
-});
-
-ipcMain.handle('vault-copy-secret', async (event, entryId) => {
-  const entry = readVaultEntries().find((item) => item.id === entryId);
-  if (!entry) {
-    return { success: false, error: 'Vault entry not found.' };
-  }
-
-  const verification = await verifyVaultAccess({
-    reason: 'Unlock Neural Vault to copy a saved password.',
-    actionText: `Copy password for ${getVaultEntryLabel(entry)}`,
-  });
-
-  if (!verification.success) {
-    return { success: false, error: verification.error };
-  }
-
-  clipboard.writeText(entry.password || '');
-  return { success: true };
-});
-
-ipcMain.on('propose-password-save', (event, { domain, username, password, type }) => {
-  const passwords = readVaultEntries();
-  const normalizedDomain = normalizeVaultSite(domain);
-
-  // PRE-CHECK: Avoid opening dialog if identical entry exists
-  const isDuplicate = passwords.some(p =>
-    p.site === normalizedDomain &&
-    p.username === username &&
-    p.password === password &&
-    (p.type === type || (!p.type && type === 'login'))
-  );
-
-  if (isDuplicate) {
-    console.log(`[Vault] Suppression: Credential for ${normalizedDomain} already exists.`);
-    return;
-  }
-
-  // Automatically show a dialog to save password
-  dialog.showMessageBox(mainWindow, {
-    type: 'question',
-    buttons: ['Save', 'Ignore'],
-    defaultId: 0,
-    title: 'Comet Vault',
-    message: `Do you want to save the password for ${domain}?`,
-    detail: `User: ${username}`
-  }).then(async (result) => {
-    if (result.response === 0) {
-      // Require native unlock before saving auto-captured password
-      const verification = await verifyVaultAccess({
-        reason: 'Unlock Neural Vault to save this captured password.',
-        actionText: `Save captured password for ${domain}`,
-      });
-
-      if (!verification.success) {
-        console.warn('[Vault] Auto-save denied by user during native unlock.');
-        return;
-      }
-
-      const passwords = readVaultEntries();
-      const normalizedDomain = normalizeVaultSite(domain);
-      const entry = {
-        id: Date.now().toString(),
-        site: normalizedDomain,
-        username,
-        password,
-        type: type || 'login',
-        created: new Date().toISOString()
-      };
-      passwords.push(entry);
-      addToNativeKeychain(entry);
-      writeVaultEntries(passwords);
-      clearVaultUnlock();
-      console.log(`[Vault] Saved password for ${normalizedDomain}`);
-    }
-  });
-});
-
-ipcMain.on('propose-form-collection-save', (event, { domain, title, data, type }) => {
-  const entries = readVaultEntries();
-  const normalizedDomain = normalizeVaultSite(domain);
-
-  // PRE-CHECK: If we already have this exact form-data for this site, skip.
-  const isDuplicate = entries.some(e =>
-    e.site === normalizedDomain &&
-    e.type === 'form' &&
-    JSON.stringify(e.formData) === JSON.stringify(data)
-  );
-
-  if (isDuplicate) return;
-
-  dialog.showMessageBox(mainWindow, {
-    type: 'question',
-    buttons: ['Save Collection', 'Ignore'],
-    defaultId: 0,
-    title: 'Neural Vault — Collect Data',
-    message: `Securely save this form collection from ${domain}?`,
-    detail: `Captured ${data.length} fields from: ${title}`
-  }).then(async (result) => {
-    if (result.response === 0) {
-      const verification = await verifyVaultAccess({
-        reason: 'Unlock Neural Vault to save this form collection.',
-        actionText: `Save form collection for ${domain}`,
-      });
-
-      if (!verification.success) return;
-
-      const entries = readVaultEntries();
-      entries.push({
-        id: Date.now().toString(),
-        site: normalizeVaultSite(domain),
-        title,
-        formData: data,
-        type: 'form',
-        created: new Date().toISOString()
-      });
-      writeVaultEntries(entries);
-      console.log(`[Vault] Saved form collection for ${domain}`);
-    }
-  });
-});
-
-
 // Auth - Create proper OAuth window instead of opening in external browser
 let authWindow = null;
 
@@ -4476,7 +4221,7 @@ ipcMain.on('open-auth-window', (event, authUrl) => {
 
   if (isOAuthUrl) {
     // Direct Google OAuth URLs should still use the system browser.
-    // Our hosted /auth page should stay inside Comet so Firebase popup can open as a child window.
+    // Our hosted /auth page should stay inside Aartiq so Firebase popup can open as a child window.
     if (authUrl.includes('accounts.google.com')) {
       if (authWindow && !authWindow.isDestroyed()) {
         authWindow.destroy();
@@ -6773,18 +6518,18 @@ app.whenReady().then(async () => {
       // Windows: Use PowerShell to create a scheduled task
       // Note: Creating scheduled tasks requires Administrator privileges.
       // This command will create a basic task that displays a message.
-      command = `powershell.exe - Command "$Action = New-ScheduledTaskAction -Execute 'msg.exe' -Argument '* ${message}'; $Trigger = New-ScheduledTaskTrigger -Once -At '${formattedTime}'; Register-ScheduledTask -TaskName 'CometAlarm_${Date.now()}' -Action $Action -Trigger $Trigger -Description '${message}'"`;
+      command = `powershell.exe - Command "$Action = New-ScheduledTaskAction -Execute 'msg.exe' -Argument '* ${message}'; $Trigger = New-ScheduledTaskTrigger -Once -At '${formattedTime}'; Register-ScheduledTask -TaskName 'AartiqAlarm_${Date.now()}' -Action $Action -Trigger $Trigger -Description '${message}'"`;
     } else if (platform === 'darwin') {
       // macOS: Use osascript to create a Calendar event or a reminder
       // Creating a reminder is more straightforward for a simple alarm.
       command = `osascript - e 'tell application "Reminders" to make new reminder with properties {name:"${message}", remind me date:"${alarmTime.toISOString()}"}'`;
       // Alternatively, for a notification at a specific time:
-      // command = `osascript - e 'display notification "${message}" with title "Comet Alarm" subtitle "Time to Wake Up!"' - e 'delay $(((${alarmTime.getTime()} - $(date +%s%3N)) / 1000))' - e 'display dialog "${message}" buttons {"OK"} default button 1 with title "Comet Alarm"'`;
+      // command = `osascript - e 'display notification "${message}" with title "Aartiq Alarm" subtitle "Time to Wake Up!"' - e 'delay $(((${alarmTime.getTime()} - $(date +%s%3N)) / 1000))' - e 'display dialog "${message}" buttons {"OK"} default button 1 with title "Aartiq Alarm"'`;
     } else if (platform === 'linux') {
       // Linux: Use 'at' command (requires 'at' daemon to be running)
-      // Example: echo "DISPLAY=:0 notify-send 'Comet Alarm' '${message}'" | at ${formattedTime} ${formattedDate}
+      // Example: echo "DISPLAY=:0 notify-send 'Aartiq Alarm' '${message}'" | at ${formattedTime} ${formattedDate}
       // `at` command format: `at[-m] TIME[DATE]`, e.g., `at 10:00 tomorrow`
-      command = `echo "DISPLAY=:0 notify-send 'Comet Alarm' '${message}'" | at ${formattedTime} ${formattedDate} `;
+      command = `echo "DISPLAY=:0 notify-send 'Aartiq Alarm' '${message}'" | at ${formattedTime} ${formattedDate} `;
     } else {
       return { success: false, error: `Unsupported platform for alarms: ${platform} ` };
     }
@@ -8647,6 +8392,9 @@ ${tabData}`;
     flutterBridge,
   };
   registerAllHandlers(ipcMain, handlerDeps);
+
+  // Sync existing vault entries to native keychain on startup
+  syncAllVaultToNativeKeychain();
 }).catch(err => {
   console.error('[Main] App ready failed:', err);
   if (app?.quit) {

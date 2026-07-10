@@ -6,8 +6,8 @@ const { promisify } = require('util');
 
 const execPromise = promisify(exec);
 
-exports.COMET_URL_SCHEME = 'aartiq';
-exports.COMET_APP_NAME = 'Aartiq';
+exports.AARTIQ_URL_SCHEME = 'aartiq';
+exports.AARTIQ_APP_NAME = 'Aartiq';
 
 const APP_SHORTCUTS = [
   {
@@ -110,7 +110,7 @@ function focusMainWindow(win) {
   win.focus();
 }
 
-function parseCometURL(url) {
+function parseAartiqURL(url) {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'aartiq:') {
@@ -286,23 +286,23 @@ function setupSiriShortcutsHandlers() {
   });
 
   ipcMain.handle('siri:get-url-scheme', () => {
-    return exports.COMET_URL_SCHEME;
+    return exports.AARTIQ_URL_SCHEME;
   });
 
   ipcMain.handle('siri:parse-url', (_event, url) => {
-    return parseCometURL(url);
+    return parseAartiqURL(url);
   });
 }
 
 function registerURLScheme() {
   if (process.defaultApp && process.argv.length >= 2) {
-    return app.setAsDefaultProtocolClient(exports.COMET_URL_SCHEME, process.execPath, [path.resolve(process.argv[1])]);
+    return app.setAsDefaultProtocolClient(exports.AARTIQ_URL_SCHEME, process.execPath, [path.resolve(process.argv[1])]);
   }
-  return app.setAsDefaultProtocolClient(exports.COMET_URL_SCHEME);
+  return app.setAsDefaultProtocolClient(exports.AARTIQ_URL_SCHEME);
 }
 
 function handleURLSchemeEvent(url) {
-  const parsed = parseCometURL(url);
+  const parsed = parseAartiqURL(url);
   if (parsed) {
     executeShortcutAction(parsed.action, parsed.params);
   }
@@ -361,7 +361,7 @@ function setupShortcutsCLIHandlers() {
 }
 
 exports.generateShortcutURL = generateShortcutURL;
-exports.parseCometURL = parseCometURL;
+exports.parseAartiqURL = parseAartiqURL;
 exports.executeShortcutAction = executeShortcutAction;
 exports.speakWithSiri = speakWithSiri;
 exports.listenWithDictation = listenWithDictation;
@@ -375,10 +375,10 @@ exports.setupShortcutsCLIHandlers = setupShortcutsCLIHandlers;
 exports.APP_SHORTCUTS = APP_SHORTCUTS;
 
 module.exports = {
-  COMET_URL_SCHEME: exports.COMET_URL_SCHEME,
+  AARTIQ_URL_SCHEME: exports.AARTIQ_URL_SCHEME,
   APP_SHORTCUTS,
   generateShortcutURL,
-  parseCometURL,
+  parseAartiqURL,
   executeShortcutAction,
   speakWithSiri,
   listenWithDictation,

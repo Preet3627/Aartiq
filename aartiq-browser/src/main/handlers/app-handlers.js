@@ -253,11 +253,11 @@ module.exports = function registerAppHandlers(ipcMain, handlers) {
     const url = new URL(request.url);
     const resourcePath = url.hostname;
     if (resourcePath === 'extensions') {
-      return new Response('<h1>Comet Extensions</h1><p>Extensions management</p>', { headers: { 'content-type': 'text/html' } });
+      return new Response('<h1>Aartiq Extensions</h1><p>Extensions management</p>', { headers: { 'content-type': 'text/html' } });
     } else if (resourcePath === 'vault') {
-      return new Response('<h1>Comet Vault</h1><p>Secure vault storage</p>', { headers: { 'content-type': 'text/html' } });
+      return new Response('<h1>Aartiq Vault</h1><p>Secure vault storage</p>', { headers: { 'content-type': 'text/html' } });
     }
-    return new Response('<h1>Comet Protocol</h1><p>Not found</p>', { status: 404, headers: { 'content-type': 'text/html' } });
+    return new Response('<h1>Aartiq Protocol</h1><p>Not found</p>', { status: 404, headers: { 'content-type': 'text/html' } });
   });
 
   console.log('[Handlers] App handlers registered');

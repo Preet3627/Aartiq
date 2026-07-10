@@ -68,7 +68,7 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
                 </h3>
                 <p className="text-xs text-white/60 leading-relaxed">
                   To unlock the full potential of your browser's AI agent, you need to connect an AI Provider. 
-                  Comet supports both **Cloud Providers** (for maximum IQ) and **Local Engines** (for maximum privacy).
+                  Aartiq supports both **Cloud Providers** (for maximum IQ) and **Local Engines** (for maximum privacy).
                 </p>
               </div>
               <div className="space-y-3">
@@ -125,7 +125,7 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
               <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/10 flex items-start gap-3">
                 <AlertCircle size={14} className="text-amber-500 flex-shrink-0 mt-0.5" />
                 <p className="text-[9px] text-amber-500/80 leading-relaxed font-medium">
-                  Comet stores your keys locally in an encrypted vault. They are never sent to our servers.
+                  Aartiq stores your keys locally in an encrypted vault. They are never sent to our servers.
                 </p>
               </div>
             </motion.div>
@@ -150,7 +150,7 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
                 <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 space-y-2">
                   <div className="text-[10px] font-black text-white/40 uppercase">1. Expose to Network</div>
                   <p className="text-[10px] text-white/60 leading-relaxed">
-                    By default, Ollama only listens locally. To allow Comet to connect (especially if using a remote server):
+                    By default, Ollama only listens locally. To allow Aartiq to connect (especially if using a remote server):
                   </p>
                   <div className="bg-black/40 p-2 rounded-lg font-mono text-[9px] text-sky-300 border border-white/5">
                     export OLLAMA_HOST=0.0.0.0

@@ -85,7 +85,30 @@ class SyncService {
     }
   }
 
+  /// Clears ALL saved devices and the last-device key from storage.
+  /// Use this as a recovery step when connections fail with unexpected ports.
+  Future<void> forgetAllDevices() async {
+    try {
+      _savedDevices.clear();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_deviceMemoryKey);
+      await prefs.remove(_lastDeviceKey);
+      print('[Sync] All saved devices cleared.');
+    } catch (e) {
+      print('[Sync] Error clearing all devices: $e');
+    }
+  }
+
   List<Map<String, dynamic>> getSavedDevices() => _savedDevices;
+
+  /// Sanitize port: the Aartiq desktop sync server always listens on 3004.
+  /// If a saved device has a port outside the valid range 1–65535 or outside
+  /// expected sync ports (3004), fall back to 3004 to avoid stale port errors.
+  int _sanitizePort(dynamic rawPort) {
+    final p = rawPort is int ? rawPort : int.tryParse('$rawPort') ?? 0;
+    if (p >= 1024 && p <= 65535) return p;
+    return 3004;
+  }
 
   Map<String, dynamic> _normalizeSavedDevice(Map<String, dynamic> device) {
     return {
@@ -93,7 +116,7 @@ class SyncService {
       'deviceName': device['deviceName'] ?? 'Desktop Device',
       'deviceType': device['deviceType'] ?? 'desktop',
       'ip': device['ip'],
-      'port': device['port'] ?? 3004,
+      'port': _sanitizePort(device['port']),
       'timestamp': device['timestamp'] ?? DateTime.now().millisecondsSinceEpoch,
       'lastConnected': device['lastConnected'] ?? device['timestamp'],
       'lastSeen':
@@ -733,7 +756,7 @@ class SyncService {
 
     // Wait for response (with timeout)
     try {
-      final response = await onDesktopControl
+      final response = await onCommandResponse
           .firstWhere(
             (msg) => msg['commandId'] == commandId,
             orElse: () => {'error': 'Timeout'},

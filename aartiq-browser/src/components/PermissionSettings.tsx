@@ -364,7 +364,7 @@ const PermissionSettings = () => {
                 </div>
                 <div>
                   <h5 className="text-white font-bold">Low Risk AI Actions</h5>
-                  <p className="text-white/50 text-xs">Navigation, page reads, and other inside-Comet safe actions.</p>
+                  <p className="text-white/50 text-xs">Navigation, page reads, and other inside-Aartiq safe actions.</p>
                 </div>
               </div>
               <button

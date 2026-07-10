@@ -290,7 +290,7 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
                                 <span>Select <span className="text-white/20 px-1 font-sans">↵</span></span>
                             </div>
                             <div className="flex items-center gap-1">
-                                <span className="text-sky-500/40">Comet Brain</span>
+                                <span className="text-sky-500/40">Aartiq Brain</span>
                                 <span className="text-white/5">v0.3.0</span>
                             </div>
                         </div>

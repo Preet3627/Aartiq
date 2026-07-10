@@ -39,7 +39,7 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
             }
 
             const clientId = store.clientId || '601898745585-8g9t0k72gq4q1a4s1o4d1t6t7e5v4c4g.apps.googleusercontent.com';
-            const redirectUri = store.redirectUri || 'https://browser.ponsrischool.in/oauth2callback';
+            const redirectUri = store.redirectUri || 'https://aartiq-three.vercel.app/oauth2callback';
 
             if (!clientId) {
                 console.error('[Auth] No clientId available — check landing page config');
@@ -69,7 +69,7 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
             // Step 3: Open system browser with updated logic
             if (window.electronAPI) {
                 const firebaseConfig = firebaseConfigStorage.load() || {};
-                const authUrl = `https://browser.ponsrischool.in/auth?client_id=desktop-app&redirect_uri=aartiq-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(firebaseConfig))}`;
+                const authUrl = `https://aartiq-three.vercel.app/auth?client_id=desktop-app&redirect_uri=aartiq-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(firebaseConfig))}`;
                 window.electronAPI.openAuthWindow(authUrl);
             }
         } catch (err) {

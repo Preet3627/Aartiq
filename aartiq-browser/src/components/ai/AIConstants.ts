@@ -1,4 +1,4 @@
-export const COMET_CAPABILITIES = {
+export const AARTIQ_CAPABILITIES = {
   browser: true,
   terminal: true,
   filesystem: true,

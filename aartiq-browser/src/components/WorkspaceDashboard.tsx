@@ -41,10 +41,10 @@ const WorkspaceDashboard = () => {
 
     const handleConnect = () => {
         if (window.electronAPI) {
-            const authUrl = `https://browser.ponsrischool.in/auth?client_id=desktop-app&redirect_uri=aartiq-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(firebaseConfigStorage.load() || {}))}`;
+            const authUrl = `https://aartiq-three.vercel.app/auth?client_id=desktop-app&redirect_uri=aartiq-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(firebaseConfigStorage.load() || {}))}`;
             window.electronAPI.openAuthWindow(authUrl);
         } else {
-            const url = `https://browser.ponsrischool.in/auth?client_id=web-app&redirect_uri=${encodeURIComponent(window.location.origin + '/auth')}`;
+            const url = `https://aartiq-three.vercel.app/auth?client_id=web-app&redirect_uri=${encodeURIComponent(window.location.origin + '/auth')}`;
             window.open(url, "_blank");
         }
     };

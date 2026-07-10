@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../auth_service.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:provider/provider.dart';
 import '../models/browser_model.dart';
@@ -156,7 +157,57 @@ class _AartiqHomePageState extends State<AartiqHomePage>
                         padding: const EdgeInsets.symmetric(horizontal: 24.0),
                         child: Column(
                           children: [
-                            const SizedBox(height: 80),
+                            const SizedBox(height: 16),
+                            Align(
+                              alignment: Alignment.topRight,
+                              child: GestureDetector(
+                                onTap: () => Navigator.pushNamed(context, '/settings'),
+                                child: StreamBuilder<Map<String, dynamic>?>(
+                                  stream: AuthService().onAuthStateChanged,
+                                  initialData: AuthService().isAuthenticated
+                                      ? {
+                                          'photoUrl': AuthService().photoUrl,
+                                        }
+                                      : null,
+                                  builder: (context, snapshot) {
+                                    final user = snapshot.data;
+                                    final isLoggedIn = user != null &&
+                                        !user['userId'].toString().startsWith('guest_');
+                                    final photoUrl = user?['photoUrl'];
+
+                                    if (isLoggedIn && photoUrl != null) {
+                                      return Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: const Color(0xFF00E5FF).withOpacity(0.5),
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: CircleAvatar(
+                                          radius: 18,
+                                          backgroundImage: NetworkImage(photoUrl),
+                                        ),
+                                      );
+                                    }
+                                    return Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white.withOpacity(0.05),
+                                        border: Border.all(color: Colors.white10),
+                                      ),
+                                      child: const Icon(
+                                        Icons.settings_outlined,
+                                        color: Color(0xFF00E5FF),
+                                        size: 20,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 32),
                             _buildModernLogo(settings),
                             const SizedBox(height: 40),
                             _buildAddressSearchBar(settings),

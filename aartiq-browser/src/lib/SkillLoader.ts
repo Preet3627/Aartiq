@@ -140,7 +140,7 @@ class SkillLoader {
 
     let skillContent = lines.slice(startIndex).join('\n').trim();
 
-    const runtimeNoteRegex = /> Comet runtime note:[\s\S]*?---/;
+    const runtimeNoteRegex = /> Aartiq runtime note:[\s\S]*?---/;
     skillContent = skillContent.replace(runtimeNoteRegex, '').trim();
 
     return skillContent;

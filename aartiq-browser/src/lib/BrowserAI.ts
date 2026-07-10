@@ -21,7 +21,7 @@ export class BrowserAI {
             } catch (e) {
                 await tf.setBackend('cpu');
             }
-            console.log(`Comet Intelligence: TF.js Backend [${tf.getBackend()}] Ready.`);
+            console.log(`Aartiq Intelligence: TF.js Backend [${tf.getBackend()}] Ready.`);
         })();
         return this.isReady;
     }
@@ -67,7 +67,7 @@ export class BrowserAI {
             // or let it be 'conceptual' for local similarity.
             // In a pro setup we'd load weights here.
             this.encoderModel = model;
-            console.log("Comet Neural Engine: RAG Vector Encoder Initialized.");
+            console.log("Aartiq Neural Engine: RAG Vector Encoder Initialized.");
         } catch (e) {
             console.error("TF.js Encoder Initialization failed:", e);
         }
@@ -141,7 +141,7 @@ export class BrowserAI {
                         vector: tf.tensor1d(item.vector),
                         metadata: item.metadata
                     }));
-                    console.log(`[Comet Intelligence] Loaded ${this.vectorMemory.length} memories from local vector DB.`);
+                    console.log(`[Aartiq Intelligence] Loaded ${this.vectorMemory.length} memories from local vector DB.`);
                 }
             } catch (e) {
                 console.warn("Failed to load vector store:", e);
@@ -187,7 +187,7 @@ export class BrowserAI {
 
         return `
             <div class="space-y-4">
-                <p class="font-bold text-deep-space-accent-neon">🧠 Comet Neural Analysis (Offline)</p>
+                <p class="font-bold text-deep-space-accent-neon">🧠 Aartiq Neural Analysis (Offline)</p>
                 <div class="p-3 bg-white/5 border border-white/10 rounded-xl">
                     <p class="text-[10px] uppercase font-black tracking-widest text-white/40 mb-2">Retrieved Context</p>
                     <p class="text-[11px] leading-relaxed opacity-60">${contextSummary}</p>

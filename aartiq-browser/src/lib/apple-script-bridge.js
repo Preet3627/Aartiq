@@ -324,7 +324,7 @@ function generateDpeechRecognitionScript() {
         return "Command sent to Aartiq"
       end if
       
-      return "No Comet command found"
+      return "No Aartiq command found"
     end processSpokenText
     
     -- Alternative: Use macOS Dictation feature

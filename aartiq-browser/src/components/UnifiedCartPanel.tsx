@@ -56,7 +56,7 @@ const UnifiedCartPanel = ({ onClose, onScan }: { onClose: () => void, onScan: ()
 
             {store.unifiedCart.length > 0 && (
                 <button className="w-full mt-8 py-4 bg-deep-space-accent-neon text-deep-space-bg font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-[0_0_20px_rgba(0,255,255,0.3)] hover:scale-[1.02] transition-all">
-                    Checkout All via Comet Pay
+                    Checkout All via Aartiq Pay
                 </button>
             )}
         </motion.div>

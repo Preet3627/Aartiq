@@ -58,11 +58,11 @@ import { useUIStore } from '@/stores/uiStore';
 import {
   getThreatRecord, setThreatRecord, checkThreat, scrubbedContent,
   isFailedPageContent, extractSiteFromContext, buildCleanPDFContent, buildPDFFromJSON,
-  lsGet, lsSet, preloadCometIcon, tryGetIconBase64,
+  lsGet, lsSet, preloadAartiqIcon, tryGetIconBase64,
   type PDFImage, type PDFActionLog, type PDFOCRData, generateSmartPDF, PDF_ICONS, getIcon
 } from './ai/AIUtils';
 import {
-  COMET_CAPABILITIES, SYSTEM_INSTRUCTIONS, LANGUAGE_MAP, INTERNAL_TAG_RE,
+  AARTIQ_CAPABILITIES, SYSTEM_INSTRUCTIONS, LANGUAGE_MAP, INTERNAL_TAG_RE,
   queryRequiresSearch
 } from './ai/AIConstants';
 import { useAppStore } from '@/store/useAppStore';
@@ -754,7 +754,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     setThinkingSteps((prev) => prev.map((s) => s.id === id ? { ...s, detail } : s));
   }, []);
 
-  const preloadCometIconLocal = useCallback(async (): Promise<void> => {
+  const preloadAartiqIconLocal = useCallback(async (): Promise<void> => {
     if (typeof window === 'undefined') return;
     if ((window as any).__cometIconBase64) return;
     try {
@@ -839,7 +839,7 @@ I couldn't schedule the task. The background service may not be running. Please 
     // Check if we have recent search for this topic
     const recentContext = searchContextStore.hasRecentSearch(topic);
     if (recentContext) {
-      console.log('[CometAI] Using cached search for:', topic);
+      console.log('[Aartiq] Using cached search for:', topic);
       return recentContext.content;
     }
 
@@ -860,7 +860,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           results.push(formatSearchResultsForLLM(q, normalizedResults.slice(0, 5)));
         }
       } catch (e) {
-        console.warn('[CometAI] Pre-flight search failed for:', q, e);
+        console.warn('[Aartiq] Pre-flight search failed for:', q, e);
       }
     }
 
@@ -1200,7 +1200,7 @@ I couldn't schedule the task. The background service may not be running. Please 
         setMessages(prev => [...prev, { id: responseMessageId, role: 'model', content: '' }] as ExtendedChatMessage[]);
         
         let response = await getStreamingResponse(currentHistory, responseMessageId, () => {
-          updateThinkingStep(aiId, iterations === 1 ? 'AI is responding...' : `Comet is processing Step ${iterations}...`);
+          updateThinkingStep(aiId, iterations === 1 ? 'AI is responding...' : `Aartiq is processing Step ${iterations}...`);
         });
 
         // 🔄 AUTO-CONTINUATION: If the AI was cut off due to length, automatically continue
@@ -2917,7 +2917,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           setShowTerminal(true);
           setStreamingPDFContent(`Preparing ${format.toUpperCase()}: ${pdfTitle}...`);
 
-          await preloadCometIconLocal();
+          await preloadAartiqIconLocal();
           const iconSource = (window as any).__cometIconBase64 || null;
 
           try {
@@ -2941,7 +2941,7 @@ I couldn't schedule the task. The background service may not be running. Please 
               const cleanHTML = generateSmartPDF(pdfContent, iconSource, jsonImageResults);
               const res = await window.electronAPI.generatePDF(pdfTitle, cleanHTML) as any;
               if (res.success) {
-                output = `✅ **PDF Generated Successfully!**\n\n**Title:** ${pdfTitle}\n**Engine:** Comet Neural Export\n**Template:** ${template}\n**File:** ${res.filePath}`;
+                output = `✅ **PDF Generated Successfully!**\n\n**Title:** ${pdfTitle}\n**Engine:** Aartiq Neural Export\n**Template:** ${template}\n**File:** ${res.filePath}`;
               } else {
                 output = `❌ PDF generation failed: ${res.error}`;
               }
@@ -3219,7 +3219,7 @@ I couldn't schedule the task. The background service may not be running. Please 
             pdfContent = meta.join('\n') + '\n\n---\n\n' + pdfContent;
           }
 
-          await preloadCometIconLocal();
+          await preloadAartiqIconLocal();
           const iconSource = (window as any).__cometIconBase64 || null;
 
           setIsGeneratingPDF(true);
@@ -3465,7 +3465,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           setMessages(prev => [...prev, { role: 'model', content: "📄 **Task 8: PDF Generation**\nCreating comprehensive capability report with screenshots..." }]);
           await new Promise(resolve => setTimeout(resolve, 1000));
 
-          await preloadCometIconLocal();
+          await preloadAartiqIconLocal();
           const iconSource = (window as any).__cometIconBase64 || null;
 
           const capabilityFeatures = [
@@ -3490,7 +3490,7 @@ I couldn't schedule the task. The background service may not be running. Please 
             'WiFi Sync: Seamless desktop-to-mobile device synchronization',
           ];
 
-          const pdfTitle = `Comet_AI_Capability_Report_${new Date().toISOString().split('T')[0]}`;
+          const pdfTitle = `Aartiq_AI_Capability_Report_${new Date().toISOString().split('T')[0]}`;
 
           const { buildCapabilityReportPDF } = await import('./ai/AIUtils');
           const capabilityPDF = buildCapabilityReportPDF({
@@ -3897,7 +3897,7 @@ I've successfully executed the following real tasks:
       skipBatchRef.current = 0;
       setCurrentCommandIndex(prev => prev + 1 + skip);
     }
-  }, [commandQueue, currentCommandIndex, activeTabId, router, storeSetTheme, setActiveView, currentUrl, requestActionPermission, requestBatchPermission, preloadCometIconLocal, addThinkingStep, resolveThinkingStep, fetchRealSearchContext, openTabAndWaitForLoad, waitForActiveTabToSettle]);
+  }, [commandQueue, currentCommandIndex, activeTabId, router, storeSetTheme, setActiveView, currentUrl, requestActionPermission, requestBatchPermission, preloadAartiqIconLocal, addThinkingStep, resolveThinkingStep, fetchRealSearchContext, openTabAndWaitForLoad, waitForActiveTabToSettle]);
 
   const formatMessageForExport = (m: ExtendedChatMessage) => {
     let result = `${m.role.toUpperCase()}:\n`;
@@ -4117,11 +4117,11 @@ I've successfully executed the following real tasks:
           </div>
         `;
 
-        await preloadCometIconLocal();
+        await preloadAartiqIconLocal();
         const iconSource = (window as any).__cometIconBase64 || null;
         const bandedHtml = generateSmartPDF(bodyContent, iconSource);
 
-        await window.electronAPI.generatePDF('Comet Intelligence Report', bandedHtml);
+        await window.electronAPI.generatePDF('Aartiq Intelligence Report', bandedHtml);
         setFeedback('PDF Document Ready with Action Logs');
       }
     }
@@ -4488,7 +4488,7 @@ I've successfully executed the following real tasks:
       }));
 
       if (isLoading) {
-        snapshotActivityTags.unshift('Comet is thinking');
+        snapshotActivityTags.unshift('Aartiq is thinking');
       }
 
       window.electronAPI.updateNativeMacUIState({
@@ -4699,7 +4699,7 @@ I've successfully executed the following real tasks:
                   <button onClick={() => setTerminalLogs([])} className="w-3 h-3 rounded-full bg-yellow-500/80 hover:bg-yellow-400 transition-colors" title="Clear Terminal" />
                   <div className="w-3 h-3 rounded-full bg-green-500/80" />
                 </div>
-                <span className="text-[10px] font-mono font-bold text-white/30 uppercase tracking-widest ml-2">Comet Terminal</span>
+                <span className="text-[10px] font-mono font-bold text-white/30 uppercase tracking-widest ml-2">Aartiq Terminal</span>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setTerminalLogs([])} className="text-[9px] text-white/20 hover:text-white/50 font-mono uppercase tracking-widest transition-colors">Clear</button>
@@ -4870,7 +4870,7 @@ I've successfully executed the following real tasks:
                         <div className="w-6 h-6 rounded-lg bg-sky-500/20 flex items-center justify-center text-sky-400 border border-sky-500/20">
                           <Sparkles size={12} />
                         </div>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-sky-400/60">Comet Response</span>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-sky-400/60">Aartiq Response</span>
                       </div>
                       <button
                         onClick={() => { navigator.clipboard.writeText(displayContent); }}
@@ -5111,7 +5111,7 @@ I've successfully executed the following real tasks:
                 <span className="w-2 h-2 rounded-full bg-indigo-400/60 animate-pulse" />
                 <span className="w-2 h-2 rounded-full bg-indigo-400/40 animate-pulse" />
               </div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Comet is thinking</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Aartiq is thinking</span>
             </div>
           )}
         </AnimatePresence>

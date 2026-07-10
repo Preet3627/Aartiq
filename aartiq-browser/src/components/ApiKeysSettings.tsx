@@ -92,8 +92,8 @@ const ApiKeysSettings = () => {
                     </div>
                 </div>
                 <div className="pt-4 border-t border-white/5">
-                    <p className="text-[10px] text-orange-400/60 font-medium">
-                        ⚠️ Note: For this development build, API keys are stored in local storage. In a production open-source release, it is recommended to use more secure storage like the OS keychain.
+                    <p className="text-[10px] text-green-400/60 font-medium">
+                        ✓ API keys are stored securely in the OS native keychain (macOS Keychain / Windows Credential Manager).
                     </p>
                 </div>
             </div>

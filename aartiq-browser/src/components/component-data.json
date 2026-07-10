@@ -4279,7 +4279,7 @@
           "hooks": [],
           "componentType": "utility",
           "exports": [
-            "COMET_CAPABILITIES",
+            "AARTIQ_CAPABILITIES",
             "DANGEROUS_PATTERNS",
             "AI_GENERATED_PATTERNS",
             "REFUSED_INTENT_PATTERNS",

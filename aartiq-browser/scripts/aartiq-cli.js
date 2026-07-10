@@ -18,7 +18,7 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 
-const PORT = parseInt(process.env.COMET_NATIVE_MAC_UI_PORT || '46203', 10);
+const PORT = parseInt(process.env.AARTIQ_NATIVE_MAC_UI_PORT || '46203', 10);
 const HOST = '127.0.0.1';
 
 const CONFIG_DIR = path.join(os.homedir(), '.aartiq');
@@ -285,7 +285,7 @@ async function handleAsk() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-Comet-Native-Token': token,
+            'X-Aartiq-Native-Token': token,
             'Content-Length': Buffer.byteLength(postData)
         }
     };
@@ -369,7 +369,7 @@ async function handleSearch() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-Comet-Native-Token': token,
+            'X-Aartiq-Native-Token': token,
             'Content-Length': Buffer.byteLength(postData)
         }
     };
@@ -483,7 +483,7 @@ Commands:
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Comet-Native-Token': token,
+                    'X-Aartiq-Native-Token': token,
                     'Content-Length': Buffer.byteLength(postData)
                 }
             };

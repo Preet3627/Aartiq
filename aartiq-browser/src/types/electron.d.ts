@@ -212,9 +212,11 @@ declare global {
             vaultSaveEntry: (entry: { id?: string; site: string; username?: string; password: string; type?: 'login' | 'form' | 'note'; title?: string; formData?: any[]; created?: string }) => Promise<{ success: boolean; entries?: Array<{ id: string; site: string; username: string; created?: string | null; hasPassword: boolean; passwordMasked: string; type?: 'login' | 'form' | 'note'; title?: string; formData?: any[] }>; error?: string }>;
             vaultDeleteEntry: (entryId: string) => Promise<{ success: boolean; entries?: Array<{ id: string; site: string; username: string; created?: string | null; hasPassword: boolean; passwordMasked: string; type?: 'login' | 'form' | 'note'; title?: string; formData?: any[] }>; error?: string }>;
             vaultReadSecret: (entryId: string) => Promise<{ success: boolean; password?: string; error?: string }>;
+            getAutofillData: (domain: string) => Promise<{ credentials: Array<{ username: string; password: string }>; cards: Array<any>; addresses: Array<any> }>;
             vaultCopySecret: (entryId: string) => Promise<{ success: boolean; error?: string }>;
             getPasswordsForSite: (domain: string) => Promise<any[]>;
-            proposePasswordSave: (data: { domain: string; username?: string; password?: string }) => void;
+            proposePasswordSave: (data: { domain: string; username?: string; password?: string; url?: string; type?: string }) => void;
+            onShowPasswordSaveDialog: (callback: (data: { domain: string; url?: string; username: string; password: string; type: string }) => void) => () => void;
             getOllamaModels: () => Promise<{ name: string; modified_at: string }[]>;
             pullOllamaModel: (model: string, callback: (data: any) => void) => () => void;
             importOllamaModel: (data: { modelName: string; filePath: string }) => Promise<{ success: boolean; error?: string }>;
@@ -498,7 +500,7 @@ declare global {
             onMobileApproveHighRisk: (callback: (data: { pin: string; id: string }) => void) => () => void;
             logError: (message: string) => void;
             getAppIcon: (path?: string) => Promise<string | null>;
-            getCometIcon: () => Promise<string | null>;
+            getAartiqIcon: () => Promise<string | null>;
             classifyTabsAi: (args: { tabs: Array<{ id: string; title: string; url: string }> }) => Promise<{ success: boolean; classifications?: Record<string, string>; error?: string }>;
             organizeFolder: (path: string) => Promise<{ success: boolean; count?: number; summary?: string; path?: string; error?: string }>;
 

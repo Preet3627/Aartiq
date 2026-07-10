@@ -111,7 +111,7 @@ create_launchdaemon_plist() {
     
     <key>EnvironmentVariables</key>
     <dict>
-        <key>COMET_SERVICE_MODE</key>
+        <key>AARTIQ_SERVICE_MODE</key>
         <string>background</string>
     </dict>
     
@@ -177,7 +177,7 @@ create_launchagent_plist() {
     
     <key>EnvironmentVariables</key>
     <dict>
-        <key>COMET_SERVICE_MODE</key>
+        <key>AARTIQ_SERVICE_MODE</key>
         <string>background</string>
     </dict>
     

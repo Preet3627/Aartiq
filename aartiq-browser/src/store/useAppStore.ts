@@ -355,13 +355,13 @@ export const useAppStore = create<BrowserState>()(
                 const defaults = {
                     clientId: '601898745585-8g9t0k72gq4q1a4s1o4d1t6t7e5v4c4g.apps.googleusercontent.com',
                     clientSecret: '',
-                    redirectUri: 'https://browser.ponsrischool.in/oauth2callback'
+                    redirectUri: 'https://aartiq.vercel.app/oauth2callback'
                 };
                 
                 try {
-                    const res = await fetch('https://browser.ponsrischool.in/api/config', {
+                    const res = await fetch('https://aartiq-three.vercel.app/api/config', {
                         headers: {
-                            'X-Comet-App-Token': 'comet-secure-v1' // Same token as landing page
+                            'X-Aartiq-App-Token': 'aartiq-secure-v1' // Same token as landing page
                         },
                         signal: AbortSignal.timeout(5000) // Don't hang forever
                     });

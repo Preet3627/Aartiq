@@ -318,6 +318,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.11.8"
+  flutter_font_icons:
+    dependency: "direct main"
+    description:
+      name: flutter_font_icons
+      sha256: f48e33076b5d97861057e9a9d64544afdbaa8fd0ab0e2f082bc8084a384e7239
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.0"
   flutter_inappwebview:
     dependency: "direct main"
     description:

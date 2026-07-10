@@ -93,7 +93,7 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
         'Open Terminal and run: ollama run gpt-oss-cloud:120b',
         'Or run: ollama run llama3.3:70b (for faster local model)',
         'To enable network access: export OLLAMA_HOST=0.0.0.0',
-        'Restart Ollama if needed. Comet connects to http://localhost:11434'
+        'Restart Ollama if needed. Aartiq connects to http://localhost:11434'
       ]
     },
     openai: {
@@ -487,7 +487,7 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30 mb-1">Design your Charm</div>
                 <p className="text-[10px] text-white/50 leading-relaxed">
-                  Pick the palette that matches your desk. Comet remembers your choice until you change it again.
+                  Pick the palette that matches your desk. Aartiq remembers your choice until you change it again.
                 </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -642,7 +642,7 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
               <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 flex items-start gap-4">
                 <Shield size={18} className="text-amber-500/60 flex-shrink-0 mt-0.5" />
                 <p className="text-[10px] text-amber-500/60 leading-relaxed font-bold uppercase tracking-tight">
-                  Comet vault secures your keys locally with 256-bit encryption. Your keys never leave this machine.
+                  Aartiq vault secures your keys locally with 256-bit encryption. Your keys never leave this machine.
                 </p>
               </div>
             </motion.div>
@@ -678,7 +678,7 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
                   <div className="bg-black/60 p-3 rounded-xl font-mono text-[10px] text-sky-300 border border-white/10 shadow-inner select-all">
                     export OLLAMA_HOST=0.0.0.0
                   </div>
-                  <p className="text-[8px] text-sky-400/50 italic">Allows Comet to bridge through your router/network firewall.</p>
+                  <p className="text-[8px] text-sky-400/50 italic">Allows Aartiq to bridge through your router/network firewall.</p>
                 </div>
 
                 <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3 group hover:border-sky-400/20 transition-all">

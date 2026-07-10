@@ -307,7 +307,7 @@ class ActionLogsStore {
     // Export formatted logs
     exportAsJSON(): string {
         const exportData = {
-            type: 'COMET_AI_ACTION_LOGS',
+            type: 'AARTIQ_AI_ACTION_LOGS',
             version: '1.0',
             exportTimestamp: Date.now(),
             exportDate: new Date().toISOString(),

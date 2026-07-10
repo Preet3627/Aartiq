@@ -34,7 +34,7 @@ const KeyboardShortcutSettings = () => {
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-6 text-white/55">
         {isMac
           ? 'These shortcuts now power both the shortcut manager and the native macOS menu accelerators.'
-          : 'These shortcuts update Comet actions and global-safe hotkeys where supported.'}
+          : 'These shortcuts update Aartiq actions and global-safe hotkeys where supported.'}
       </div>
 
       <div className="space-y-4">

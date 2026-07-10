@@ -62,7 +62,7 @@
 
 ***
 
-Unlike traditional AI browsers that rely only on model guardrails, Comet enforces **architectural isolation**:
+Unlike traditional AI browsers that rely only on model guardrails, Aartiq enforces **architectural isolation**:
 
 - 🔍 Secure DOM Parser + Visual Sandbox  
 - 🔥 Syntactic command firewall  
@@ -72,24 +72,24 @@ Built and optimized on **Intel i5-U | 8GB RAM | No GPU**
 
 ---
 
-## 🌌 Why Comet Exists
+## 🌌 Why Aartiq Exists
 
 Modern browsers are built for monetization and cloud dependency.
 
-Comet is built for:
+Aartiq is built for:
 
 - 🧠 Autonomous browsing agency  
 - 🔒 Privacy-first AI usage  
 - 💻 OS-level automation with safety  
 - ⚡ Low-spec hardware efficiency  
 
-Comet is for developers, researchers, and power users who want programmable browsing — without sacrificing control.
+Aartiq is for developers, researchers, and power users who want programmable browsing — without sacrificing control.
 
 ---
 
 ## 🤖 Autonomous AI Agent
 
-Comet includes a multimodal browser-level agent.
+Aartiq includes a multimodal browser-level agent.
 
 ### Perception System
 - **Secure DOM Parser** (Primary) - Fast, reliable structured data extraction with XSS prevention (DOMPurify)
@@ -131,7 +131,7 @@ Hybrid routing:
 
 ## 🛡️ Triple-Lock Security Architecture
 
-Comet does **not** claim LLM immunity.  
+Aartiq does **not** claim LLM immunity.  
 It enforces **system-level isolation.**
 
 ### 1️⃣ Secure DOM Parser + OCR Fallback
@@ -188,7 +188,7 @@ Even if socially engineered, it cannot act without approval.
 
 ### ✅ Security Summary
 
-Comet enforces:
+Aartiq enforces:
 
 - Non-executable perception  
 - Capability-scoped execution (allowlist, not denylist)  
@@ -317,7 +317,7 @@ Mobile agent trigger:
 Framework: Electron + Next.js
 
 ### Automation Layer (Cross-Platform)
-Comet uses **native OS automation** with platform-specific backends:
+Aartiq uses **native OS automation** with platform-specific backends:
 
 | Platform | Backend | Features |
 |----------|---------|----------|
@@ -363,7 +363,7 @@ Comet uses **native OS automation** with platform-specific backends:
 
 ## 🚀 Project Status: v0.2.4 "The JSON Command Update"
 
-Comet v0.2.4 introduces a comprehensive restructuring of command parsing with dedicated JSON formats for:
+Aartiq v0.2.4 introduces a comprehensive restructuring of command parsing with dedicated JSON formats for:
 - **PDF Generation**: Structured JSON with options for screenshots, attachments, and live data
 - **Action Tags**: Robust JSON parsing with category classification and permission levels
 - **Shell Commands**: Comprehensive security validation with risk assessment

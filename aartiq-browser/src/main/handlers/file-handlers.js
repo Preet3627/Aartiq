@@ -66,7 +66,7 @@ module.exports = function registerFileHandlers(ipcMain, handlers) {
   });
 
   const { getAppIconBase64 } = require('./utils.js');
-  const { generateCometPDFTemplate } = require('./pdf-utils.js');
+  const { generateAartiqPDFTemplate } = require('./pdf-utils.js');
 
   ipcMain.handle('generate-pdf', async (event, title, content) => {
     const { BrowserWindow, app } = require('electron');
@@ -75,7 +75,7 @@ module.exports = function registerFileHandlers(ipcMain, handlers) {
       const pdfTitle = title || 'Aartiq Document';
       const cleanContent = content || '';
       const icon = await getAppIconBase64();
-      const html = generateCometPDFTemplate(pdfTitle, cleanContent, icon);
+      const html = generateAartiqPDFTemplate(pdfTitle, cleanContent, icon);
 
       const downloadsPath = app.getPath('downloads');
       let workerWindow = null;
@@ -182,7 +182,7 @@ module.exports = function registerFileHandlers(ipcMain, handlers) {
       }
 
       const iconBase64 = await getAppIconBase64();
-      const pdfHtml = generateCometPDFTemplate(chatTitle, chatContent, iconBase64, 'professional', {
+      const pdfHtml = generateAartiqPDFTemplate(chatTitle, chatContent, iconBase64, 'professional', {
         author: 'Aartiq',
         category: 'Chat Session',
         tags: ['chat', 'export', 'aartiq'],

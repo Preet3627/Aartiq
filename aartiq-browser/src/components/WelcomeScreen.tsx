@@ -44,7 +44,7 @@ const featureCards = [
   {
     icon: <MonitorSmartphone size={18} />,
     title: 'Desktop + Mobile',
-    description: 'Sync automation, clipboard, and control flows across Comet devices.',
+    description: 'Sync automation, clipboard, and control flows across Aartiq devices.',
   },
   {
     icon: <Globe size={18} />,
@@ -89,7 +89,7 @@ export default function WelcomeScreen() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const authBaseUrl = useMemo(() => 'https://browser.ponsrischool.in/auth', []);
+  const authBaseUrl = useMemo(() => 'https://aartiq-three.vercel.app/auth', []);
 
   const getFirebaseConfigFromEnv = () => ({
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
@@ -236,7 +236,7 @@ export default function WelcomeScreen() {
                 </div>
 
                 <p className="max-w-2xl text-base leading-8 text-white/62">
-                  Comet gives you a modern browser shell, AI assistance, automation approvals, live search tooling,
+                  Aartiq gives you a modern browser shell, AI assistance, automation approvals, live search tooling,
                   and setup that helps you start in minutes instead of hunting through settings.
                 </p>
               </div>

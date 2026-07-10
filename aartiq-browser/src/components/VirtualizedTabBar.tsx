@@ -69,7 +69,7 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
     
     // If user "shook" the tab (multiple rapid direction changes)
     if (shakeCount.current >= 4 && dragDuration < 1500) {
-      console.log("[CometAI] Tab shake detected! Invoking AI Organizer...");
+      console.log("[Aartiq] Tab shake detected! Invoking AI Organizer...");
       autoGroupTabsAI();
       // Stop shaking immediately
       setIsShaking(false);

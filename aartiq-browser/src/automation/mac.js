@@ -19,7 +19,7 @@ async function initialize() {
       execSync(`test -x "${automationBinary}"`, { stdio: 'ignore' });
       useNative = true;
       isInitialized = true;
-      console.log('[Automation/macOS] Using native Comet automation binary');
+      console.log('[Automation/macOS] Using native Aartiq automation binary');
       return true;
     } catch (e) {}
     

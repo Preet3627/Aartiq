@@ -68,7 +68,7 @@ function parseMarkdownToHTML(content) {
   return html;
 }
 
-function generateCometPDFTemplate(title, content, iconBase64, templateName = 'professional', metadata = {}) {
+function generateAartiqPDFTemplate(title, content, iconBase64, templateName = 'professional', metadata = {}) {
   const isFullHTML = /<html/i.test(content);
   if (isFullHTML) return content;
 
@@ -84,7 +84,7 @@ function generateCometPDFTemplate(title, content, iconBase64, templateName = 'pr
 }
 
 module.exports = {
-  generateCometPDFTemplate,
+  generateAartiqPDFTemplate,
   parseMarkdownTables,
   parseMarkdownToHTML
 };

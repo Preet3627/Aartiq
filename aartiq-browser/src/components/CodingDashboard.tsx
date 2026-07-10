@@ -91,7 +91,7 @@ const CodingDashboard = () => {
         if (!store.githubToken) return handleConnectGithub();
         setIsPushing(true);
         try {
-            await IntegrationService.pushChanges(store.githubToken, code, "Update index.html via Comet Dashboard");
+            await IntegrationService.pushChanges(store.githubToken, code, "Update index.html via Aartiq Dashboard");
             alert("Changes pushed to main branch.");
         } finally {
             setIsPushing(false);

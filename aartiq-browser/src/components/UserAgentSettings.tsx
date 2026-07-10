@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 
 const userAgents: Record<string, { name: string; ua: string }> = {
-    default: { name: 'Comet (Default)', ua: '' },
+    default: { name: 'Aartiq (Default)', ua: '' },
     chrome_win: { name: 'Chrome 131 on Windows', ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.205 Safari/537.36' },
     chrome_mac: { name: 'Chrome 131 on macOS', ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.205 Safari/537.36' },
     firefox_win: { name: 'Firefox 133 on Windows', ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0' },

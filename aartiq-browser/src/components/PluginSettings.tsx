@@ -194,7 +194,7 @@ export default function PluginSettings() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold text-white mb-1">Plugin Manager</h3>
-          <p className="text-sm text-white/40">Extend Comet with AI models, commands, and integrations</p>
+          <p className="text-sm text-white/40">Extend Aartiq with AI models, commands, and integrations</p>
         </div>
         <div className="flex gap-3">
           <button

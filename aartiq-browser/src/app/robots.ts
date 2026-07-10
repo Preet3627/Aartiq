@@ -10,6 +10,6 @@ export default function robots(): MetadataRoute.Robots {
             allow: '/',
             disallow: ['/api/'],
         },
-        sitemap: 'https://browser.ponsrischool.in/sitemap.xml', // Both usually point to the same domain's sitemap
+        sitemap: 'https://aartiq-three.vercel.app/sitemap.xml', // Both usually point to the same domain's sitemap
     };
 }

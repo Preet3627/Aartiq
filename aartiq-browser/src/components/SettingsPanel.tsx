@@ -107,10 +107,10 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
 
     const handleLogin = async () => {
         if (window.electronAPI) {
-            const authUrl = `https://browser.ponsrischool.in/auth?client_id=desktop-app&redirect_uri=aartiq-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(firebaseConfigStorage.load() || {}))}`;
+            const authUrl = `https://aartiq-three.vercel.app/auth?client_id=desktop-app&redirect_uri=aartiq-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(firebaseConfigStorage.load() || {}))}`;
             window.electronAPI.openAuthWindow(authUrl);
         } else {
-            const url = `https://browser.ponsrischool.in/auth?client_id=web-app&redirect_uri=${encodeURIComponent(window.location.origin + '/auth')}`;
+            const url = `https://aartiq-three.vercel.app/auth?client_id=web-app&redirect_uri=${encodeURIComponent(window.location.origin + '/auth')}`;
             window.open(url, "_blank");
         }
     };
@@ -322,7 +322,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                         <p className="text-[10px] font-black text-white/20 uppercase tracking-widest mb-4">Cloud Status</p>
                                         <div className="flex items-center gap-3">
                                             <div className={`w-3 h-3 rounded-full ${store.user ? 'bg-deep-space-accent-neon animate-pulse shadow-[0_0_10px_#38bdf8]' : 'bg-red-500'}`} />
-                                            <span className="text-sm font-bold text-white">{store.user ? 'Synchronized with Comet Cloud' : 'Isolated Local Session'}</span>
+                                            <span className="text-sm font-bold text-white">{store.user ? 'Synchronized with Aartiq Cloud' : 'Isolated Local Session'}</span>
                                         </div>
                                     </div>
                                     <div className="p-8 rounded-[2rem] bg-white/[0.01] border border-white/5">
@@ -782,14 +782,14 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <p className="font-bold text-white mb-1">Default Browser</p>
-                                            <p className="text-xs text-white/30">Make Comet your primary portal for external links.</p>
+                                            <p className="text-xs text-white/30">Make Aartiq your primary portal for external links.</p>
                                         </div>
                                         <button
                                             onClick={async () => {
                                                 if (window.electronAPI) {
                                                     const success = await window.electronAPI.setAsDefaultBrowser();
                                                     if (success) {
-                                                        alert("Comet is now your default browser!");
+                                                        alert("Aartiq is now your default browser!");
                                                     } else {
                                                         alert("Failed to set as default browser. Please try manual settings.");
                                                     }
@@ -1084,7 +1084,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
 
                                 <div className="pt-6 border-t border-white/5 max-w-sm mx-auto">
                                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20">Version {versionLabel} Stable</p>
-                                    <p className="text-[10px] text-white/20 mt-1">Comet Intelligence System • Enhancement Update</p>
+                                    <p className="text-[10px] text-white/20 mt-1">Aartiq Intelligence System • Enhancement Update</p>
                                 </div>
                             </div>
                         )}

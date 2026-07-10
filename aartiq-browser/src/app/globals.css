@@ -294,7 +294,7 @@
 .minimal .ai-sidebar-theme [class*="rounded-[2.5rem]"]:hover {
   box-shadow: none !important;
 }
-/* Hide sparkle icon before "Comet Response" label */
+/* Hide sparkle icon before "Aartiq Response" label */
 .minimal .ai-sidebar-theme [class*="rounded-[2.5rem]"] [class*="w-6 h-6"] {
   display: none !important;
 }

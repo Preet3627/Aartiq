@@ -4,7 +4,7 @@ This guide covers the technical setup for Firebase, MySQL, Vercel deployment, an
 
 ## 🔑 Firebase Configuration
 
-Comet uses Firebase for Authentication and secondary state synchronization.
+Aartiq uses Firebase for Authentication and secondary state synchronization.
 
 1.  **Project Setup:** Create a project at [Firebase Console](https://console.firebase.google.com).
 2.  **Enable Auth:** Enable "Google" as an Authentication provider.
@@ -32,7 +32,7 @@ For cross-device synchronization, setup a MySQL/MariaDB database:
 
 ## 🌐 Vercel Deployment
 
-The landing page and web-lite version of Comet can be hosted on Vercel:
+The landing page and web-lite version of Aartiq can be hosted on Vercel:
 
 1.  **Push to GitHub:** Ensure your repository is up to date.
 2.  **Connect to Vercel:** Import your repository.

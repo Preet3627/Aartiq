@@ -34,6 +34,12 @@
     <key>keychain-access-groups</key>
     <array>
       <string>$(AppIdentifierPrefix)in.ponsri.shared.auth</string>
+      <string>$(AppIdentifierPrefix)com.aartiq.browser</string>
+    </array>
+    <key>com.apple.developer.icloud-services</key>
+    <array>
+      <string>CloudKit</string>
+      <string>KeyValueStore</string>
     </array>
     <key>com.apple.private.tcc.manager</key>
     <true/>
