@@ -28,7 +28,7 @@ struct SidebarPanelView: View {
             VStack(alignment: .leading, spacing: 16) {
                 PanelHeader(
                     title: "Aartiq",
-                    subtitle: viewModel.compactSidebar ? "Minimal mode" : (viewModel.state.isLoading ? "Comet is thinking" : "Native AI workspace"),
+                    subtitle: viewModel.compactSidebar ? "Minimal mode" : (viewModel.state.isLoading ? "Aartiq is thinking" : "Native AI workspace"),
                     symbol: PanelMode.sidebar.symbol,
                     viewModel: viewModel,
                     showStatus: false,
@@ -134,7 +134,7 @@ struct SidebarPanelView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 12) {
                             if visibleMessages.isEmpty {
-                                EmptyStateCard(title: "Ready for prompts", description: "Ask Comet anything, launch action chains, and keep your saved sessions close without breaking browser flow.", appearance: viewModel.state.themeAppearance)
+                                EmptyStateCard(title: "Ready for prompts", description: "Ask Aartiq anything, launch action chains, and keep your saved sessions close without breaking browser flow.", appearance: viewModel.state.themeAppearance)
                             }
 
                             ForEach(visibleMessages) { message in
@@ -197,7 +197,7 @@ struct SidebarPanelView: View {
                             )
 
                         if viewModel.promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("Ask Comet anything, continue a session, or kick off an action chain...")
+                            Text("Ask Aartiq anything, continue a session, or kick off an action chain...")
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundStyle(palette.secondaryText)
                                 .padding(.horizontal, 18)

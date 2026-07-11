@@ -5,9 +5,9 @@ import SwiftUI
 // MARK: - Entities
 
 @available(macOS 13.0, *)
-struct CometPanelEntity: AppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Comet Panel"
-    static var defaultQuery = CometPanelQuery()
+struct AartiqPanelEntity: AppEntity {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Aartiq Panel"
+    static var defaultQuery = AartiqPanelQuery()
     
     let id: String
     let name: String
@@ -19,24 +19,24 @@ struct CometPanelEntity: AppEntity {
 }
 
 @available(macOS 13.0, *)
-struct CometPanelQuery: EntityQuery {
-    func entities(for identifiers: [String]) async throws -> [CometPanelEntity] {
+struct AartiqPanelQuery: EntityQuery {
+    func entities(for identifiers: [String]) async throws -> [AartiqPanelEntity] {
         return allPanels().filter { identifiers.contains($0.id) }
     }
     
-    func suggestedEntities() async throws -> [CometPanelEntity] {
+    func suggestedEntities() async throws -> [AartiqPanelEntity] {
         return allPanels()
     }
     
-    private func allPanels() -> [CometPanelEntity] {
+    private func allPanels() -> [AartiqPanelEntity] {
         [
-            CometPanelEntity(id: "sidebar", name: "Sidebar", symbol: "sparkles.rectangle.stack"),
-            CometPanelEntity(id: "menu", name: "Command Center", symbol: "square.grid.2x2"),
-            CometPanelEntity(id: "apple-ai", name: "Apple Intelligence", symbol: "appleintelligence"),
-            CometPanelEntity(id: "action-chain", name: "Action Chain", symbol: "point.3.filled.connected.trianglepath.dotted"),
-            CometPanelEntity(id: "downloads", name: "Downloads", symbol: "arrow.down.circle"),
-            CometPanelEntity(id: "clipboard", name: "Clipboard", symbol: "doc.on.clipboard"),
-            CometPanelEntity(id: "settings", name: "Settings", symbol: "slider.horizontal.3")
+            AartiqPanelEntity(id: "sidebar", name: "Sidebar", symbol: "sparkles.rectangle.stack"),
+            AartiqPanelEntity(id: "menu", name: "Command Center", symbol: "square.grid.2x2"),
+            AartiqPanelEntity(id: "apple-ai", name: "Apple Intelligence", symbol: "appleintelligence"),
+            AartiqPanelEntity(id: "action-chain", name: "Action Chain", symbol: "point.3.filled.connected.trianglepath.dotted"),
+            AartiqPanelEntity(id: "downloads", name: "Downloads", symbol: "arrow.down.circle"),
+            AartiqPanelEntity(id: "clipboard", name: "Clipboard", symbol: "doc.on.clipboard"),
+            AartiqPanelEntity(id: "settings", name: "Settings", symbol: "slider.horizontal.3")
         ]
     }
 }
@@ -44,9 +44,9 @@ struct CometPanelQuery: EntityQuery {
 // MARK: - Intents
 
 @available(macOS 13.0, *)
-struct CometConversationEntity: AppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Comet Conversation"
-    static var defaultQuery = CometConversationQuery()
+struct AartiqConversationEntity: AppEntity {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Aartiq Conversation"
+    static var defaultQuery = AartiqConversationQuery()
     
     let id: String
     let title: String
@@ -57,22 +57,22 @@ struct CometConversationEntity: AppEntity {
 }
 
 @available(macOS 13.0, *)
-struct CometConversationQuery: EntityQuery {
-    func entities(for identifiers: [String]) async throws -> [CometConversationEntity] {
+struct AartiqConversationQuery: EntityQuery {
+    func entities(for identifiers: [String]) async throws -> [AartiqConversationEntity] {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         let state = try? await bridge.getState()
         return (state?.conversations ?? []).filter { identifiers.contains($0.id) }.map {
-            CometConversationEntity(id: $0.id, title: $0.title)
+            AartiqConversationEntity(id: $0.id, title: $0.title)
         }
     }
     
-    func suggestedEntities() async throws -> [CometConversationEntity] {
+    func suggestedEntities() async throws -> [AartiqConversationEntity] {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         let state = try? await bridge.getState()
         return (state?.conversations ?? []).prefix(10).map {
-            CometConversationEntity(id: $0.id, title: $0.title)
+            AartiqConversationEntity(id: $0.id, title: $0.title)
         }
     }
 }
@@ -80,7 +80,7 @@ struct CometConversationQuery: EntityQuery {
 // MARK: - Intents
 
 @available(macOS 13.0, *)
-struct AskCometIntent: AppIntent {
+struct AskAartiqIntent: AppIntent {
     static var title: LocalizedStringResource = "Ask Aartiq"
     static var description = IntentDescription("Send a prompt to Aartiq and get a response.")
     
@@ -88,12 +88,12 @@ struct AskCometIntent: AppIntent {
     var prompt: String
     
     static var parameterSummary: some ParameterSummary {
-        Summary("Ask Comet \(\.$prompt)")
+        Summary("Ask Aartiq \(\.$prompt)")
     }
     
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         
         do {
             let result = try await bridge.sendPrompt(prompt)
@@ -106,9 +106,9 @@ struct AskCometIntent: AppIntent {
 }
 
 @available(macOS 13.0, *)
-struct RefineCometResponseIntent: AppIntent {
-    static var title: LocalizedStringResource = "Refine Comet Response"
-    static var description = IntentDescription("Ask Comet to change the style or length of the last response.")
+struct RefineAartiqResponseIntent: AppIntent {
+    static var title: LocalizedStringResource = "Refine Aartiq Response"
+    static var description = IntentDescription("Ask Aartiq to change the style or length of the last response.")
     
     @Parameter(title: "Instruction", description: "e.g., 'Make it shorter', 'More professional', 'Explain like I'm 5'")
     var instruction: String
@@ -119,7 +119,7 @@ struct RefineCometResponseIntent: AppIntent {
     
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         
         do {
             let result = try await bridge.sendPrompt("Please refine your previous response with this instruction: \(instruction)")
@@ -131,20 +131,20 @@ struct RefineCometResponseIntent: AppIntent {
 }
 
 @available(macOS 13.0, *)
-struct RegenerateCometResponseIntent: AppIntent {
-    static var title: LocalizedStringResource = "Regenerate Comet Response"
-    static var description = IntentDescription("Ask Comet to try answering the last prompt again.")
+struct RegenerateAartiqResponseIntent: AppIntent {
+    static var title: LocalizedStringResource = "Regenerate Aartiq Response"
+    static var description = IntentDescription("Ask Aartiq to try answering the last prompt again.")
     
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         
         do {
             _ = try await bridge.conversationAction("regenerate")
             // Wait for new response
             try await Task.sleep(nanoseconds: 1_000_000_000)
             let result = try await bridge.waitForResponse()
-            return .result(value: result, dialog: "Comet regenerated the response: \(result)")
+            return .result(value: result, dialog: "Aartiq regenerated the response: \(result)")
         } catch {
             return .result(value: "Error", dialog: "I couldn't regenerate the response.")
         }
@@ -152,13 +152,13 @@ struct RegenerateCometResponseIntent: AppIntent {
 }
 
 @available(macOS 13.0, *)
-struct ReadLatestCometResponseIntent: AppIntent {
-    static var title: LocalizedStringResource = "Read Latest Comet Response"
+struct ReadLatestAartiqResponseIntent: AppIntent {
+    static var title: LocalizedStringResource = "Read Latest Aartiq Response"
     static var description = IntentDescription("Hear the last message sent by Aartiq.")
     
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         
         do {
             let state = try await bridge.getState()
@@ -168,7 +168,7 @@ struct ReadLatestCometResponseIntent: AppIntent {
                 return .result(value: "No messages found.", dialog: "I couldn't find any recent responses from Aartiq.")
             }
         } catch {
-            return .result(value: "Connection error", dialog: "I couldn't access Comet to read the response.")
+            return .result(value: "Connection error", dialog: "I couldn't access Aartiq to read the response.")
         }
     }
 }
@@ -187,7 +187,7 @@ struct SearchWebIntent: AppIntent {
     
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         let result = try await bridge.sendPrompt("Search the web for: \(query)")
         return .result(value: result, dialog: "Search results from Aartiq: \(result)")
     }
@@ -202,12 +202,12 @@ struct SetModelIntent: AppIntent {
     var model: String
     
     static var parameterSummary: some ParameterSummary {
-        Summary("Set Comet model to \(\.$model)")
+        Summary("Set Aartiq model to \(\.$model)")
     }
     
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         _ = try await bridge.post("/native-mac-ui/preferences", body: ["activeModel": model])
         return .result(dialog: "Aartiq model set to \(model).")
     }
@@ -215,19 +215,19 @@ struct SetModelIntent: AppIntent {
 
 @available(macOS 13.0, *)
 struct CaptureScreenshotIntent: AppIntent {
-    static var title: LocalizedStringResource = "Capture Comet Screenshot"
+    static var title: LocalizedStringResource = "Capture Aartiq Screenshot"
     static var description = IntentDescription("Take a screenshot of the current browser page.")
     
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         let data = try await bridge.post("/native-mac-ui/screenshot", body: [:])
         
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let path = json["path"] as? String {
             return .result(value: path, dialog: "Screenshot captured and saved to Downloads.")
         }
-        throw NSError(domain: "CometBridge", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to capture screenshot"])
+        throw NSError(domain: "AartiqBridge", code: 3, userInfo: [NSLocalizedDescriptionKey: "Failed to capture screenshot"])
     }
 }
 
@@ -248,22 +248,22 @@ struct CreateDocumentIntent: AppIntent {
     
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         _ = try await bridge.sendPrompt("Generate a \(format) document about: \(topic)")
-        return .result(dialog: "Comet is generating your \(format) document.")
+        return .result(dialog: "Aartiq is generating your \(format) document.")
     }
 }
 
 @available(macOS 13.0, *)
-struct ResetCometChatIntent: AppIntent {
-    static var title: LocalizedStringResource = "Reset Comet Chat"
+struct ResetAartiqChatIntent: AppIntent {
+    static var title: LocalizedStringResource = "Reset Aartiq Chat"
     static var description = IntentDescription("Clear the current conversation context.")
     
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         _ = try? await bridge.conversationAction("new")
-        return .result(dialog: "Comet chat context has been reset.")
+        return .result(dialog: "Aartiq chat context has been reset.")
     }
 }
 
@@ -274,7 +274,7 @@ struct SummarizeCurrentPageIntent: AppIntent {
     
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         
         do {
             let summary = try await bridge.summarizePage()
@@ -286,39 +286,39 @@ struct SummarizeCurrentPageIntent: AppIntent {
 }
 
 @available(macOS 13.0, *)
-struct OpenCometPanelIntent: AppIntent {
-    static var title: LocalizedStringResource = "Open Comet Panel"
+struct OpenAartiqPanelIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open Aartiq Panel"
     static var description = IntentDescription("Open a specific Aartiq interface.")
     
     @Parameter(title: "Panel")
-    var panel: CometPanelEntity
+    var panel: AartiqPanelEntity
     
     static var parameterSummary: some ParameterSummary {
-        Summary("Open Comet \(\.$panel)")
+        Summary("Open Aartiq \(\.$panel)")
     }
     
     @MainActor
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         _ = try? await bridge.openPanel(panel.id)
         return .result(dialog: "Opening \(panel.name).")
     }
 }
 
 @available(macOS 13.0, *)
-struct ListCometConversationsIntent: AppIntent {
-    static var title: LocalizedStringResource = "List Comet Conversations"
+struct ListAartiqConversationsIntent: AppIntent {
+    static var title: LocalizedStringResource = "List Aartiq Conversations"
     static var description = IntentDescription("Show a list of your recent Aartiq conversations.")
     
-    func perform() async throws -> some IntentResult & ReturnsValue<[CometConversationEntity]> {
+    func perform() async throws -> some IntentResult & ReturnsValue<[AartiqConversationEntity]> {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         
         do {
             let state = try await bridge.getState()
             let conversations = (state.conversations ?? []).map {
-                CometConversationEntity(id: $0.id, title: $0.title)
+                AartiqConversationEntity(id: $0.id, title: $0.title)
             }
             
             if conversations.isEmpty {
@@ -334,12 +334,12 @@ struct ListCometConversationsIntent: AppIntent {
 }
 
 @available(macOS 13.0, *)
-struct OpenCometConversationIntent: AppIntent {
-    static var title: LocalizedStringResource = "Open Comet Conversation"
+struct OpenAartiqConversationIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open Aartiq Conversation"
     static var description = IntentDescription("Open a specific chat session in Aartiq.")
     
     @Parameter(title: "Conversation")
-    var conversation: CometConversationEntity
+    var conversation: AartiqConversationEntity
     
     static var parameterSummary: some ParameterSummary {
         Summary("Open \(\.$conversation) in Aartiq")
@@ -347,7 +347,7 @@ struct OpenCometConversationIntent: AppIntent {
     
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         _ = try? await bridge.conversationAction("load", id: conversation.id)
         _ = try? await bridge.openPanel("sidebar")
         return .result(dialog: "Opening your conversation \"\(conversation.title)\".")
@@ -356,13 +356,13 @@ struct OpenCometConversationIntent: AppIntent {
 
 
 @available(macOS 13.0, *)
-struct NewCometChatIntent: AppIntent {
-    static var title: LocalizedStringResource = "New Comet Chat"
+struct NewAartiqChatIntent: AppIntent {
+    static var title: LocalizedStringResource = "New Aartiq Chat"
     static var description = IntentDescription("Start a fresh conversation with Aartiq.")
     
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         _ = try? await bridge.conversationAction("new")
         _ = try? await bridge.openPanel("sidebar")
         return .result(dialog: "Started a new conversation.")
@@ -370,7 +370,7 @@ struct NewCometChatIntent: AppIntent {
 }
 
 @available(macOS 13.0, *)
-struct RunCometCommandIntent: AppIntent {
+struct RunAartiqCommandIntent: AppIntent {
     static var title: LocalizedStringResource = "Run Command in Aartiq"
     static var description = IntentDescription("Execute a shell command via Aartiq.")
     
@@ -383,7 +383,7 @@ struct RunCometCommandIntent: AppIntent {
     
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         // Commands are sensitive, we send them as prompts for AI to handle with permission UI
         _ = try await bridge.sendPrompt("Run this shell command: \(command)")
         return .result(dialog: "Executing command via Aartiq. Please check for permission prompts if required.")
@@ -393,7 +393,7 @@ struct RunCometCommandIntent: AppIntent {
 // MARK: - What Can You Do Intent
 
 @available(macOS 13.0, *)
-struct WhatCanCometDoIntent: AppIntent {
+struct WhatCanAartiqDoIntent: AppIntent {
     static var title: LocalizedStringResource = "What Can Aartiq Do"
     static var description = IntentDescription("Learn about all the things Aartiq can help you with.")
     
@@ -425,7 +425,7 @@ struct WhatCanCometDoIntent: AppIntent {
 
         💬 Chat Management - Start new chats, view past conversations
 
-        Just say "Ask Comet [your question]" to get started!
+        Just say "Ask Aartiq [your question]" to get started!
         """
         
         return .result(value: capabilities, dialog: "Aartiq is your AI-powered browser assistant. You can ask questions, create documents, search the web, run commands, and much more using voice or the Shortcuts app.")
@@ -436,7 +436,7 @@ struct WhatCanCometDoIntent: AppIntent {
 
 @available(macOS 13.0, *)
 struct SetVolumeIntent: AppIntent {
-    static var title: LocalizedStringResource = "Set Comet Volume"
+    static var title: LocalizedStringResource = "Set Aartiq Volume"
     static var description = IntentDescription("Adjust system volume through Aartiq.")
     
     @Parameter(title: "Volume Level", description: "0-100")
@@ -448,7 +448,7 @@ struct SetVolumeIntent: AppIntent {
     
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         _ = try await bridge.post("/native-mac-ui/volume", body: ["level": level])
         return .result(dialog: "Volume set to \(level) percent.")
     }
@@ -470,7 +470,7 @@ struct OpenApplicationIntent: AppIntent {
     
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         _ = try await bridge.openApp(appName)
         return .result(dialog: "Opening \(appName).")
     }
@@ -479,8 +479,8 @@ struct OpenApplicationIntent: AppIntent {
 // MARK: - Schedule Task Intent
 
 @available(macOS 13.0, *)
-struct ScheduleCometTaskIntent: AppIntent {
-    static var title: LocalizedStringResource = "Schedule Comet Task"
+struct ScheduleAartiqTaskIntent: AppIntent {
+    static var title: LocalizedStringResource = "Schedule Aartiq Task"
     static var description = IntentDescription("Schedule an AI task to run automatically.")
     
     @Parameter(title: "Task", description: "What should the AI do?")
@@ -495,7 +495,7 @@ struct ScheduleCometTaskIntent: AppIntent {
     
     func perform() async throws -> some IntentResult {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         _ = try await bridge.sendPrompt("Schedule this task: \(task). Run it: \(schedule)")
         return .result(dialog: "Your task has been scheduled for \(schedule).")
     }
@@ -505,12 +505,12 @@ struct ScheduleCometTaskIntent: AppIntent {
 
 @available(macOS 13.0, *)
 struct GetClipboardIntent: AppIntent {
-    static var title: LocalizedStringResource = "Read Comet Clipboard"
+    static var title: LocalizedStringResource = "Read Aartiq Clipboard"
     static var description = IntentDescription("Read the current clipboard content from Aartiq.")
     
     func perform() async throws -> some IntentResult & ReturnsValue<String> {
         let config = LaunchConfiguration.parse()
-        let bridge = CometBridgeClient(config: config)
+        let bridge = AartiqBridgeClient(config: config)
         
         do {
             let data = try await bridge.get("/native-mac-ui/clipboard")
@@ -529,10 +529,10 @@ struct GetClipboardIntent: AppIntent {
 // MARK: - Shortcuts Provider
 
 @available(macOS 13.0, *)
-struct CometShortcutsProvider: AppShortcutsProvider {
+struct AartiqShortcutsProvider: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
-            intent: AskCometIntent(),
+            intent: AskAartiqIntent(),
             phrases: [
                 "Ask \(.applicationName) \(\.$prompt)",
                 "Tell \(.applicationName) \(\.$prompt)",
@@ -543,7 +543,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: RefineCometResponseIntent(),
+            intent: RefineAartiqResponseIntent(),
             phrases: [
                 "Refine \(.applicationName) response",
                 "Make \(.applicationName) response \(\.$instruction)",
@@ -554,7 +554,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: RegenerateCometResponseIntent(),
+            intent: RegenerateAartiqResponseIntent(),
             phrases: [
                 "Regenerate \(.applicationName) response",
                 "Try again in \(.applicationName)",
@@ -597,7 +597,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: ReadLatestCometResponseIntent(),
+            intent: ReadLatestAartiqResponseIntent(),
             phrases: [
                 "What did \(.applicationName) say?",
                 "Read latest response from \(.applicationName)",
@@ -619,7 +619,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: ListCometConversationsIntent(),
+            intent: ListAartiqConversationsIntent(),
             phrases: [
                 "List my conversations in \(.applicationName)",
                 "Show my recent chats in \(.applicationName)",
@@ -630,7 +630,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: OpenCometConversationIntent(),
+            intent: OpenAartiqConversationIntent(),
             phrases: [
                 "Open my \(\.$conversation) in \(.applicationName)",
                 "Show \(\.$conversation) in \(.applicationName)"
@@ -640,7 +640,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: NewCometChatIntent(),
+            intent: NewAartiqChatIntent(),
             phrases: [
                 "New chat in \(.applicationName)",
                 "Start new conversation with \(.applicationName)"
@@ -650,7 +650,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: WhatCanCometDoIntent(),
+            intent: WhatCanAartiqDoIntent(),
             phrases: [
                 "What can you do with \(.applicationName)",
                 "What can \(.applicationName) do",
@@ -685,7 +685,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: ScheduleCometTaskIntent(),
+            intent: ScheduleAartiqTaskIntent(),
             phrases: [
                 "Schedule \(\.$task) \(\.$schedule) in \(.applicationName)",
                 "Set up \(\.$task) \(\.$schedule) with \(.applicationName)",
@@ -718,7 +718,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: ResetCometChatIntent(),
+            intent: ResetAartiqChatIntent(),
             phrases: [
                 "Reset \(.applicationName) chat",
                 "Clear \(.applicationName) conversation",
@@ -732,7 +732,7 @@ struct CometShortcutsProvider: AppShortcutsProvider {
 
 // MARK: - Bridge Client Helper
 
-class CometBridgeClient {
+class AartiqBridgeClient {
     let config: LaunchConfiguration
     
     init(config: LaunchConfiguration) {
@@ -767,7 +767,7 @@ class CometBridgeClient {
            let content = json["content"] as? String {
             return try await sendPrompt("Summarize this concisely: \(content)")
         }
-        throw NSError(domain: "CometBridge", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to extract page"])
+        throw NSError(domain: "AartiqBridge", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to extract page"])
     }
     
     func openPanel(_ mode: String) async throws -> Bool {
@@ -793,13 +793,13 @@ class CometBridgeClient {
         let data = try await get("/native-mac-ui/state?mode=sidebar")
         let envelope = try JSONDecoder().decode(BridgeStateEnvelope.self, from: data)
         if let state = envelope.state { return state }
-        throw NSError(domain: "CometBridge", code: 2, userInfo: [NSLocalizedDescriptionKey: "No state returned"])
+        throw NSError(domain: "AartiqBridge", code: 2, userInfo: [NSLocalizedDescriptionKey: "No state returned"])
     }
     
     func get(_ path: String) async throws -> Data {
         let url = url(path: path)
         var request = URLRequest(url: url)
-        request.addValue(config.token, forHTTPHeaderField: "X-Comet-Native-Token")
+        request.addValue(config.token, forHTTPHeaderField: "X-Aartiq-Native-Token")
         let (data, _) = try await URLSession.shared.data(for: request)
         return data
     }
@@ -809,7 +809,7 @@ class CometBridgeClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue(config.token, forHTTPHeaderField: "X-Comet-Native-Token")
+        request.addValue(config.token, forHTTPHeaderField: "X-Aartiq-Native-Token")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: request)
         return data

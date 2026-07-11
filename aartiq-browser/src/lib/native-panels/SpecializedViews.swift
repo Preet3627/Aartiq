@@ -281,7 +281,7 @@ struct AnimatedMarkdownMessageText: View {
                     Capsule()
                         .fill(PanelPalette(appearance: appearance).accent)
                         .frame(width: 4, height: 16)
-                    Text("Comet is writing...")
+                    Text("Aartiq is writing...")
                         .font(.system(size: 10, weight: .bold, design: .rounded))
                         .foregroundStyle(PanelPalette(appearance: appearance).secondaryText)
                 }

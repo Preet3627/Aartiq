@@ -17,7 +17,7 @@ struct NativeSettingsPanelView: View {
                                 .font(.system(size: 20, weight: .semibold))
                                 .foregroundStyle(palette.accent)
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Comet Settings")
+                                Text("Aartiq Settings")
                                     .font(.system(size: 22, weight: .bold, design: .rounded))
                                     .foregroundStyle(palette.primaryText)
                                 HStack(spacing: 8) {

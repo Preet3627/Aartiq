@@ -15,12 +15,12 @@ enum PanelMode: String, CaseIterable {
     var title: String {
         switch self {
         case .sidebar: return "Aartiq Sidebar"
-        case .actionChain: return "Comet Action Chain"
-        case .menu: return "Comet Command Center"
-        case .settings: return "Comet Settings"
-        case .downloads: return "Comet Downloads"
-        case .clipboard: return "Comet Clipboard"
-        case .permissions: return "Comet Approval"
+        case .actionChain: return "Aartiq Action Chain"
+        case .menu: return "Aartiq Command Center"
+        case .settings: return "Aartiq Settings"
+        case .downloads: return "Aartiq Downloads"
+        case .clipboard: return "Aartiq Clipboard"
+        case .permissions: return "Aartiq Approval"
         case .appleAI: return "Apple Intelligence"
         }
     }

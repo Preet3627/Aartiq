@@ -19,7 +19,7 @@ struct DownloadsPanelView: View {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         let downloads = viewModel.state.downloads ?? []
                         if downloads.isEmpty {
-                            EmptyStateCard(title: "No downloads yet", description: "Completed and active downloads from Comet will appear here.", appearance: viewModel.state.themeAppearance)
+                            EmptyStateCard(title: "No downloads yet", description: "Completed and active downloads from Aartiq will appear here.", appearance: viewModel.state.themeAppearance)
                         }
                         ForEach(downloads) { item in
                             VStack(alignment: .leading, spacing: 10) {
@@ -87,7 +87,7 @@ struct ClipboardPanelView: View {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         let items = viewModel.state.clipboardItems ?? []
                         if items.isEmpty {
-                            EmptyStateCard(title: "Clipboard is empty", description: "Copied text from Comet and synced devices will show up here.", appearance: viewModel.state.themeAppearance)
+                            EmptyStateCard(title: "Clipboard is empty", description: "Copied text from Aartiq and synced devices will show up here.", appearance: viewModel.state.themeAppearance)
                         }
                         ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                             VStack(alignment: .leading, spacing: 10) {
@@ -132,7 +132,7 @@ struct PermissionsPanelView: View {
                         if let approval = viewModel.state.pendingApproval {
                             ApprovalCard(approval: approval, viewModel: viewModel, appearance: viewModel.state.themeAppearance)
                         } else {
-                            EmptyStateCard(title: "No pending approvals", description: "When Comet wants to run a shell command or access secure files, the request will appear here for you to verify.", appearance: viewModel.state.themeAppearance)
+                            EmptyStateCard(title: "No pending approvals", description: "When Aartiq wants to run a shell command or access secure files, the request will appear here for you to verify.", appearance: viewModel.state.themeAppearance)
                         }
 
                         if viewModel.state.pendingApproval == nil {
@@ -140,7 +140,7 @@ struct PermissionsPanelView: View {
                                 Image(systemName: "checkmark.shield")
                                     .font(.system(size: 14))
                                     .foregroundStyle(Color.green)
-                                Text("System is secure. Comet cannot run terminal commands without your explicit consent.")
+                                Text("System is secure. Aartiq cannot run terminal commands without your explicit consent.")
                                     .font(.system(size: 11, design: .rounded))
                                     .foregroundStyle(palette.secondaryText)
                             }

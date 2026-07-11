@@ -184,7 +184,7 @@ struct AuroraThinkingView: View {
                     .blur(radius: 2)
             }
             
-            Text("Comet is thinking…")
+            Text("Aartiq is thinking…")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(palette.secondaryText)
         }

@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 @main
-struct CometNativePanelsApp: App {
+struct AartiqNativePanelsApp: App {
     @NSApplicationDelegateAdaptor(NativePanelsAppDelegate.self) var appDelegate
     @StateObject private var viewModel: NativePanelViewModel
     let configuration: LaunchConfiguration

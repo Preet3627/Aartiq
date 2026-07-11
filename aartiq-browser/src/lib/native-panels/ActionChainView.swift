@@ -74,7 +74,7 @@ struct ActionChainPanelView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         if viewModel.state.actionChain.isEmpty {
-                            EmptyStateCard(title: "No active chain", description: "When Comet starts executing a multi-step plan, the pending and running steps will appear here in real time.", appearance: viewModel.state.themeAppearance)
+                            EmptyStateCard(title: "No active chain", description: "When Aartiq starts executing a multi-step plan, the pending and running steps will appear here in real time.", appearance: viewModel.state.themeAppearance)
                         }
                         ForEach(Array(viewModel.state.actionChain.enumerated()), id: \.element.id) { index, command in
                             HStack(alignment: .top, spacing: 12) {

@@ -228,6 +228,30 @@ final class NativePanelViewModel: ObservableObject {
         }
     }
 
+    func requestApproval(command: String, reason: String = "", risk: String = "medium") async -> (approved: Bool, error: String?) {
+        recordInteraction()
+        do {
+            let data = try await sendJSONRequest(path: "/native-mac-ui/approval/request", body: [
+                "command": command,
+                "reason": reason,
+                "risk": risk,
+            ])
+            if let response = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let success = response["success"] as? Bool, success,
+               let approval = response["approval"] as? [String: Any] {
+                if let qrImage = approval["highRiskQr"] as? String {
+                    statusText = "Mobile approval required"
+                } else {
+                    statusText = risk == "high" ? "Device unlock required" : "Approval required"
+                }
+                return (true, nil)
+            }
+            return (false, "Failed to create approval request")
+        } catch {
+            return (false, error.localizedDescription)
+        }
+    }
+
     func verifyDeviceOwnerApproval(reason: String, command: String, risk: String) async -> (approved: Bool, error: String?) {
         let context = LAContext()
         context.localizedCancelTitle = "Deny"
@@ -266,7 +290,7 @@ final class NativePanelViewModel: ObservableObject {
             components.queryItems = [URLQueryItem(name: "mode", value: configuration.mode.rawValue)]
 
             var request = URLRequest(url: components.url!)
-            request.addValue(configuration.token, forHTTPHeaderField: "X-Comet-Native-Token")
+            request.addValue(configuration.token, forHTTPHeaderField: "X-Aartiq-Native-Token")
 
             let (data, _) = try await URLSession.shared.data(for: request)
             let envelope = try decoder.decode(BridgeStateEnvelope.self, from: data)
@@ -284,7 +308,7 @@ final class NativePanelViewModel: ObservableObject {
                 updateSidebarPresentation(using: nextState)
                 lastSeenUpdatedAt = nextState.updatedAt
                 isConnected = true
-                statusText = nextState.isLoading ? "Comet is thinking" : "Connected"
+                statusText = nextState.isLoading ? "Aartiq is thinking" : "Connected"
             } else {
                 isConnected = false
                 statusText = envelope.error ?? "Bridge unavailable"
@@ -299,7 +323,7 @@ final class NativePanelViewModel: ObservableObject {
         var request = URLRequest(url: url(path: path))
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue(configuration.token, forHTTPHeaderField: "X-Comet-Native-Token")
+        request.addValue(configuration.token, forHTTPHeaderField: "X-Aartiq-Native-Token")
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
         let (data, _) = try await URLSession.shared.data(for: request)
         return data
@@ -309,7 +333,7 @@ final class NativePanelViewModel: ObservableObject {
         var request = URLRequest(url: url(path: "/native-mac-ui/apple-intelligence/summary"))
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue(configuration.token, forHTTPHeaderField: "X-Comet-Native-Token")
+        request.addValue(configuration.token, forHTTPHeaderField: "X-Aartiq-Native-Token")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["text": text], options: [])
         let (data, _) = try await URLSession.shared.data(for: request)
         let response = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
@@ -320,7 +344,7 @@ final class NativePanelViewModel: ObservableObject {
         var request = URLRequest(url: url(path: "/native-mac-ui/apple-intelligence/image"))
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue(configuration.token, forHTTPHeaderField: "X-Comet-Native-Token")
+        request.addValue(configuration.token, forHTTPHeaderField: "X-Aartiq-Native-Token")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["prompt": prompt], options: [])
         let (data, _) = try await URLSession.shared.data(for: request)
         let response = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any]
@@ -360,7 +384,7 @@ final class NativePanelViewModel: ObservableObject {
         lastInteractionAt = Date()
         compactSidebar = false
         if !expandOnly {
-            statusText = state.isLoading ? "Comet is thinking" : statusText
+            statusText = state.isLoading ? "Aartiq is thinking" : statusText
         }
     }
 
