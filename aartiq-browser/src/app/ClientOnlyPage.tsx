@@ -12,7 +12,7 @@ import {
   RotateCw, AlertTriangle, ShieldCheck, DownloadCloud, ShoppingCart, Copy as CopyIcon,
   Terminal, Settings as GhostSettings, FolderOpen, Sparkles, ScanLine, Search, X,
   Puzzle, Code2, Briefcase, Image as ImageIcon, User as UserIcon, Maximize2, Minimize2, RefreshCcw, Download as DownloadIcon,
-  Layout, MoreVertical, MoreHorizontal, CreditCard, ArrowRight, Languages, Share2, Lock, Shield, Volume2, Square, Music2, Waves, Presentation, Package,
+  MoreVertical, MoreHorizontal, CreditCard, ArrowRight, Languages, Share2, Lock, Shield, Volume2, Square, Music2, Waves, Presentation, Package,
   Zap, Check, Paperclip, MousePointer2,
   // ── NEW: theme icon ──
   Sun, Moon, Palette,
@@ -109,27 +109,7 @@ function ThemeIcon({ theme }: { theme: AppTheme }) {
   return <Moon size={16} />;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SIDEBAR ICON (unchanged)
-// ─────────────────────────────────────────────────────────────────────────────
-const SidebarIcon = ({ icon, label, active, onClick, collapsed }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void, collapsed: boolean }) => (
-  <button
-    onClick={onClick}
-    className={`group relative flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-500 focus:outline-none ${active
-      ? 'bg-accent/10 text-accent'
-      : 'text-secondary-text hover:bg-accent/5 hover:text-accent hover:scale-105 active:scale-95'
-      }`}
-  >
-    <div className="relative z-10 transition-transform duration-300 group-hover:scale-110">
-      {icon}
-    </div>
-    {collapsed && (
-      <div className="absolute left-full ml-4 px-3 py-1.5 bg-[var(--primary-bg)] border border-border-color rounded-lg text-[10px] font-black uppercase tracking-widest text-primary-text opacity-0 group-hover:opacity-100 transition-all pointer-events-none translate-x-[-10px] group-hover:translate-x-0 whitespace-nowrap z-[100]" style={{ boxShadow: '0 4px 20px var(--shadow-color)' }}>
-        {label}
-      </div>
-    )}
-  </button>
-);
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MUSIC VISUALIZER (unchanged)
@@ -248,7 +228,7 @@ export default function Home() {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, visible: boolean } | null>(null);
   const [aiOverview, setAiOverview] = useState<AiOverviewState | null>(null);
   const [showTabSwitcher, setShowTabSwitcher] = useState(false);
-  const [railVisible, setRailVisible] = useState(true);
+
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState<{ x: number, y: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -264,6 +244,7 @@ export default function Home() {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const [showTranslateDialog, setShowTranslateDialog] = useState(false);
   const [showChromeCustomizer, setShowChromeCustomizer] = useState(false);
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [draggedToolbarAction, setDraggedToolbarAction] = useState<ToolbarActionId | null>(null);
   const [compactRevealed, setCompactRevealed] = useState(false);
   const compactHideTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -398,39 +379,35 @@ export default function Home() {
     }
   }, [store.tabs, store.activeTabId, store.history]);
 
-  // Sidebar items configuration
-  const sidebarItems = [
-    { icon: <Globe size={20} />, label: 'Browser', view: 'browser' },
-    { icon: <Briefcase size={20} />, label: 'Workspace', view: 'workspace' },
-    { icon: <ShoppingBag size={20} />, label: 'Web Store', view: 'webstore' },
-    { icon: <FileText size={20} />, label: 'PDF Tools', view: 'pdf' },
-    { icon: <Code2 size={20} />, label: 'Coding', view: 'coding' },
-    { icon: <ImageIcon size={20} />, label: 'Media Studio', view: 'media' },
-    { icon: <Presentation size={20} />, label: 'Presenton', view: 'presenton' },
-    { icon: <Lock size={20} />, label: 'Passwords', view: 'passwords' },
-    { icon: <Shield size={20} />, label: 'Firewall', view: 'firewall' },
-    { icon: <Share2 size={20} />, label: 'P2P Sync', view: 'p2psync' },
+  // Consolidated tools config — used in the ⋮ dropdown menu
+  const mainTools = [
+    { icon: <Globe size={14} />, label: 'Browser', view: 'browser' },
+    { icon: <Lock size={14} />, label: 'Passwords', view: 'passwords' },
+    { icon: <Shield size={14} />, label: 'Nexus Shield', view: 'firewall' },
+    { icon: <Share2 size={14} />, label: 'P2P Sync', view: 'p2psync' },
   ];
 
-  const handleSidebarClick = (item: any) => {
+  const extraTools = [
+    { icon: <Briefcase size={14} />, label: 'Workspace', view: 'workspace' },
+    { icon: <ShoppingBag size={14} />, label: 'Web Store', view: 'webstore' },
+    { icon: <FileText size={14} />, label: 'PDF Tools', view: 'pdf' },
+    { icon: <Code2 size={14} />, label: 'Coding', view: 'coding' },
+    { icon: <ImageIcon size={14} />, label: 'Media Studio', view: 'media' },
+    { icon: <Presentation size={14} />, label: 'Presenton', view: 'presenton' },
+  ];
+
+  const handleToolSelect = (item: { view?: string; popup?: string; manager?: string }) => {
+    setShowToolsMenu(false);
     if (item.view) {
-      // Keep AI sidebar open when opening other panels (except settings-related)
-      // Only close sidebar for settings/profile popups
-      const shouldCloseSidebar = item.popup === 'settings';
-      
-      store.setActiveView(item.view);
+      store.setActiveView(item.view as any);
       setActiveManager(null);
-      if (shouldCloseSidebar) {
-        setShowClipboard(false);
-        setShowSettings(false);
-      }
       if (item.view !== 'browser') {
         window.electronAPI?.hideAllViews();
       } else {
         window.electronAPI?.showAllViews();
       }
     } else if (item.manager) {
-      setActiveManager(item.manager);
+      setActiveManager(item.manager as any);
       store.setActiveView('browser');
       setShowClipboard(false);
       setShowSettings(false);
@@ -540,6 +517,56 @@ export default function Home() {
         cleanTranslation();
       };
     }
+  }, []);
+
+  // Close tools dropdown on outside click
+  useEffect(() => {
+    if (!showToolsMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.tools-menu-container')) setShowToolsMenu(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showToolsMenu]);
+
+  // Listen for actions forwarded from popup windows
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    const clean = window.electronAPI.on('execute-popup-action', (action: any) => {
+      if (action.action === 'tool-select') {
+        setShowToolsMenu(false);
+        store.setActiveView(action.view as any);
+        setActiveManager(null);
+        if (action.view !== 'browser') {
+          window.electronAPI?.hideAllViews();
+        } else {
+          window.electronAPI?.showAllViews();
+        }
+      } else if (action.action === 'open-setting') {
+        openSettingsPanel(action.section);
+      } else if (action.action === 'open-popup') {
+        setShowToolsMenu(false);
+        setIsBrowserDisabled(true);
+        switch (action.popupType) {
+          case 'plugins': setShowExtensionsPopup(true); break;
+          case 'clipboard': openClipboardPanel(); break;
+          case 'translate': openTranslateDialog(); break;
+          case 'search': setShowSpotlightSearch(true); break;
+          case 'downloads': openDownloadsPanel(); break;
+          case 'cart': setShowCart(true); break;
+        }
+      } else if (action.action === 'cycle-theme') {
+        cycleTheme();
+      } else if (action.action === 'create-shortcut') {
+        handleCreateShortcut();
+      } else if (action.action === 'save-page') {
+        handleOfflineSave();
+      } else if (action.action === 'search-with-ai') {
+        runAiOverview(store.currentUrl);
+      }
+    });
+    return () => clean();
   }, []);
 
   const toggleFullscreen = () => {
@@ -693,14 +720,23 @@ export default function Home() {
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    const menuWidth = 192;
-    const menuHeight = 250;
-    const padding = 16;
-    let x = e.clientX;
-    let y = e.clientY;
-    if (e.clientX + menuWidth + padding > window.innerWidth) x = window.innerWidth - menuWidth - padding;
-    if (e.clientY + menuHeight + padding > window.innerHeight) y = window.innerHeight - menuHeight - padding;
-    setShowContextMenu({ x, y });
+    if (window.electronAPI) {
+      window.electronAPI.openContextMenuPopup({
+        x: Math.round(e.screenX),
+        y: Math.round(e.screenY),
+        width: 240,
+        height: 420,
+      });
+    } else {
+      const menuWidth = 192;
+      const menuHeight = 250;
+      const padding = 16;
+      let x = e.clientX;
+      let y = e.clientY;
+      if (e.clientX + menuWidth + padding > window.innerWidth) x = window.innerWidth - menuWidth - padding;
+      if (e.clientY + menuHeight + padding > window.innerHeight) y = window.innerHeight - menuHeight - padding;
+      setShowContextMenu({ x, y });
+    }
   };
 
   const handleTranslate = async () => {
@@ -1451,7 +1487,6 @@ export default function Home() {
       return { x: 0, y: 0, width: 0, height: 0 };
     }
 
-    const railWidth = railVisible ? 70 : 0;
     const aiSidebarWidth = !store.sidebarOpen ? 0 : (store.isSidebarCollapsed ? 70 : store.sidebarWidth);
     const isCompactMode = store.theme === 'minimal' && store.minimalCompactMode;
     const headerHeight = isCompactMode ? 0 : (40 + 56 + topTabsHeight);
@@ -1459,16 +1494,14 @@ export default function Home() {
 
     let x = 0;
     if (store.sidebarSide === 'left') {
-      x = railWidth + aiSidebarWidth;
-    } else {
-      x = railWidth;
+      x = aiSidebarWidth;
     }
 
     if (hasSideTabs && !sideTabsOnRight) {
       x += effectiveSideTabsWidth;
     }
 
-    const width = window.innerWidth - railWidth - aiSidebarWidth - effectiveSideTabsWidth;
+    const width = window.innerWidth - aiSidebarWidth - effectiveSideTabsWidth;
     const height = window.innerHeight - headerHeight;
 
     return {
@@ -1477,7 +1510,14 @@ export default function Home() {
       width: Math.max(0, Math.round(width)),
       height: Math.max(0, Math.round(height))
     };
-  }, [store.sidebarOpen, store.isSidebarCollapsed, store.sidebarWidth, store.sidebarSide, railVisible, store.hasCompletedStartupSetup, store.hasSeenWelcomePage, store.activeView, topTabsHeight, hasSideTabs, sideTabsOnRight, sideTabsWidth, store.theme, store.minimalCompactMode, showSettings, activeManager, showCamera, showDownloads, showCart, showExtensionsPopup, showClipboard, showSpotlightSearch, aiOverview, showTranslateDialog, showSchedulingModal]);
+  }, [store.sidebarOpen, store.isSidebarCollapsed, store.sidebarWidth, store.sidebarSide, store.hasCompletedStartupSetup, store.hasSeenWelcomePage, store.activeView, topTabsHeight, hasSideTabs, sideTabsOnRight, sideTabsWidth, store.theme, store.minimalCompactMode, showSettings, activeManager, showCamera, showDownloads, showCart, showExtensionsPopup, showClipboard, showSpotlightSearch, aiOverview, showTranslateDialog, showSchedulingModal]);
+
+  const handleResize = useCallback(() => {
+    if (window.electronAPI) {
+      const bounds = calculateBounds();
+      window.electronAPI.setBrowserViewBounds(bounds);
+    }
+  }, [calculateBounds]);
 
   useEffect(() => {
     if (window.electronAPI) {
@@ -1486,26 +1526,23 @@ export default function Home() {
     }
 
     if (store.activeView === 'browser') {
-      window.addEventListener('resize', calculateBounds);
+      window.addEventListener('resize', handleResize);
     }
 
     let cleanupFullscreen: (() => void) | undefined;
     if (window.electronAPI?.onWindowFullscreenChanged) {
       cleanupFullscreen = window.electronAPI.onWindowFullscreenChanged(() => {
         requestAnimationFrame(() => {
-          if (window.electronAPI) {
-            const bounds = calculateBounds();
-            window.electronAPI.setBrowserViewBounds(bounds);
-          }
+          handleResize();
         });
       });
     }
 
     return () => {
-      window.removeEventListener('resize', calculateBounds);
+      window.removeEventListener('resize', handleResize);
       cleanupFullscreen?.();
     };
-  }, [calculateBounds, store.activeView]);
+  }, [handleResize, store.activeView]);
 
   // View Management Effects
   useEffect(() => {
@@ -1825,6 +1862,15 @@ export default function Home() {
     };
   }, []);
 
+  // macOS native UI bridge - must be before early return to keep hook count consistent
+  useEffect(() => {
+    if (!window.electronAPI?.updateNativeMacUIState) return;
+    window.electronAPI.updateNativeMacUIState({
+      downloads,
+      clipboardItems: store.clipboard,
+    });
+  }, [downloads, store.clipboard]);
+
   // ── Early return for standalone popup windows (unchanged) ──
   if (isPopupWindow) {
     const params = new URLSearchParams(window.location.search);
@@ -1854,6 +1900,11 @@ export default function Home() {
               <Languages size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Translate</span>
             </button>
+            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'save-page' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <DownloadIcon size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Save Page</span>
+            </button>
+            <div className="h-[1px] bg-white/5 my-1" />
             <button onClick={() => { window.electronAPI?.toggleFullscreen(); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
               <Maximize2 size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Fullscreen</span>
@@ -1862,6 +1913,53 @@ export default function Home() {
               <Code2 size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Inspect</span>
             </button>
+            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'create-shortcut' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <Plus size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Create Shortcut</span>
+            </button>
+            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'cycle-theme' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <Palette size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Switch Theme</span>
+            </button>
+            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'search-with-ai' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <Sparkles size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Search with AI</span>
+            </button>
+            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'open-setting', section: 'profile' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <GhostSettings size={14} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Settings</span>
+            </button>
+          </div>
+        )}
+        {panel === 'tools-menu' && (
+          <div className="w-full h-full bg-[#0a0a0f]/95 backdrop-blur-2xl border border-white/10 rounded-xl shadow-2xl overflow-hidden py-1.5 flex flex-col">
+            <div className="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-white/30">Main</div>
+            {[
+              { action: 'tool-select', view: 'browser', icon: <Globe size={14} />, label: 'Browser' },
+              { action: 'tool-select', view: 'passwords', icon: <Lock size={14} />, label: 'Passwords' },
+              { action: 'tool-select', view: 'firewall', icon: <Shield size={14} />, label: 'Nexus Shield' },
+              { action: 'tool-select', view: 'p2psync', icon: <Share2 size={14} />, label: 'P2P Sync' },
+            ].map((item) => (
+              <button key={item.view} onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: item.action, view: item.view }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+                {item.icon}
+                <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
+              </button>
+            ))}
+            <div className="h-[1px] bg-white/5 my-1.5 mx-3" />
+            <div className="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-white/30">Extras</div>
+            {[
+              { action: 'tool-select', view: 'workspace', icon: <Briefcase size={14} />, label: 'Workspace' },
+              { action: 'tool-select', view: 'webstore', icon: <ShoppingBag size={14} />, label: 'Web Store' },
+              { action: 'tool-select', view: 'pdf', icon: <FileText size={14} />, label: 'PDF Tools' },
+              { action: 'tool-select', view: 'coding', icon: <Code2 size={14} />, label: 'Coding' },
+              { action: 'tool-select', view: 'media', icon: <ImageIcon size={14} />, label: 'Media Studio' },
+              { action: 'tool-select', view: 'presenton', icon: <Presentation size={14} />, label: 'Presenton' },
+            ].map((item) => (
+              <button key={item.view} onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: item.action, view: item.view }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+                {item.icon}
+                <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
+              </button>
+            ))}
           </div>
         )}
         {panel === 'translate' && (
@@ -1902,14 +2000,6 @@ export default function Home() {
   const useNativeActionChainShell = isMacOS && store.macNativeActionChainMode === 'swiftui';
   const keepNativeBridgeMounted = useNativeSidebarShell || useNativeActionChainShell;
   const showEmbeddedSidebar = store.sidebarOpen && !useNativeSidebarShell;
-
-  useEffect(() => {
-    if (!window.electronAPI?.updateNativeMacUIState) return;
-    window.electronAPI.updateNativeMacUIState({
-      downloads,
-      clipboardItems: store.clipboard,
-    });
-  }, [downloads, store.clipboard]);
 
   const renderToolbarAction = (id: ToolbarActionId) => {
     if (!isToolbarActionVisible(id)) return null;
@@ -2127,33 +2217,7 @@ export default function Home() {
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
       >
-        {/* Navigation Sidebar (Rail) */}
-        <AnimatePresence>
-          {railVisible && store.activeView === 'browser' && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 70, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              className="flex flex-col items-center py-6 gap-5 z-[100] backdrop-blur-3xl shadow-[20px_0_60px_rgba(0,0,0,0.15)] border-r no-drag-region outline-none ring-0"
-              style={{
-                background: `linear-gradient(180deg, color-mix(in srgb, var(--navbar-bg) ${store.themeOpacity}%, transparent), color-mix(in srgb, var(--primary-bg) ${Math.max(0, store.themeOpacity - 10)}%, transparent), color-mix(in srgb, var(--primary-bg) ${Math.max(0, store.themeOpacity - 2)}%, transparent))`,
-                borderColor: 'color-mix(in srgb, var(--border-color) 35%, transparent)',
-                backdropFilter: `blur(${store.themeBlur}px)`,
-              }}
-            >
-              {sidebarItems.map((item, idx) => (
-                <SidebarIcon
-                  key={idx}
-                  icon={item.icon}
-                  label={item.label}
-                  active={!!(item.view && store.activeView === item.view)}
-                  onClick={() => handleSidebarClick(item)}
-                  collapsed={true}
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+
 
         <AnimatePresence>
           {(showEmbeddedSidebar || keepNativeBridgeMounted) && store.sidebarOpen && (
@@ -2254,9 +2318,7 @@ export default function Home() {
               }}
             >
               <div className="flex items-center gap-1">
-                <button onClick={() => setRailVisible(!railVisible)} className={`p-2 rounded-xl transition-all ${railVisible ? 'text-secondary-text hover:text-primary-text' : 'bg-accent/10 text-accent'}`} title="Toggle Tools Rail">
-                  <Layout size={18} />
-                </button>
+
                 <button onClick={async () => {
                   if (window.electronAPI) {
                     const selectedText = await window.electronAPI.getSelectedText();
@@ -2524,9 +2586,42 @@ export default function Home() {
                   )}
                 </button>
 
-                <button onClick={(e) => handleContextMenu(e as any)} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="More">
-                  <MoreVertical size={18} />
-                </button>
+                <div className="relative tools-menu-container">
+                  <button onClick={() => setShowToolsMenu(!showToolsMenu)} className="p-2 rounded-xl hover:bg-primary-bg/10 text-secondary-text hover:text-primary-text transition-all" title="Tools">
+                    <MoreVertical size={18} />
+                  </button>
+                  {showToolsMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-48 border rounded-2xl shadow-2xl z-[200] p-2 backdrop-blur-2xl bg-[#0a0a0f]/95 border-white/10" onClick={() => setShowToolsMenu(false)}>
+                      <div className="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-white/30">Main</div>
+                      {[
+                        { view: 'browser', icon: <Globe size={14} />, label: 'Browser' },
+                        { view: 'passwords', icon: <Lock size={14} />, label: 'Passwords' },
+                        { view: 'firewall', icon: <Shield size={14} />, label: 'Nexus Shield' },
+                        { view: 'p2psync', icon: <Share2 size={14} />, label: 'P2P Sync' },
+                      ].map((item) => (
+                        <button key={item.view} onClick={() => { store.setActiveView(item.view as any); setActiveManager(null); if (item.view !== 'browser') window.electronAPI?.hideAllViews(); else window.electronAPI?.showAllViews(); setShowToolsMenu(false); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left rounded-xl">
+                          {item.icon}
+                          <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
+                        </button>
+                      ))}
+                      <div className="h-[1px] bg-white/5 my-1.5 mx-3" />
+                      <div className="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-white/30">Extras</div>
+                      {[
+                        { view: 'workspace', icon: <Briefcase size={14} />, label: 'Workspace' },
+                        { view: 'webstore', icon: <ShoppingBag size={14} />, label: 'Web Store' },
+                        { view: 'pdf', icon: <FileText size={14} />, label: 'PDF Tools' },
+                        { view: 'coding', icon: <Code2 size={14} />, label: 'Coding' },
+                        { view: 'media', icon: <ImageIcon size={14} />, label: 'Media Studio' },
+                        { view: 'presenton', icon: <Presentation size={14} />, label: 'Presenton' },
+                      ].map((item) => (
+                        <button key={item.view} onClick={() => { store.setActiveView(item.view as any); setActiveManager(null); if (item.view !== 'browser') window.electronAPI?.hideAllViews(); else window.electronAPI?.showAllViews(); setShowToolsMenu(false); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left rounded-xl">
+                          {item.icon}
+                          <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </header>
           )}
