@@ -1,17 +1,10 @@
-const { app, ipcMain, BrowserWindow, dialog, shell, nativeTheme, screen } = require('electron');
+const { app, ipcMain, dialog, shell, nativeTheme } = require('electron');
 const path = require('path');
-const os = require('os');
 
 module.exports = function registerAppHandlers(ipcMain, handlers) {
   const { mainWindow, store, getTopWindow, isDev } = handlers;
 
-  ipcMain.handle('get-app-version', () => ({
-    version: app.getVersion(),
-    name: app.getName(),
-    electron: process.versions.electron,
-    chrome: process.versions.chrome,
-    node: process.versions.node,
-  }));
+  ipcMain.handle('get-app-version', () => app.getVersion() || '1.0.0');
 
   ipcMain.handle('get-platform', () => ({
     platform: process.platform,
@@ -131,118 +124,14 @@ module.exports = function registerAppHandlers(ipcMain, handlers) {
     return isOnline;
   });
 
-  // ============================================================================
-  // POPUP WINDOW SYSTEM
-  // ============================================================================
-  const popupWindows = new Map();
-
-  function createPopupWindow(type, options = {}) {
-    if (popupWindows.has(type)) {
-      const existing = popupWindows.get(type);
-      if (existing && !existing.isDestroyed()) existing.close();
-      popupWindows.delete(type);
+  // Forward actions from popup windows to the main window
+  // Use handle/invoke pattern so the popup can await delivery before closing
+  ipcMain.handle('popup-action', async (event, action) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('execute-popup-action', action);
     }
-
-    const isMacPlatform = process.platform === 'darwin';
-    const defaultOptions = {
-      width: 1000,
-      height: 700,
-      frame: isMacPlatform,
-      transparent: !isMacPlatform,
-      backgroundColor: '#00000000',
-      webPreferences: {
-        preload: path.join(__dirname, '..', '..', 'preload.js'),
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: false,
-      },
-      parent: mainWindow,
-      alwaysOnTop: true,
-      skipTaskbar: true,
-      resizable: true,
-      show: false,
-      titleBarStyle: isMacPlatform ? 'hiddenInset' : 'hidden',
-    };
-
-    const popup = new BrowserWindow({ ...defaultOptions, ...options });
-    popup.setAlwaysOnTop(true, 'screen-saturation');
-
-    const baseUrl = isDev
-      ? 'http://localhost:3003'
-      : `file://${path.join(__dirname, '..', '..', 'out', 'index.html')}`;
-
-    let route = '';
-    switch (type) {
-      case 'settings': route = isDev ? '/?panel=settings' : '/settings'; break;
-      case 'extensions':
-      case 'plugins': route = isDev ? '/?panel=extensions' : '/extensions'; break;
-      case 'profile': route = isDev ? '/?panel=profile' : '/profile'; break;
-      case 'downloads': route = isDev ? '/?panel=downloads' : '/downloads'; break;
-      case 'clipboard': route = isDev ? '/?panel=clipboard' : '/clipboard'; break;
-      case 'cart':
-      case 'unified-cart': route = '/cart'; break;
-      case 'search':
-      case 'search-apps': route = isDev ? '/?panel=apps' : '/apps'; break;
-      case 'translate': route = isDev ? '/?panel=translate' : '/translate'; break;
-      case 'context-menu':
-      case 'rightclick': route = isDev ? '/?panel=context-menu' : '/context-menu'; break;
-      default: route = `/${type}`;
-    }
-
-    let url;
-    if (isDev) {
-      url = `${baseUrl}${route}`;
-    } else {
-      const fs = require('fs');
-      const routePathIndex = route === '/' ? '/index.html' : `${route}/index.html`;
-      const routePathHtml = route === '/' ? '/index.html' : `${route}.html`;
-      const fullPathIndex = path.join(__dirname, '..', '..', 'out', routePathIndex);
-      const fullPathHtml = path.join(__dirname, '..', '..', 'out', routePathHtml);
-
-      if (fs.existsSync(fullPathIndex)) url = `file://${fullPathIndex}`;
-      else if (fs.existsSync(fullPathHtml)) url = `file://${fullPathHtml}`;
-      else url = `file://${path.join(__dirname, '..', '..', 'out', 'index.html')}#${route}`;
-    }
-
-    popup.loadURL(url);
-    popup.once('ready-to-show', () => {
-      popup.show();
-      popup.focus();
-      popup.moveTop();
-    });
-    popup.on('closed', () => popupWindows.delete(type));
-    popupWindows.set(type, popup);
-    return popup;
-  }
-
-  ipcMain.on('open-popup-window', (event, { type, options }) => {
-    createPopupWindow(type, options);
+    return { success: true };
   });
-
-  ipcMain.on('close-popup-window', (event, type) => {
-    const popup = popupWindows.get(type);
-    if (popup && !popup.isDestroyed()) popup.close();
-    popupWindows.delete(type);
-  });
-
-  ipcMain.on('close-all-popups', () => {
-    popupWindows.forEach((popup) => { if (popup && !popup.isDestroyed()) popup.close(); });
-    popupWindows.clear();
-  });
-
-  ipcMain.on('open-settings-popup', (event, section = 'profile') => {
-    const popup = createPopupWindow('settings', { width: 1200, height: 800 });
-    setTimeout(() => { if (popup && !popup.isDestroyed()) popup.webContents.send('set-settings-section', section); }, 500);
-  });
-
-  ipcMain.on('open-profile-popup', () => createPopupWindow('profile', { width: 600, height: 700 }));
-  ipcMain.on('open-plugins-popup', () => createPopupWindow('plugins', { width: 900, height: 700 }));
-  ipcMain.on('open-downloads-popup', () => createPopupWindow('downloads', { width: 400, height: 600 }));
-  ipcMain.on('open-clipboard-popup', () => createPopupWindow('clipboard', { width: 450, height: 650 }));
-  ipcMain.on('open-cart-popup', () => createPopupWindow('cart', { width: 500, height: 700 }));
-  ipcMain.on('open-search-popup', (event, options = {}) => createPopupWindow('search', { width: 600, height: 500, ...options }));
-  ipcMain.on('open-translate-popup', (event, options = {}) => createPopupWindow('translate', { width: 400, height: 500, ...options }));
-  ipcMain.on('open-context-menu-popup', (event, options = {}) => createPopupWindow('context-menu', { width: 250, height: 400, ...options }));
 
   // ============================================================================
   // PROTOCOL HANDLING

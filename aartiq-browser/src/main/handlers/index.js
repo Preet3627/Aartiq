@@ -61,7 +61,7 @@ function registerAllHandlers(ipcMain, handlers) {
     'plugins:enable','plugins:disable','plugins:get-commands','plugins:execute-command',
     'plugins:update-config','plugins:get-dir','plugins:scan',
     'plugin-api:read-file','plugin-api:write-file','plugin-api:log',
-    'get-ai-memory','save-vector-store','load-vector-store',
+    'get-ai-memory','save-vector-store','load-vector-store','clear-vector-store',
     'memory:collect','memory:flush','memory:stats',
     'rag-ingest','rag-retrieve','rag-context','rag-stats','rag-delete-source','rag-clear',
     'voice-transcribe','voice-mic-permission','workflow-start','workflow-record',
@@ -70,6 +70,7 @@ function registerAllHandlers(ipcMain, handlers) {
     'user-preference:save','user-preference:load-all','user-preference:delete',
     'pop-search-show','pop-search-show-at-cursor','pop-search-get-config',
     'pop-search-update-config','pop-search-save-config','pop-search-load-config',
+    'popup-action',
   ];
   const onChannels = [
     'minimize-window','maximize-window','close-window','toggle-fullscreen',
@@ -86,7 +87,6 @@ function registerAllHandlers(ipcMain, handlers) {
     'open-settings-popup','open-profile-popup','open-plugins-popup','open-downloads-popup',
     'open-clipboard-popup','open-cart-popup','open-search-popup','open-translate-popup',
     'open-context-menu-popup',
-    'automation-shell-approval-response',
   ];
   handleChannels.forEach(ch => { try { ipcMain.removeHandler(ch); } catch (e) {} });
   onChannels.forEach(ch => { try { ipcMain.removeAllListeners(ch); } catch (e) {} });
