@@ -170,6 +170,12 @@ export interface BrowserState {
     aiSafetyMode: boolean; // If true, AI asks for confirmation before critical actions
     setAiSafetyMode: (enabled: boolean) => void;
 
+    // AI Privacy
+    enableAiPreferenceLearning: boolean; // AI auto-learns user preferences (SAVE_PREFERENCE)
+    setEnableAiPreferenceLearning: (enabled: boolean) => void;
+    enableCrossSessionMemory: boolean; // AI remembers past conversations via RAG
+    setEnableCrossSessionMemory: (enabled: boolean) => void;
+
     // Theme settings
     theme: "system" | "dark" | "light" | "vibrant" | "custom" | "minimal";
     customThemePrimary: string;
@@ -889,8 +895,14 @@ export const useAppStore = create<BrowserState>()(
             setAdditionalAIInstructions: (instructions: string) => set({ additionalAIInstructions: instructions }),
 
             // AI Safety
-            aiSafetyMode: true, // Default to Safe Mode
+            aiSafetyMode: true,
             setAiSafetyMode: (enabled: boolean) => set({ aiSafetyMode: enabled }),
+
+            // AI Privacy
+            enableAiPreferenceLearning: false,
+            setEnableAiPreferenceLearning: (enabled: boolean) => set({ enableAiPreferenceLearning: enabled }),
+            enableCrossSessionMemory: false,
+            setEnableCrossSessionMemory: (enabled: boolean) => set({ enableCrossSessionMemory: enabled }),
 
             // Theme settings
             setTheme: (theme: "light" | "dark" | "system" | "vibrant" | "custom" | "minimal") => set({ theme }),

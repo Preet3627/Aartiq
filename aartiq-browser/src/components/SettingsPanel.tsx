@@ -30,6 +30,7 @@ import UpdatesSettings from './UpdatesSettings';
 import PluginSettings from './PluginSettings';
 import { useAppVersion } from '@/lib/useAppVersion';
 import ThemeSettings from './ThemeSettings';
+import AiMemoryManagerSection from './ai/AiMemoryManagerSection';
 
 const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () => void, defaultSection?: string }) => {
     const store = useAppStore();
@@ -708,6 +709,58 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                         </div>
                                     </div>
                                 </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 flex flex-col gap-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-bold text-white">AI Preference Learning</p>
+                                                <p className="text-xs text-white/40">AI auto-learns your preferences from conversations.</p>
+                                            </div>
+                                            <button
+                                                onClick={() => store.setEnableAiPreferenceLearning(!store.enableAiPreferenceLearning)}
+                                                className={`relative w-14 h-8 rounded-full border transition-all ${store.enableAiPreferenceLearning ? 'bg-deep-space-accent-neon/20 border-deep-space-accent-neon shadow-[0_0_12px_rgba(56,189,248,0.35)]' : 'bg-white/5 border-white/10'}`}
+                                                aria-label="Toggle AI preference learning"
+                                            >
+                                                <span
+                                                    className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-transform duration-200 ${store.enableAiPreferenceLearning ? 'translate-x-6 bg-deep-space-accent-neon text-black' : 'translate-x-0'}`}
+                                                />
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+                                            <BookOpen size={14} className={store.enableAiPreferenceLearning ? 'text-deep-space-accent-neon' : 'text-white/30'} />
+                                            <span className={store.enableAiPreferenceLearning ? 'text-deep-space-accent-neon' : 'text-white/40'}>
+                                                {store.enableAiPreferenceLearning ? 'Active - AI learns from chat' : 'Inactive - preferences not saved'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 flex flex-col gap-4">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-bold text-white">Cross-Session Memory</p>
+                                                <p className="text-xs text-white/40">AI remembers past conversations via RAG memory.</p>
+                                            </div>
+                                            <button
+                                                onClick={() => store.setEnableCrossSessionMemory(!store.enableCrossSessionMemory)}
+                                                className={`relative w-14 h-8 rounded-full border transition-all ${store.enableCrossSessionMemory ? 'bg-deep-space-accent-neon/20 border-deep-space-accent-neon shadow-[0_0_12px_rgba(56,189,248,0.35)]' : 'bg-white/5 border-white/10'}`}
+                                                aria-label="Toggle cross-session memory"
+                                            >
+                                                <span
+                                                    className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white transition-transform duration-200 ${store.enableCrossSessionMemory ? 'translate-x-6 bg-deep-space-accent-neon text-black' : 'translate-x-0'}`}
+                                                />
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+                                            <Database size={14} className={store.enableCrossSessionMemory ? 'text-deep-space-accent-neon' : 'text-white/30'} />
+                                            <span className={store.enableCrossSessionMemory ? 'text-deep-space-accent-neon' : 'text-white/40'}>
+                                                {store.enableCrossSessionMemory ? 'Active - cross-session RAG enabled' : 'Inactive - no memory across chats'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <AiMemoryManagerSection />
                             </div>
                         )}
 

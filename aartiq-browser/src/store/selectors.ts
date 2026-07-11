@@ -50,6 +50,8 @@ export const selectAIChatSidebarStore = (state: BrowserState) => ({
   groqModel: state.groqModel,
   xaiModel: state.xaiModel,
   macNativeSidebarAutoMinimize: state.macNativeSidebarAutoMinimize,
+  enableAiPreferenceLearning: state.enableAiPreferenceLearning,
+  enableCrossSessionMemory: state.enableCrossSessionMemory,
 });
 
 export const selectOptimizedTabsStore = (state: BrowserState) => ({
