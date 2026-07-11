@@ -21,8 +21,8 @@ Aartiq is an AI-native browser that can browse the web, understand your context,
 
 ### AI Agent
 - Multi-step autonomous task execution via chained commands
-- RAG using local vector memory with **cross-session persistence**
-- **AI User Preference Auto-Learning** — AI detects and remembers user preferences (response style, language, behavior)
+- RAG using local vector memory with **cross-session persistence** (opt-in privacy toggle)
+- **AI User Preference Auto-Learning** — AI detects and remembers user preferences (response style, language, behavior) with opt-in privacy control
 - **SAVE_PREFERENCE** command for AI-driven preference storage
 - Hybrid context: browser history + live web search + past conversation RAG
 - `<think>` tag parsing for chain-of-thought models
@@ -36,6 +36,7 @@ Aartiq is an AI-native browser that can browse the web, understand your context,
 - In-page DOM search
 - OCR-based screen reading (Tesseract.js)
 - Built-in ad blocker
+- **Compact toolbar navigation** — three-dot tools menu for quick access to Passwords, Coding, PDF Tools, Media Studio, and more
 
 ### Background Scheduling & Automation
 - Natural language scheduling ("schedule PDF at 8am daily")
@@ -50,8 +51,8 @@ Aartiq is an AI-native browser that can browse the web, understand your context,
 - Charts and watermarks
 
 ### Platform Integration
-- **macOS**: Siri Shortcuts native Swift bridge, Apple Intelligence bridge, native Swift panels, Raycast extension
-- **Windows**: URL scheme, voice control, Microsoft Copilot companion, Power Automate
+- **macOS**: Updated app icon, Siri Shortcuts native Swift bridge (rebranded to Aartiq), Apple Intelligence bridge, native Swift panels, Raycast extension
+- **Windows**: Native title bar controls (minimize/maximize/close), URL scheme, voice control, Microsoft Copilot companion, Power Automate
 - **Linux**: GNOME/KDE detection, espeak TTS, desktop notifications
 
 ### Mobile App (Flutter)
@@ -64,6 +65,7 @@ Aartiq is an AI-native browser that can browse the web, understand your context,
 ### Security
 - Triple-lock architecture: visual sandbox, syntactic firewall, human-in-the-loop
 - **Biometric per-session auth** — Touch ID required once per session; subsequent low-risk actions auto-approve
+- **Biometric Every Action** — optional stricter mode requiring Touch ID for every low-risk action
 - **Batch shell command approval** — multiple consecutive shell commands shown in one modal with per-command toggles
 - **Irreversible command warnings** — red/amber banners for destructive commands (rm -rf, dd, mkfs, etc.) before approval
 - **AES-256-GCM vault** — encrypted credential storage with native OS keychain backup (macOS/Windows/Linux)
