@@ -66,7 +66,7 @@ function SingleMode({ context, onAllow, onDeny, highRiskApproved }: {
       initial={{ opacity: 0, scale: 0.92, y: 12 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.92, y: 12 }}
-      className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0d1a] shadow-2xl overflow-hidden backdrop-blur-2xl mx-auto"
+      className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0d1a] shadow-2xl overflow-y-auto backdrop-blur-2xl mx-auto max-h-[85vh]"
     >
       <div className={`flex items-center gap-3 px-5 py-4 border-b border-white/5 ${risk.bg}`}>
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 ${risk.bg} border ${risk.border}`}>
@@ -323,7 +323,7 @@ function BatchMode({ batchCommands, onAllowBatch, onDeny }: {
       initial={{ opacity: 0, scale: 0.92, y: 12 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.92, y: 12 }}
-      className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0d0d1a] shadow-2xl overflow-hidden backdrop-blur-2xl mx-auto"
+      className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0d0d1a] shadow-2xl overflow-y-auto backdrop-blur-2xl mx-auto max-h-[85vh]"
     >
       <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5 bg-amber-500/10">
         <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-amber-500/10 border border-amber-500/20">

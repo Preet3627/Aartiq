@@ -59,12 +59,25 @@ module.exports = function registerPermissionHandlers(ipcMain, handlers) {
   });
 
   ipcMain.handle('network-security-get', async () => {
-    return networkSecurityManager?.getConfig() || {};
+    const config = networkSecurityManager?.getConfig() || {};
+    return {
+      success: true,
+      config,
+      restartRequiredFor: config.enableSecureDns || config.preventWebRtcLeaks ? ['secureDns', 'webRtcLeaks'] : [],
+    };
   });
 
   ipcMain.handle('network-security-update', async (event, config) => {
-    if (networkSecurityManager) await networkSecurityManager.applyConfig(config);
-    return { success: true };
+    if (networkSecurityManager) {
+      await networkSecurityManager.applyConfig(config);
+      const updated = networkSecurityManager.getConfig();
+      const restartRequiredFor = [];
+      if (config.enableSecureDns !== undefined || config.preventWebRtcLeaks !== undefined) {
+        if (config.enableSecureDns || config.preventWebRtcLeaks) restartRequiredFor.push('secureDns', 'webRtcLeaks');
+      }
+      return { success: true, config: updated, restartRequiredFor };
+    }
+    return { success: false, config: {}, restartRequiredFor: [], error: 'Network security manager not available' };
   });
 
   ipcMain.handle('security-settings-get', async () => {
@@ -75,6 +88,7 @@ module.exports = function registerPermissionHandlers(ipcMain, handlers) {
       requireDeviceUnlockForManualApproval: storeSettings.requireDeviceUnlockForManualApproval !== false,
       requireDeviceUnlockForVaultAccess: storeSettings.requireDeviceUnlockForVaultAccess !== false,
       requireBiometricPerSession: storeSettings.requireBiometricPerSession !== false,
+      requireBiometricEveryTime: !!storeSettings.requireBiometricEveryTime,
       autoApprovedCommands: Array.isArray(storeSettings.autoApprovedCommands) ? storeSettings.autoApprovedCommands : [],
       autoApprovedActions: Array.isArray(storeSettings.autoApprovedActions) ? storeSettings.autoApprovedActions : [],
     };
@@ -93,6 +107,12 @@ module.exports = function registerPermissionHandlers(ipcMain, handlers) {
     }
     if (settings.requireDeviceUnlockForVaultAccess !== undefined) {
       updates.requireDeviceUnlockForVaultAccess = !!settings.requireDeviceUnlockForVaultAccess;
+    }
+    if (settings.requireBiometricPerSession !== undefined) {
+      updates.requireBiometricPerSession = !!settings.requireBiometricPerSession;
+    }
+    if (settings.requireBiometricEveryTime !== undefined) {
+      updates.requireBiometricEveryTime = !!settings.requireBiometricEveryTime;
     }
     if (Object.keys(updates).length > 0) {
       permissionStore.updateSettings(updates);

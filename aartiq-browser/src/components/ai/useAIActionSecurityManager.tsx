@@ -75,18 +75,40 @@ export function useAIActionSecurityManager() {
 
     const settings = await getSecuritySettingsSafe();
     if (isActionAutoApproved(settings, actionType, risk)) {
-      if (risk === 'low' && settings?.requireBiometricPerSession && !biometricVerifiedRef.current) {
+      if (risk === 'low' && settings?.requireBiometricEveryTime) {
+        if (window.electronAPI?.authenticateBiometric) {
+          const authResult = await window.electronAPI.authenticateBiometric(
+            `Verify identity: ${input.action}`
+          );
+          if (!authResult?.success) return false;
+        }
+      } else if (risk === 'low' && settings?.requireBiometricPerSession && !biometricVerifiedRef.current) {
         if (window.electronAPI?.authenticateBiometric) {
           const authResult = await window.electronAPI.authenticateBiometric(
             'Verify identity for low-risk actions this session'
           );
-          if (!authResult?.success) {
-            return false;
-          }
+          if (!authResult?.success) return false;
         }
         biometricVerifiedRef.current = true;
       }
       return true;
+    }
+
+    if (risk === 'low') {
+      if (settings?.requireBiometricEveryTime && window.electronAPI?.authenticateBiometric) {
+        const authResult = await window.electronAPI.authenticateBiometric(
+          `Verify identity: ${input.action}`
+        );
+        return !!authResult?.success;
+      }
+      if (settings?.requireBiometricPerSession && !biometricVerifiedRef.current && window.electronAPI?.authenticateBiometric) {
+        const authResult = await window.electronAPI.authenticateBiometric(
+          'Verify identity for low-risk actions this session'
+        );
+        if (!authResult?.success) return false;
+        biometricVerifiedRef.current = true;
+        return true;
+      }
     }
 
     const requiresDeviceUnlock = settings?.requireDeviceUnlockForManualApproval !== false;
@@ -134,7 +156,14 @@ export function useAIActionSecurityManager() {
 
       const settings = await getSecuritySettingsSafe();
       if (isActionAutoApproved(settings, actionType, risk)) {
-        if (risk === 'low' && settings?.requireBiometricPerSession && !biometricVerifiedRef.current) {
+        if (risk === 'low' && settings?.requireBiometricEveryTime) {
+          if (window.electronAPI?.authenticateBiometric) {
+            const authResult = await window.electronAPI.authenticateBiometric(
+              `Verify identity: ${input.action}`
+            );
+            if (!authResult?.success) return { ...input, actionType, risk, autoApproved: false as const };
+          }
+        } else if (risk === 'low' && settings?.requireBiometricPerSession && !biometricVerifiedRef.current) {
           if (window.electronAPI?.authenticateBiometric) {
             const authResult = await window.electronAPI.authenticateBiometric(
               'Verify identity for low-risk actions this session'
@@ -145,6 +174,24 @@ export function useAIActionSecurityManager() {
         }
         return { ...input, actionType, risk, autoApproved: true as const };
       }
+
+      if (risk === 'low') {
+        if (settings?.requireBiometricEveryTime && window.electronAPI?.authenticateBiometric) {
+          const authResult = await window.electronAPI.authenticateBiometric(
+            `Verify identity: ${input.action}`
+          );
+          return { ...input, actionType, risk, autoApproved: !!authResult?.success as const };
+        }
+        if (settings?.requireBiometricPerSession && !biometricVerifiedRef.current && window.electronAPI?.authenticateBiometric) {
+          const authResult = await window.electronAPI.authenticateBiometric(
+            'Verify identity for low-risk actions this session'
+          );
+          if (!authResult?.success) return { ...input, actionType, risk, autoApproved: false as const };
+          biometricVerifiedRef.current = true;
+          return { ...input, actionType, risk, autoApproved: true as const };
+        }
+      }
+
       return { ...input, actionType, risk, autoApproved: false as const };
     }));
 
@@ -264,6 +311,24 @@ export function useAIActionSecurityManager() {
   }, []);
 
   useEffect(() => {
+    if (!window.electronAPI?.onApprovalActionResolved) return;
+    const cleanup = window.electronAPI.onApprovalActionResolved((data: { requestId: string; allowed: boolean }) => {
+      if (!data.allowed) {
+        setPendingPermission((prev) => {
+          if (prev) { prev.resolve(false); }
+          return null;
+        });
+        return;
+      }
+      setPendingPermission((prev) => {
+        if (prev) { prev.resolve(true); }
+        return null;
+      });
+    });
+    return cleanup;
+  }, []);
+
+  useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
       if (!pendingPermission || pendingPermission.context.risk === 'high') {
         return;
@@ -288,7 +353,7 @@ export function useAIActionSecurityManager() {
     const isBatch = !!pendingPermission.batchCommands && pendingPermission.batchCommands.length > 0;
 
     return (
-      <div className="absolute inset-0 z-[10001] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md">
+      <div className="fixed inset-0 z-[10001] flex items-start justify-center overflow-y-auto py-6 px-4 bg-black/60 backdrop-blur-md">
         {isBatch ? (
           <ClickPermissionModal
             context={pendingPermission.context}

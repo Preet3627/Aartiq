@@ -83,6 +83,8 @@ declare global {
             onDownloadComplete: (callback: (filename: string) => void) => () => void;
             triggerDownload: (url: string, filename: string) => Promise<boolean>;
             on: (channel: string, listener: (...args: any[]) => void) => () => void; // Generic 'on' for ipcRenderer events
+            send: (channel: string, ...args: any[]) => void; // Generic 'send' for ipcRenderer events
+            invoke: (channel: string, ...args: any[]) => Promise<any>; // Generic 'invoke' for ipcRenderer.invoke
             onAddNewTab: (callback: (url: string) => void) => () => void; // Specific add new tab event
 
             getSuggestions: (query: string) => Promise<any[]>; // New IPC handler
@@ -207,21 +209,8 @@ declare global {
             // RAG Persistence & Ollama
             saveVectorStore: (data: any[]) => Promise<boolean>;
             loadVectorStore: () => Promise<any[]>;
-            webSearchRag: (query: string) => Promise<string[]>;
-            vaultListEntries: () => Promise<{ success: boolean; entries: Array<{ id: string; site: string; username: string; created?: string | null; hasPassword: boolean; passwordMasked: string; type?: 'login' | 'form' | 'note'; title?: string; formData?: any[] }>; error?: string }>;
-            vaultSaveEntry: (entry: { id?: string; site: string; username?: string; password: string; type?: 'login' | 'form' | 'note'; title?: string; formData?: any[]; created?: string }) => Promise<{ success: boolean; entries?: Array<{ id: string; site: string; username: string; created?: string | null; hasPassword: boolean; passwordMasked: string; type?: 'login' | 'form' | 'note'; title?: string; formData?: any[] }>; error?: string }>;
-            vaultDeleteEntry: (entryId: string) => Promise<{ success: boolean; entries?: Array<{ id: string; site: string; username: string; created?: string | null; hasPassword: boolean; passwordMasked: string; type?: 'login' | 'form' | 'note'; title?: string; formData?: any[] }>; error?: string }>;
-            vaultReadSecret: (entryId: string) => Promise<{ success: boolean; password?: string; error?: string }>;
-            getAutofillData: (domain: string) => Promise<{ credentials: Array<{ username: string; password: string }>; cards: Array<any>; addresses: Array<any> }>;
-            vaultCopySecret: (entryId: string) => Promise<{ success: boolean; error?: string }>;
-            getPasswordsForSite: (domain: string) => Promise<any[]>;
-            proposePasswordSave: (data: { domain: string; username?: string; password?: string; url?: string; type?: string }) => void;
-            onShowPasswordSaveDialog: (callback: (data: { domain: string; url?: string; username: string; password: string; type: string }) => void) => () => void;
-            getOllamaModels: () => Promise<{ name: string; modified_at: string }[]>;
-            pullOllamaModel: (model: string, callback: (data: any) => void) => () => void;
-            importOllamaModel: (data: { modelName: string; filePath: string }) => Promise<{ success: boolean; error?: string }>;
-            selectLocalFile: (options?: { filters?: { name: string; extensions: string[] }[]; properties?: string[] }) => Promise<string | null>;
-            executeJavaScript: (code: string) => Promise<any>;
+            clearVectorStore: () => Promise<{ success: boolean }>;
+
 
             // Tab Management
             onTabLoaded: (callback: (data: { tabId: string; url: string }) => void) => () => void;
@@ -314,6 +303,11 @@ declare global {
             }) => void;
             onMacNativeUIPreferencesChanged: (callback: (preferences: { sidebarMode: 'electron' | 'swiftui'; actionChainMode: 'electron' | 'swiftui'; utilityMode: 'electron' | 'swiftui'; permissionMode: 'electron' | 'swiftui'; sidebarAutoMinimize?: boolean; sidebarGradientPreset?: 'graphite' | 'ocean' | 'aurora'; sidebarShowQuickActions?: boolean; sidebarShowSessions?: boolean; sidebarShowSearchTags?: boolean; sidebarShowCommandCenterButton?: boolean; sidebarShowActionChainButton?: boolean }) => void) => () => void;
             onNativeMacPrompt: (callback: (payload: { prompt: string; source?: string }) => void) => () => void;
+            notifyAiSidebarOpen: () => void;
+            notifyAiSidebarClosed: () => void;
+            notifyApprovalPending: (details: { requestId?: string; command: string; reason?: string; risk?: string; highRiskQr?: string | null; expectedPin?: string | null; actionType?: string; action?: string; requiresDeviceUnlock?: boolean }) => void;
+            notifyApprovalCleared: () => void;
+            onApprovalActionResolved: (callback: (data: { requestId: string; allowed: boolean; deviceUnlockValidated?: boolean }) => void) => () => void;
 
             // Event Listeners for UI updates
             onNetworkStatusChanged: (callback: (isOnline: boolean) => void) => () => void;
@@ -405,8 +399,8 @@ declare global {
             permCheck: (key: string) => Promise<{ granted: boolean }>;
             permList: () => Promise<Array<{ key: string; level: string; granted_at: number; expires_at: number | null; description: string }>>;
             permAuditLog: (limit?: number) => Promise<Array<{ entry: string; timestamp: number }>>;
-            getSecuritySettings: () => Promise<{ autoApproveLowRisk: boolean; autoApproveMidRisk: boolean; requireDeviceUnlockForManualApproval: boolean; requireDeviceUnlockForVaultAccess: boolean; requireBiometricPerSession: boolean; autoApprovedCommands: string[]; autoApprovedActions: string[] }>;
-            updateSecuritySettings: (settings: { autoApproveLowRisk?: boolean; autoApproveMidRisk?: boolean; requireDeviceUnlockForManualApproval?: boolean; requireDeviceUnlockForVaultAccess?: boolean; autoApprovedActions?: string[]; autoApprovedCommands?: string[] }) => Promise<{ success: boolean; settings: { autoApproveLowRisk: boolean; autoApproveMidRisk: boolean; requireDeviceUnlockForManualApproval: boolean; requireDeviceUnlockForVaultAccess: boolean; autoApprovedCommands: string[]; autoApprovedActions: string[] } }>;
+            getSecuritySettings: () => Promise<{ autoApproveLowRisk: boolean; autoApproveMidRisk: boolean; requireDeviceUnlockForManualApproval: boolean; requireDeviceUnlockForVaultAccess: boolean; requireBiometricPerSession: boolean; requireBiometricEveryTime: boolean; autoApprovedCommands: string[]; autoApprovedActions: string[] }>;
+            updateSecuritySettings: (settings: { autoApproveLowRisk?: boolean; autoApproveMidRisk?: boolean; requireDeviceUnlockForManualApproval?: boolean; requireDeviceUnlockForVaultAccess?: boolean; requireBiometricPerSession?: boolean; requireBiometricEveryTime?: boolean; autoApprovedActions?: string[]; autoApprovedCommands?: string[] }) => Promise<{ success: boolean; settings: { autoApproveLowRisk: boolean; autoApproveMidRisk: boolean; requireDeviceUnlockForManualApproval: boolean; requireDeviceUnlockForVaultAccess: boolean; requireBiometricPerSession: boolean; requireBiometricEveryTime: boolean; autoApprovedCommands: string[]; autoApprovedActions: string[] } }>;
             setAutoApprovalCommand: (payload: { command: string; enabled: boolean }) => Promise<{ success: boolean; commands: string[] }>;
             getAutoApprovedCommands: () => Promise<{ commands: string[] }>;
             setAutoApprovalAction: (payload: { actionType: string; enabled: boolean }) => Promise<{ success: boolean; actions: string[] }>;

@@ -67,6 +67,7 @@ type SecuritySettings = {
   requireDeviceUnlockForManualApproval: boolean;
   requireDeviceUnlockForVaultAccess: boolean;
   requireBiometricPerSession: boolean;
+  requireBiometricEveryTime: boolean;
   autoApprovedCommands: string[];
   autoApprovedActions: string[];
 };
@@ -77,6 +78,7 @@ const DEFAULT_SETTINGS: SecuritySettings = {
   requireDeviceUnlockForManualApproval: true,
   requireDeviceUnlockForVaultAccess: true,
   requireBiometricPerSession: true,
+  requireBiometricEveryTime: false,
   autoApprovedCommands: [],
   autoApprovedActions: [],
 };
@@ -464,6 +466,26 @@ const PermissionSettings = () => {
                 className={`relative w-14 h-8 rounded-full transition-all duration-300 ${settings.requireBiometricPerSession ? 'bg-purple-500' : 'bg-white/10'}`}
               >
                 <div className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-lg transition-all duration-300 ${settings.requireBiometricPerSession ? 'left-7' : 'left-1'}`} />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-4 bg-rose-500/5 rounded-2xl border border-rose-500/20">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                  <Lock size={20} className="text-rose-400" />
+                </div>
+                <div>
+                  <h5 className="text-white font-bold">Biometric Every Action</h5>
+                  <p className="text-white/50 text-xs">Require Touch ID / Windows Hello for EVERY low risk action. Stricter than per-session.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => void updateSetting('requireBiometricEveryTime', !settings.requireBiometricEveryTime)}
+                className={`relative w-14 h-8 rounded-full transition-all duration-300 ${settings.requireBiometricEveryTime ? 'bg-rose-500' : 'bg-white/10'}`}
+              >
+                <div className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow-lg transition-all duration-300 ${settings.requireBiometricEveryTime ? 'left-7' : 'left-1'}`} />
               </button>
             </div>
           </div>
