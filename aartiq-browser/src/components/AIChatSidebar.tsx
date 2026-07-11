@@ -411,7 +411,18 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [pdfProgress, setPdfProgress] = useState(0);
   const [pdfVisualStage, setPdfVisualStage] = useState<VisualStage>('idle');
   const [pythonAvailable, setPythonAvailable] = useState<boolean>(false);
+  const [demoHighlight, setDemoHighlight] = useState<{ title: string; description: string; align?: 'left' | 'center' | 'right' } | null>(null);
   const aiTabsAutoCloseRef = useRef(false);
+
+  const showDemoOverlay = useCallback(async (title: string, description: string, durationMs: number = 2500) => {
+    return new Promise<void>(resolve => {
+      setDemoHighlight({ title, description });
+      setTimeout(() => {
+        setDemoHighlight(null);
+        resolve();
+      }, durationMs);
+    });
+  }, []);
   const schedulingOpenedByClient = useRef(false);
 
   const findYouTubeLinkElement = (elements: DOMElement[]): DOMElement | null => {
@@ -1168,14 +1179,20 @@ I couldn't schedule the task. The background service may not be running. Please 
           : '',
       ].filter(Boolean).join('\n\n');
 
-      const userPrefsBlock = Object.keys(userPreferences).length > 0
+      const enableAiPreferenceLearning = useAppStore.getState().enableAiPreferenceLearning;
+
+      const userPrefsBlock = enableAiPreferenceLearning && Object.keys(userPreferences).length > 0
         ? `\n[USER PREFERENCES — Learned from past interactions]\n${Object.entries(userPreferences).map(([k, v]) => `  - ${k}: ${JSON.stringify(v.value)}`).join('\n')}\n[PREFERENCE COMMAND — To save a new preference, include in your response:\nSAVE_PREFERENCE:key:value\nExample: SAVE_PREFERENCE:response_style:concise\nExample: SAVE_PREFERENCE:language:simple_english\nOnly save when explicitly stated by user or confidently observed.]`
         : '';
+
+      const systemInstructions = enableAiPreferenceLearning
+        ? SYSTEM_INSTRUCTIONS
+        : SYSTEM_INSTRUCTIONS.replace(/\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nUSER PREFERENCES — Auto-Learning[\s\S]*$/, '');
 
       let currentHistory: ChatMessage[] = [
         {
           role: 'system',
-          content: `${SYSTEM_INSTRUCTIONS}${skillContext ? `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 SKILL INSTRUCTIONS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${skillContext}` : ''}${userPrefsBlock}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
+          content: `${systemInstructions}${skillContext ? `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 SKILL INSTRUCTIONS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${skillContext}` : ''}${userPrefsBlock}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
         },
         ...messages.map(m => ({ role: m.role, content: m.content.replace(INTERNAL_TAG_RE, '').trim() })),
         {
@@ -1246,14 +1263,16 @@ I couldn't schedule the task. The background service may not be running. Please 
         responseText = stripAllCommands(responseText);
 
         // Extract user preference commands (SAVE_PREFERENCE:key:value)
-        const prefRegex = /SAVE_PREFERENCE:\s*([^:]+?)\s*:\s*(.+?)(?:\n|$)/gi;
-        let prefMatch;
-        while ((prefMatch = prefRegex.exec(response.text)) !== null) {
-          const key = prefMatch[1].trim().toLowerCase().replace(/\s+/g, '_');
-          const val = prefMatch[2].trim();
-          if (key && val && window.electronAPI?.saveUserPreference) {
-            window.electronAPI.saveUserPreference(key, val).catch(() => {});
-            setUserPreferences(prev => ({ ...prev, [key]: { value: val, updatedAt: Date.now() } }));
+        if (useAppStore.getState().enableAiPreferenceLearning) {
+          const prefRegex = /SAVE_PREFERENCE:\s*([^:]+?)\s*:\s*(.+?)(?:\n|$)/gi;
+          let prefMatch;
+          while ((prefMatch = prefRegex.exec(response.text)) !== null) {
+            const key = prefMatch[1].trim().toLowerCase().replace(/\s+/g, '_');
+            const val = prefMatch[2].trim();
+            if (key && val && window.electronAPI?.saveUserPreference) {
+              window.electronAPI.saveUserPreference(key, val).catch(() => {});
+              setUserPreferences(prev => ({ ...prev, [key]: { value: val, updatedAt: Date.now() } }));
+            }
           }
         }
 
@@ -3331,14 +3350,20 @@ I couldn't schedule the task. The background service may not be running. Please 
         case 'EXPLAIN_CAPABILITIES': {
           setShowCapabilities(true);
 
-          const platform = (typeof process !== 'undefined' && process.platform) || 'darwin';
+          const platform = (typeof process !== 'undefined' && process.platform) ||
+            (typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('win') ? 'win32' :
+             typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('mac') ? 'darwin' :
+             typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent) ? 'win32' :
+             typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent) ? 'darwin' :
+             typeof navigator !== 'undefined' && /Linux/i.test(navigator.userAgent) ? 'linux' : 'darwin');
           const isMac = platform === 'darwin';
           const isWindows = platform === 'win32';
           const isLinux = platform === 'linux';
+          const platformName = isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux';
 
           // Step 1: Announce demonstration start
           setMessages(prev => [...prev, { role: 'model', content: "🚀 **Initiating Full Capability Demonstration...**\n\nI'll showcase real tasks across all my capabilities." }]);
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await showDemoOverlay('Agentic AI Engine', 'Aartiq AI has full system access — browsing, terminal, files, apps, and cross-device sync. Watch real tasks execute live.');
 
           // Step 2: Web Search - Latest News
           const searchStepId = addThinkingStep('Searching latest news...');
@@ -3356,9 +3381,10 @@ I couldn't schedule the task. The background service may not be running. Please 
             console.warn('[Demo] News search failed:', e);
           }
           resolveThinkingStep(searchStepId, newsResults ? 'done' : 'error', newsResults ? '3 results found' : 'Search failed');
-          await new Promise(resolve => setTimeout(resolve, 600));
+          await showDemoOverlay('Web Search & RAG', 'Real-time web search with RAG-powered context retrieval. AI fetches live data, not just static knowledge.');
+          await new Promise(resolve => setTimeout(resolve, 400));
 
-          // Step 3: System Info via Shell Command
+          // Step 3: Shell Command Execution
           setMessages(prev => [...prev, { role: 'model', content: "🖥️ **Task 2: Shell Command Execution**\nGetting WiFi/network information..." }]);
           await new Promise(resolve => setTimeout(resolve, 800));
 
@@ -3373,9 +3399,10 @@ I couldn't schedule the task. The background service may not be running. Please 
             wifiInfo = 'System info available';
           }
           setMessages(prev => [...prev, { role: 'model', content: `✅ **Shell Command Result:**\n\`\`\`\n${wifiInfo}\n\`\`\`` }]);
-          await new Promise(resolve => setTimeout(resolve, 600));
+          await showDemoOverlay('Shell Command Execution', 'AI can execute terminal commands with user approval. Every command is risk-assessed — low/medium/high with security gating.');
+          await new Promise(resolve => setTimeout(resolve, 400));
 
-          // Step 4: Volume Adjustment
+          // Step 4: Volume / System Controls
           setMessages(prev => [...prev, { role: 'model', content: "🔊 **Task 3: System Volume Control**\nAdjusting volume to 50%..." }]);
           await new Promise(resolve => setTimeout(resolve, 800));
           try {
@@ -3384,14 +3411,46 @@ I couldn't schedule the task. The background service may not be running. Please 
           } catch (e) {
             setMessages(prev => [...prev, { role: 'model', content: "⚠️ Volume control not available on this system" }]);
           }
+          await showDemoOverlay('System Controls', 'AI adjusts system settings — volume, brightness, app launching. Full OS integration beyond the browser.');
+          await new Promise(resolve => setTimeout(resolve, 400));
+
+          // Step 5: Browser Navigation
+          setMessages(prev => [...prev, { role: 'model', content: "🌐 **Task 4: Browser Navigation**\nNavigating to Aartiq website..." }]);
+          await new Promise(resolve => setTimeout(resolve, 800));
+          try {
+            await window.electronAPI.navigate('https://aartiq.com');
+            setMessages(prev => [...prev, { role: 'model', content: "✅ **Browser navigated to aartiq.com** — Real browser interaction working" }]);
+          } catch (e) {
+            setMessages(prev => [...prev, { role: 'model', content: "ℹ️ Browser navigation available via API" }]);
+          }
+          await showDemoOverlay('Browser Automation', 'AI drives the browser — navigate, search, click, fill forms, scroll, read page content. Full autonomous web interaction.');
+          await new Promise(resolve => setTimeout(resolve, 400));
+
+          // Step 6: Settings & Permissions Panel Demo
+          setMessages(prev => [...prev, { role: 'model', content: "⚙️ **Task 5: Settings & Permissions**\nOpening settings panel to demonstrate security architecture..." }]);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+          await showDemoOverlay('Permission Manager Opening', 'Aartiq has granular security — per-action permissions, biometric unlock, and high-risk QR approval via mobile.');
+          if (props.setShowSettings && props.setSettingsSection) {
+            props.setShowSettings(true);
+            props.setSettingsSection('permissions');
+            setMessages(prev => [...prev, { role: 'model', content: "✅ **Settings panel opened** — Permission security controls visible" }]);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await showDemoOverlay('Security Architecture', 'Triple-lock: AI cannot execute without approval gates. Actions are risk-graded, biometric-verified, and audit-logged.');
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            props.setShowSettings(false);
+            setMessages(prev => [...prev, { role: 'model', content: "✅ **Settings panel closed** — Permission system explained" }]);
+          } else {
+            setMessages(prev => [...prev, { role: 'model', content: "ℹ️ Settings panel API available — Permission system controls system access levels" }]);
+          }
           await new Promise(resolve => setTimeout(resolve, 500));
 
-          // Step 5: Open Calculator App (with platform fallbacks)
-          setMessages(prev => [...prev, { role: 'model', content: "🧮 **Task 4: Application Launch**\nOpening calculator..." }]);
+          // Step 7: Open Calculator App
+          setMessages(prev => [...prev, { role: 'model', content: "🚀 **Task 6: Application Launch**\nOpening calculator..." }]);
           await new Promise(resolve => setTimeout(resolve, 800));
           let calcLaunched = false;
           try {
-            const calcApp = isMac ? 'Calculator' : isWindows ? 'calc' : 'gnome-calculator';
+            const calcApp = isMac ? 'Calculator' : isWindows ? 'ms-calculator:' : 'gnome-calculator';
             const calcRes = await window.electronAPI.openExternalApp(calcApp);
             if (calcRes.success) {
               calcLaunched = true;
@@ -3402,22 +3461,25 @@ I couldn't schedule the task. The background service may not be running. Please 
           } catch (e) {
             setMessages(prev => [...prev, { role: 'model', content: `ℹ️ Could not auto-launch calculator. This requires Accessibility permissions on some platforms.` }]);
           }
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await showDemoOverlay('Cross-App Launch', 'AI opens any application — Calculator, Terminal, Settings. Works across macOS, Windows, and Linux with platform-specific names.');
+          await new Promise(resolve => setTimeout(resolve, 400));
 
-          // Step 6: File System Access - Read app version file
-          setMessages(prev => [...prev, { role: 'model', content: "📁 **Task 5: File System Access**\nReading system information..." }]);
+          // Step 8: File System Access
+          setMessages(prev => [...prev, { role: 'model', content: "📁 **Task 7: File System Access**\nReading system information..." }]);
           await new Promise(resolve => setTimeout(resolve, 800));
           try {
             const versionResult = await window.electronAPI.getVersion();
-            setMessages(prev => [...prev, { role: 'model', content: `✅ **System info retrieved:** Aartiq ${versionResult || versionLabel} — Running on ${isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux'}` }]);
+            const versionStr = typeof versionResult === 'string' ? versionResult : versionResult?.version || versionLabel;
+            setMessages(prev => [...prev, { role: 'model', content: `✅ **System info retrieved:** Aartiq ${versionStr} — Running on ${isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux'}` }]);
           } catch (e) {
             setMessages(prev => [...prev, { role: 'model', content: `✅ **Platform detected:** ${isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux'} — File system access ready` }]);
           }
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await showDemoOverlay('File System Access', 'Read, write, and organize files. AI can generate PDFs, DOCX, XLSX, PPTX — and save them directly to your system.');
+          await new Promise(resolve => setTimeout(resolve, 400));
 
-          // Step 7: Biometric Authentication (Windows Hello / Touch ID)
+          // Step 9: Biometric Authentication
           const bioStepId = addThinkingStep('Checking biometric auth...');
-          setMessages(prev => [...prev, { role: 'model', content: `🔐 **Task 6: Biometric Authentication**\nChecking for ${isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'biometric'} availability...` }]);
+          setMessages(prev => [...prev, { role: 'model', content: `🔐 **Task 8: Biometric Authentication**\nChecking for ${isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'biometric'} availability...` }]);
           await new Promise(resolve => setTimeout(resolve, 800));
           let bioAvailable = false;
           let bioType = '';
@@ -3441,10 +3503,11 @@ I couldn't schedule the task. The background service may not be running. Please 
             setMessages(prev => [...prev, { role: 'model', content: `ℹ️ ${isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'Biometric auth'} is not available on this system.` }]);
           }
           resolveThinkingStep(bioStepId, bioAvailable ? 'done' : 'error', bioAvailable ? `${bioType} checked` : 'Not available');
-          await new Promise(resolve => setTimeout(resolve, 600));
+          await showDemoOverlay('Platform Security Integration', `${isWindows ? 'Windows Hello' : 'Touch ID'} integration means AI actions can require biometric verification before execution — hardware-gated security.`);
+          await new Promise(resolve => setTimeout(resolve, 400));
 
-          // Step 8: Screenshot Capture
-          setMessages(prev => [...prev, { role: 'model', content: "📸 **Task 7: Screenshot Capture**\nCapturing and analyzing screen..." }]);
+          // Step 10: Screenshot Capture
+          setMessages(prev => [...prev, { role: 'model', content: "📸 **Task 9: Screenshot Capture**\nCapturing and analyzing screen..." }]);
           await new Promise(resolve => setTimeout(resolve, 1200));
 
           let screenshotBase64: string | undefined;
@@ -3459,10 +3522,11 @@ I couldn't schedule the task. The background service may not be running. Please 
           } catch (e) {
             console.warn('[Demo] Screenshot failed:', e);
           }
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await showDemoOverlay('OCR & Vision', 'AI captures screenshots, extracts text via OCR, and analyzes visual content — enabling cross-app automation and accessibility.');
+          await new Promise(resolve => setTimeout(resolve, 400));
 
-          // Step 9: Generate Comprehensive Capability Report PDF
-          setMessages(prev => [...prev, { role: 'model', content: "📄 **Task 8: PDF Generation**\nCreating comprehensive capability report with screenshots..." }]);
+          // Step 11: PDF Report Generation
+          setMessages(prev => [...prev, { role: 'model', content: "📄 **Task 10: PDF Generation**\nCreating comprehensive capability report with screenshots..." }]);
           await new Promise(resolve => setTimeout(resolve, 1000));
 
           await preloadAartiqIconLocal();
@@ -3502,10 +3566,9 @@ I couldn't schedule the task. The background service may not be running. Please 
 
           await window.electronAPI.generatePDF(pdfTitle, capabilityPDF);
           setMessages(prev => [...prev, { role: 'model', content: "✅ **Capability Report PDF generated and saved!**" }]);
-          await new Promise(resolve => setTimeout(resolve, 600));
+          await showDemoOverlay('Document Generation', 'AI generates professional PDF reports with branding, screenshots, and structured content — saved directly to your system.');
 
           // Final Summary
-          const platformName = isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux';
           setMessages(prev => [...prev, {
             role: 'model', content: `
 ## ✅ **Full Demonstration Complete!**
@@ -3514,14 +3577,16 @@ I've successfully executed the following real tasks:
 
 | # | Task | Status | Details |
 |---|------|--------|---------|
-| 1 | 📰 Web Search | ✅ | Fetched latest tech news |
+| 1 | 📰 Web Search | ✅ | Fetched latest tech news via RAG |
 | 2 | 🖥️ Shell Command | ✅ | Retrieved WiFi/network info on ${platformName} |
-| 3 | 🔊 Volume Control | ✅ | Set to 50% |
-| 4 | 🧮 App Launch | ${calcLaunched ? '✅' : 'ℹ️'} | ${calcLaunched ? 'Opened Calculator' : 'Calculator requires Accessibility permissions'} |
-| 5 | 📁 File System | ✅ | Retrieved app version & platform |
-| 6 | 🔐 Biometric Auth | ${bioAvailable ? '✅' : 'ℹ️'} | ${bioAvailable ? `${bioType} verified` : `${isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'Biometric auth'} not configured`} |
-| 7 | 📸 Screenshot | ✅ | Captured screen for PDF embedding |
-| 8 | 📄 PDF Report | ✅ | Created with 19 capability listings |
+| 3 | 🔊 System Control | ✅ | Volume adjusted to 50% |
+| 4 | 🌐 Browser Nav | ✅ | Navigated to aartiq.com |
+| 5 | ⚙️ Permissions | ✅ | Settings & security architecture shown |
+| 6 | 🚀 App Launch | ${calcLaunched ? '✅' : 'ℹ️'} | ${calcLaunched ? 'Opened Calculator' : 'Calculator requires Accessibility permissions'} |
+| 7 | 📁 File System | ✅ | Retrieved app version & platform |
+| 8 | 🔐 Biometric Auth | ${bioAvailable ? '✅' : 'ℹ️'} | ${bioAvailable ? `${bioType} verified` : `${isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'Biometric auth'} not configured`} |
+| 9 | 📸 Vision/OCR | ✅ | Captured screen for PDF embedding |
+| 10 | 📄 PDF Report | ✅ | Created with 19 capability listings |
 
 ---
 
@@ -3532,7 +3597,7 @@ I've successfully executed the following real tasks:
 *Aartiq ${versionLabel} — The AI-Native Browser*
           ` }]);
 
-          output = 'Full capability demonstration executed successfully with real tasks: search, shell command, volume, app launch, file system access, biometric auth, screenshot, and PDF generation.';
+          output = 'Full capability demonstration executed with 10 real tasks: search, shell, system control, browser nav, permissions, app launch, file system, biometric auth, vision, and PDF generation.';
           break;
         }
 
@@ -3993,7 +4058,7 @@ I've successfully executed the following real tasks:
       .filter(m => m.content && m.content.length > 20)
       .map(m => `[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`)
       .join('\n');
-    if (conversationText.length > 50) {
+    if (conversationText.length > 50 && useAppStore.getState().enableCrossSessionMemory) {
       BrowserAI.addToVectorMemory(conversationText, { type: 'chat_conversation', conversationId, timestamp: now }).catch(() => {});
     }
 
@@ -4319,6 +4384,38 @@ I've successfully executed the following real tasks:
       if (remoteCleanup) remoteCleanup();
     };
   }, [handleSendMessage]);
+
+  useEffect(() => {
+    window.electronAPI?.notifyAiSidebarOpen?.();
+    return () => {
+      window.electronAPI?.notifyAiSidebarClosed?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!permissionPending) {
+      window.electronAPI?.notifyApprovalCleared?.();
+      return;
+    }
+    window.electronAPI?.notifyApprovalPending?.({
+      requestId: `ui-${Date.now()}`,
+      command: permissionPending.context.target || permissionPending.context.what || '',
+      reason: permissionPending.context.reason,
+      risk: permissionPending.context.risk,
+      highRiskQr: permissionPending.context.highRiskQr || null,
+      actionType: permissionPending.context.actionType,
+      action: permissionPending.context.action,
+      requiresDeviceUnlock: permissionPending.context.requiresDeviceUnlock,
+    });
+  }, [permissionPending]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onApprovalActionResolved) return;
+    const cleanup = window.electronAPI.onApprovalActionResolved((data) => {
+      console.log('[ApprovalActionResolved] Swift approved:', data);
+    });
+    return cleanup;
+  }, []);
 
   useEffect(() => {
     if (!window.electronAPI?.onNativeMacPrompt) return;
@@ -4723,6 +4820,30 @@ I've successfully executed the following real tasks:
       </AnimatePresence>
 
       <AnimatePresence>{approvalModal}</AnimatePresence>
+
+      {/* Demo Highlight Overlay */}
+      <AnimatePresence>
+        {demoHighlight && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -10 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="absolute left-4 right-4 z-[9999] bg-white/5 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+            style={{ top: '88px' }}
+          >
+            <div className="px-5 py-4 bg-gradient-to-r from-sky-500/10 via-transparent to-purple-500/10">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-8 h-8 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center">
+                  <Sparkles size={16} className="text-sky-400" />
+                </div>
+                <span className="text-xs font-black uppercase tracking-widest text-sky-300">{demoHighlight.title}</span>
+              </div>
+              <p className="text-sm text-white/70 leading-relaxed pl-11">{demoHighlight.description}</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Header */}
       <header className={`px-4 flex flex-col justify-center border-b backdrop-blur-2xl sticky top-0 z-[50] transition-[height,padding] duration-500 h-[56px]`} style={{ ...sidebarShellStyle, borderColor: 'color-mix(in srgb, var(--border-color) 35%, transparent)' }}>
