@@ -65,14 +65,19 @@ const LandingPage = () => {
         setIsMuted(!isMuted);
     };
 
-    const getFirebaseConfigFromEnv = (): FirebaseConfig => ({
-        apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
-        authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "",
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "",
-        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "",
-        messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "",
-        appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "",
-    });
+    const getFirebaseConfig = async (): Promise<Record<string, string>> => {
+        const stored = firebaseConfigStorage.load();
+        if (stored) return stored;
+        try {
+            const res = await fetch('/api/config');
+            const data = await res.json();
+            if (data.firebaseConfig) {
+                firebaseConfigStorage.save(data.firebaseConfig);
+                return data.firebaseConfig;
+            }
+        } catch { /* config fetch failed */ }
+        return {};
+    };
 
     const handleGuestMode = () => {
         store.setGuestMode(true);
@@ -82,8 +87,8 @@ const LandingPage = () => {
 
     const handleGoogleSignIn = async () => {
         setIsLoading(true);
+        const config = await getFirebaseConfig();
         if (window.electronAPI) {
-            const config = firebaseConfigStorage.load() || getFirebaseConfigFromEnv();
             const authUrl = `https://aartiq-three.vercel.app/auth?client_id=desktop-app&redirect_uri=aartiq-browser%3A%2F%2Fauth&firebase_config=${btoa(JSON.stringify(config))}`;
             window.electronAPI.openAuthWindow(authUrl);
         } else {

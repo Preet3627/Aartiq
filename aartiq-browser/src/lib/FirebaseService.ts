@@ -22,27 +22,13 @@ class FirebaseService {
 
   private initializeFirebase() {
     try {
-      // Get Firebase config from stored config (from landing page) or fallback to env vars
-      const getFirebaseConfig = (): FirebaseConfig => {
-        // First, try to load from localStorage (received from landing page)
-        const storedConfig = firebaseConfigStorage.load();
-        if (storedConfig) {
-          return storedConfig;
-        }
+      const storedConfig = firebaseConfigStorage.load();
+      if (!storedConfig) {
+        console.log('[Firebase] No stored config found. Firebase will be initialized when config is set via landing page.');
+        return;
+      }
 
-        // Fallback to environment variables
-        return {
-          apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
-          authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
-          storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
-          messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
-          appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
-          measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-        };
-      };
-
-      const firebaseConfig = getFirebaseConfig();
+      const firebaseConfig = storedConfig;
 
       // Only initialize if we have valid config
       if (firebaseConfig.apiKey) {
