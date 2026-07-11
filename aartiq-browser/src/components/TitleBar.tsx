@@ -21,9 +21,12 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
     const router = useRouter(); // Initialize useRouter
 
     const [isMac, setIsMac] = useState(false);
+    const [isWindows, setIsWindows] = useState(false);
 
     useEffect(() => {
-        setIsMac(navigator.userAgent.toLowerCase().includes('mac'));
+        const ua = navigator.userAgent.toLowerCase();
+        setIsMac(ua.includes('mac'));
+        setIsWindows(ua.includes('windows'));
     }, []);
 
     const [isSigningIn, setIsSigningIn] = useState(false);
@@ -99,7 +102,9 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
                 borderColor: 'var(--border-color)',
             }}
         >
-            {!isMac ? (
+            {isMac ? (
+                <div className="w-[60px]" />
+            ) : !isWindows ? (
                 <div className="flex items-center no-drag-region h-full">
                     <button
                         onClick={handleMinimize}
@@ -123,9 +128,7 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
                         <X size={15} />
                     </button>
                 </div>
-            ) : (
-                <div className="w-[60px]" />
-            )}
+            ) : null}
             {/* Aartiq Logo and Text */}
             <div className="flex items-center gap-2 px-3 drag-region">
                 <img src="/logo-transparent.png" alt="Aartiq Logo" className="w-5 h-5 object-contain" />
@@ -146,6 +149,31 @@ const TitleBar = ({ onToggleSpotlightSearch, onOpenSettings }: TitleBarProps) =>
             )}
 
             <div className="flex items-center no-drag-region h-full">
+                {isWindows && (
+                    <>
+                        <button
+                            onClick={handleMinimize}
+                            className="h-full w-11 flex items-center justify-center text-secondary-text hover:text-primary-text hover:bg-white/10 active:bg-white/15 transition-colors"
+                            title="Minimize"
+                        >
+                            <Minus size={14} />
+                        </button>
+                        <button
+                            onClick={handleMaximize}
+                            className="h-full w-11 flex items-center justify-center text-secondary-text hover:text-primary-text hover:bg-white/10 active:bg-white/15 transition-colors"
+                            title="Maximize"
+                        >
+                            <Square size={11} />
+                        </button>
+                        <button
+                            onClick={handleClose}
+                            className="h-full w-11 flex items-center justify-center text-secondary-text hover:text-white hover:bg-red-500/80 active:bg-red-500 transition-colors"
+                            title="Close"
+                        >
+                            <X size={15} />
+                        </button>
+                    </>
+                )}
                 <button onClick={onToggleSpotlightSearch} className="p-1 text-secondary-text hover:text-primary-text transition-colors" title="Global Spotlight Search">
                     <Search size={18} />
                 </button>
