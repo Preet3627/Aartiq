@@ -934,6 +934,7 @@ const nativeMacUiState = {
   downloads: [],
   clipboardItems: [],
   pendingApproval: null,
+  electronAiSidebarOpen: false,
 };
 const nativeMacPanelManager = new MacNativePanelManager({
   bridgeUrlProvider: () => `http://127.0.0.1:${nativeMacUiPort}`,
@@ -1081,9 +1082,39 @@ const startNativeMacUiBridge = () => {
       if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Missing or invalid prompt field' });
       }
+      // Forward to renderer for UI sync (best-effort if sidebar is open)
       deliverNativeMacUiEvent('native-mac-ui-submit-prompt', { prompt: prompt.slice(0, 32000), source })
-        .catch(err => console.error('[NativeMacBridge] deliver error:', err));
+        .catch(() => {});
+      // Optimistically add user message to state so the Swift panel's immediate
+      // refreshState() poll sees it instead of overwriting the optimistic message
+      appendNativeMacUiMessage({ role: 'user', content: prompt.slice(0, 16000) });
+      nativeMacUiState.isLoading = true;
+      nativeMacUiState.updatedAt = Date.now();
       res.json({ received: true });
+
+      // Handle the LLM call directly in main.js so Swift works even without the
+      // Electron AI sidebar being open. The response is appended to the bridge
+      // state where Swift picks it up via polling.
+      const activeProvider = activeLlmProvider || llmProviders[0]?.id || 'google';
+      const systemMsg = 'You are Aartiq, a helpful AI assistant with system automation capabilities. Respond conversationally and helpfully.';
+      AiGateway.generate(
+        [{ role: 'system', content: systemMsg }, { role: 'user', content: prompt.slice(0, 16000) }],
+        { provider: activeProvider, skipTools: true }
+      ).then((result) => {
+        if (result && result.text) {
+          appendNativeMacUiMessage({ role: 'model', content: result.text.slice(0, 16000) });
+        } else if (result && result.error) {
+          appendNativeMacUiMessage({ role: 'model', content: `Error: ${result.error}` });
+          nativeMacUiState.error = result.error;
+        }
+        nativeMacUiState.isLoading = false;
+        nativeMacUiState.updatedAt = Date.now();
+      }).catch((err) => {
+        appendNativeMacUiMessage({ role: 'model', content: `Error: ${err.message}` });
+        nativeMacUiState.isLoading = false;
+        nativeMacUiState.error = err.message;
+        nativeMacUiState.updatedAt = Date.now();
+      });
     });
 
     bridgeApp.get('/native-mac-ui/state', (_req, res) => {
@@ -1114,6 +1145,163 @@ const startNativeMacUiBridge = () => {
       }
       setMacNativeUiPreferences(updates);
       res.json({ applied: true, preferences: getMacNativeUiPreferences() });
+    });
+
+    // Alias for Swift panels that call /native-mac-ui/preferences
+    bridgeApp.post('/native-mac-ui/preferences', (req, res) => {
+      const updates = req.body || {};
+      if (typeof updates !== 'object' || Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'Empty or invalid preferences payload' });
+      }
+      setMacNativeUiPreferences(updates);
+      res.json({ applied: true, preferences: getMacNativeUiPreferences() });
+    });
+
+    bridgeApp.post('/native-mac-ui/settings/open', (req, res) => {
+      const { target } = req.body || {};
+      try {
+        ipcMain.emit('open-settings-popup', { sender: { send: () => {} } }, target || 'profile');
+      } catch (err) {
+        console.error('[NativeMacBridge] settings/open error:', err);
+      }
+      res.json({ received: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/focus-electron', (_req, res) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      res.json({ focused: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/clipboard/copy', (req, res) => {
+      const { text } = req.body || {};
+      if (text) {
+        clipboard.writeText(String(text));
+        nativeMacUiState.clipboardItems = [String(text).slice(0, 4000), ...(nativeMacUiState.clipboardItems || []).slice(0, 39)];
+        nativeMacUiState.updatedAt = Date.now();
+      }
+      res.json({ copied: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/clipboard/clear', (_req, res) => {
+      nativeMacUiState.clipboardItems = [];
+      nativeMacUiState.updatedAt = Date.now();
+      res.json({ cleared: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/downloads/open', (req, res) => {
+      const { path } = req.body || {};
+      if (path) {
+        shell.openPath(String(path)).catch(() => {});
+      }
+      res.json({ opened: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/downloads/reveal', (req, res) => {
+      const { path } = req.body || {};
+      if (path) {
+        shell.showItemInFolder(String(path));
+      }
+      res.json({ revealed: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/conversations/action', (req, res) => {
+      const { action, id } = req.body || {};
+      deliverNativeMacUiEvent('native-mac-ui-conversation-action', { action: action || 'new', id: id || null })
+        .catch(err => console.error('[NativeMacBridge] conversation action error:', err));
+      res.json({ received: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/export', (req, res) => {
+      const { format } = req.body || {};
+      deliverNativeMacUiEvent('native-mac-ui-export', { format: format || 'txt' })
+        .catch(err => console.error('[NativeMacBridge] export error:', err));
+      res.json({ received: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/approval/request', async (req, res) => {
+      const { command, reason, risk, actionType } = req.body || {};
+      if (!command) return res.status(400).json({ error: 'Missing command' });
+      const riskLevel = risk || 'medium';
+      const requestId = `swift-${Date.now()}-${randomBytes(4).toString('hex')}`;
+      let highRiskQr = null;
+      let expectedPin = null;
+      if (riskLevel === 'high') {
+        try {
+          const qrResult = await generateShellApprovalQR(command);
+          highRiskQr = qrResult.qrImage;
+          expectedPin = qrResult.pin;
+        } catch (e) {
+          console.error('[NativeMacBridge] QR generation failed:', e);
+        }
+      }
+      const resolvedPromise = new Promise((resolve) => {
+        shellApprovalResolvers.set(requestId, resolve);
+      });
+      nativeMacUiState.pendingApproval = {
+        requestId,
+        command,
+        reason: reason || 'The AI wants to execute a shell command on the host machine.',
+        risk: riskLevel,
+        highRiskQr,
+        expectedPin,
+        actionType: actionType || 'SHELL_COMMAND',
+        action: 'Shell Command',
+        requiresDeviceUnlock: riskLevel === 'high',
+      };
+      nativeMacUiState.updatedAt = Date.now();
+      resolvedPromise.then((result) => {
+        nativeMacUiState.pendingApproval = null;
+        nativeMacUiState.isLoading = false;
+        nativeMacUiState.updatedAt = Date.now();
+        ipcMain.emit('swift-approval-resolved', null, { requestId, allowed: result.allowed, deviceUnlockValidated: result.deviceUnlockValidated });
+      });
+      res.json({
+        success: true,
+        approval: {
+          requestId,
+          highRiskQr: highRiskQr || undefined,
+          expectedPin: expectedPin || undefined,
+          risk: riskLevel,
+        },
+      });
+    });
+
+    bridgeApp.post('/native-mac-ui/approval/respond', (req, res) => {
+      const { requestId, allowed, deviceUnlockValidated } = req.body || {};
+      const id = requestId || '';
+      if (id) {
+        const resolver = shellApprovalResolvers.get(id);
+        if (resolver) {
+          shellApprovalResolvers.delete(id);
+          resolver({ allowed: !!allowed, deviceUnlockValidated: !!deviceUnlockValidated });
+        }
+      }
+      res.json({ received: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/apple-intelligence/summary', async (req, res) => {
+      const { text } = req.body || {};
+      if (!text) return res.status(400).json({ error: 'Missing text' });
+      try {
+        const summary = await summarizeWithAppleIntelligence(String(text));
+        res.json({ summary });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/apple-intelligence/image', async (req, res) => {
+      const { prompt } = req.body || {};
+      if (!prompt) return res.status(400).json({ error: 'Missing prompt' });
+      try {
+        const path = await generateAppleIntelligenceImage(String(prompt), undefined, undefined);
+        res.json({ path });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
     });
 
     // ── CLI endpoints (used by `aartiq` CLI) ──
@@ -3144,10 +3332,15 @@ const forceShowWindow = (window) => {
   }
 };
 
+const iconFile = process.platform === 'win32' ? 'icon.ico' : process.platform === 'darwin' ? 'icon.png' : 'icon-transparent.png';
+const iconPath = isDev
+  ? path.join(__dirname, 'out', iconFile)
+  : path.join(process.resourcesPath, 'assets', iconFile);
+
 mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    icon: path.join(__dirname, 'out', 'icon.ico'),
+    icon: iconPath,
     frame: isMacPlatform,
     transparent: false,
     webPreferences: {
@@ -6668,8 +6861,7 @@ app.whenReady().then(async () => {
         contextIsolation: true,
         sandbox: false,
       },
-      parent: mainWindow,
-      modal: false,
+      // No parent — popup needs to float above BrowserView (OS-level child view)
       alwaysOnTop: true,
       skipTaskbar: true,
       resizable: true,
@@ -6721,6 +6913,9 @@ app.whenReady().then(async () => {
       case 'context-menu':
       case 'rightclick':
         route = isDev ? '/?panel=context-menu' : '/context-menu';
+        break;
+      case 'tools-menu':
+        route = isDev ? '/?panel=tools-menu' : '/tools-menu';
         break;
       default:
         route = `/${type}`;
@@ -8391,6 +8586,48 @@ ${tabData}`;
     ragService, voiceService, workflowRecorder, popSearch,
     flutterBridge,
   };
+  // --- Native Mac UI Sidebar + Permission bridge IPC ---
+  ipcMain.on('native-mac-ui-sidebar-open', () => {
+    nativeMacUiState.electronAiSidebarOpen = true;
+    nativeMacUiState.updatedAt = Date.now();
+  });
+  ipcMain.on('native-mac-ui-sidebar-closed', () => {
+    nativeMacUiState.electronAiSidebarOpen = false;
+    nativeMacUiState.updatedAt = Date.now();
+  });
+
+  // Renderer notifies main process that a permission request is pending.
+  // This populates nativeMacUiState.pendingApproval so the Swift panel can see it.
+  ipcMain.on('ui-approval-pending', (_event, details) => {
+    const { requestId, command, reason, risk, highRiskQr, expectedPin, actionType, action, requiresDeviceUnlock } = details || {};
+    nativeMacUiState.pendingApproval = {
+      requestId: requestId || `ui-${Date.now()}`,
+      command: command || '',
+      reason: reason || 'An action needs your approval.',
+      risk: risk || 'medium',
+      highRiskQr: highRiskQr || null,
+      expectedPin: expectedPin || null,
+      actionType: actionType || 'SHELL_COMMAND',
+      action: action || 'Shell Command',
+      requiresDeviceUnlock: requiresDeviceUnlock !== false,
+    };
+    nativeMacUiState.updatedAt = Date.now();
+  });
+  ipcMain.on('ui-approval-cleared', () => {
+    nativeMacUiState.pendingApproval = null;
+    nativeMacUiState.updatedAt = Date.now();
+  });
+
+  // When Swift approves via the bridge, forward to the renderer so the
+  // Electron permission modal is also resolved.
+  ipcMain.on('swift-approval-resolved', (_event, { requestId, allowed, deviceUnlockValidated }) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('approval-action-resolved', { requestId, allowed, deviceUnlockValidated: !!deviceUnlockValidated });
+    }
+    nativeMacUiState.pendingApproval = null;
+    nativeMacUiState.updatedAt = Date.now();
+  });
+
   registerAllHandlers(ipcMain, handlerDeps);
 
   // Sync existing vault entries to native keychain on startup

@@ -136,7 +136,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAiMemory: () => ipcRenderer.invoke('get-ai-memory'),
   addAiMemory: (entry) => ipcRenderer.send('add-ai-memory', entry),
   saveVectorStore: (data) => ipcRenderer.invoke('save-vector-store', data),
-  loadVectorStore: () => ipcRenderer.invoke('load-vector-store'),
+   loadVectorStore: () => ipcRenderer.invoke('load-vector-store'),
+   clearVectorStore: () => ipcRenderer.invoke('clear-vector-store'),
   saveGoogleConfig: (config) => ipcRenderer.send('save-google-config', config),
   getGoogleConfig: () => ipcRenderer.invoke('get-google-config'),
   webSearchRag: (query) => ipcRenderer.invoke('web-search-rag', query),
@@ -375,6 +376,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(channel, subscription);
     return () => ipcRenderer.removeListener(channel, subscription);
   },
+  send: (channel, ...args) => ipcRenderer.send(channel, ...args),
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
 
   saveAiResponse: (content) => ipcRenderer.send('save-ai-response', content),
 
@@ -396,6 +399,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (event, payload) => callback(payload);
     ipcRenderer.on('native-mac-ui-submit-prompt', subscription);
     return () => ipcRenderer.removeListener('native-mac-ui-submit-prompt', subscription);
+  },
+  notifyAiSidebarOpen: () => ipcRenderer.send('native-mac-ui-sidebar-open'),
+  notifyAiSidebarClosed: () => ipcRenderer.send('native-mac-ui-sidebar-closed'),
+  notifyApprovalPending: (details) => ipcRenderer.send('ui-approval-pending', details),
+  notifyApprovalCleared: () => ipcRenderer.send('ui-approval-cleared'),
+  onApprovalActionResolved: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('approval-action-resolved', subscription);
+    return () => ipcRenderer.removeListener('approval-action-resolved', subscription);
   },
   onAIChatInputText: (callback) => {
     const subscription = (event, text) => callback(text);
@@ -550,6 +562,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   robotExecuteSequence: (actions, options) =>
     ipcRenderer.invoke('robot-execute-sequence', { actions, options }),
 
+  ocrScreenText: (displayId) => ipcRenderer.invoke('ocr-screen-text', displayId),
   ocrCaptureWords: (displayId) => ipcRenderer.invoke('ocr-capture-words', displayId),
   ocrClick: (target, useAi) => ipcRenderer.invoke('ocr-click', { target, useAi }),
 

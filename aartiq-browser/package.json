@@ -214,7 +214,7 @@
       "entitlementsInherit": "entitlements.mac.local.plist"
     },
     "linux": {
-      "icon": "assets/icon.png",
+      "icon": "assets/icon-transparent.png",
       "target": [
         "AppImage"
       ],
