@@ -34,6 +34,12 @@ module.exports = function registerMemoryHandlers(ipcMain, handlers) {
     catch { return null; }
   });
 
+  ipcMain.handle('clear-vector-store', async () => {
+    const vsPath = path.join(require('electron').app.getPath('userData'), 'vector-store.json');
+    fs.writeFileSync(vsPath, JSON.stringify([]));
+    return { success: true };
+  });
+
   ipcMain.handle('memory:collect', async () => {
     const { ragService } = handlers;
     if (ragService?.collect) await ragService.collect();

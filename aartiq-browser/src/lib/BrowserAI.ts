@@ -380,4 +380,24 @@ export class BrowserAI {
         return text;
     }
 
+    static getVectorMemoryStats(): { count: number; memories: { text: string; metadata: any }[] } {
+        return {
+            count: this.vectorMemory.length,
+            memories: this.vectorMemory.map(item => ({
+                text: item.text.substring(0, 200),
+                metadata: item.metadata
+            }))
+        };
+    }
+
+    static async clearVectorMemory(): Promise<void> {
+        for (const item of this.vectorMemory) {
+            item.vector.dispose();
+        }
+        this.vectorMemory = [];
+        if (window.electronAPI) {
+            await window.electronAPI.clearVectorStore();
+        }
+        console.log('[BrowserAI] Vector memory cleared.');
+    }
 }
