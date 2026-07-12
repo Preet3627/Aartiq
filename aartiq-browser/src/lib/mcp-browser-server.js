@@ -3,6 +3,7 @@ const { SSEServerTransport } = require('@modelcontextprotocol/sdk/server/sse.js'
 const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 const http = require('http');
 const { getAppIconBase64, searchApplications, execShellCommand, validateCommand } = require('../main/handlers/utils.js');
+const { WebSearchProvider } = require('./web-search-service.js');
 const { generateAartiqPDFTemplate } = require('../main/handlers/pdf-utils.js');
 const { exec } = require('child_process');
 const { promisify } = require('util');
@@ -685,6 +686,35 @@ class BrowserMcpServer {
             }
           }
           return { content: [{ type: 'text', text: `Unsupported platform: ${process.platform}` }], isError: true };
+        },
+      },
+      {
+        name: 'web_search',
+        description: 'Search the web for information. Supports Google, Brave, Tavily, SerpAPI, DuckDuckGo, and YouTube.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            provider: { type: 'string', description: 'Search provider (google, brave, tavily, serp, duckduckgo, youtube, googlescrape)', enum: ['google', 'brave', 'tavily', 'serp', 'duckduckgo', 'youtube', 'googlescrape'] },
+            count: { type: 'number', description: 'Number of results (default 8)', default: 8 },
+          },
+          required: ['query'],
+        },
+        execute: async (args) => {
+          try {
+            const provider = new WebSearchProvider();
+            const keys = ['GOOGLE_API_KEY', 'GOOGLE_SEARCH_ENGINE_ID', 'BRAVE_API_KEY', 'TAVILY_API_KEY', 'SERP_API_KEY'];
+            const config = {};
+            for (const key of keys) {
+              const val = process.env[key];
+              if (val) config[key] = val;
+            }
+            provider.configure(config);
+            const results = await provider.search(args.query, args.provider, args.count || 8);
+            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+          } catch (e) {
+            return { content: [{ type: 'text', text: `Search error: ${e.message}` }], isError: true };
+          }
         },
       },
     ];
