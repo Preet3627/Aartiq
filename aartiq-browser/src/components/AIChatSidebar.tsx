@@ -49,10 +49,13 @@ import DOMSearchDisplay, { DOMMetaDisplay } from './ai/DOMSearchDisplay';
 import { secureDOMReader, type DOMSearchResult, type FilteredDOMResult, type DOMElement } from './ai/SecureDOMReader';
 import { detectSchedulingIntent, type SchedulingIntent } from './ai/SchedulingIntentDetector';
 import SchedulingModal from './ai/SchedulingModal';
+import McpSetupGuide from './ai/McpSetupGuide';
 import MermaidDiagram from './ai/MermaidDiagram';
 import FlowchartDiagram from './ai/FlowchartDiagram';
 import ChartDiagram from './ai/ChartDiagram';
+import YouTubePlayer from './ai/YouTubePlayer';
 import { useUIStore } from '@/stores/uiStore';
+import { getCmdParam, getCmdParamInt, cleanCmdValue, type ParsedCommand } from '@/lib/AICommandParser';
 
 // Logic & Utils
 import {
@@ -150,19 +153,25 @@ const normalizeSearchResults = (results: any[]): SearchResultEntry[] => (
 const formatSearchResultsForLLM = (query: string, results: SearchResultEntry[]): string => {
   if (results.length === 0) return '';
 
-  return [
-    `🔍 LIVE WEB SEARCH: "${query}"`,
-    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-    'You MUST navigate to the URLs below and read the full page content.',
-    'Do NOT rely only on snippets — snippets are brief summaries.',
-    'For each result you want to use, emit: [NAVIGATE: URL] then [READ_PAGE_CONTENT]',
-    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-    '',
-    ...results.map((entry, index) => [
+  const blocks = results.map((entry, index) => {
+    const lines = [
       `**${index + 1}. ${entry.title}**`,
       `🔗 ${entry.url}`,
       `📝 ${entry.snippet || 'No snippet available.'}`,
-    ].join('\n')),
+    ];
+    if ((entry as any).pageContent) {
+      lines.push(`📄 **PAGE CONTENT:**\n${(entry as any).pageContent.substring(0, 3000)}`);
+    }
+    return lines.join('\n');
+  });
+
+  return [
+    `🔍 LIVE WEB SEARCH: "${query}"`,
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    'Full page content is included below for some results — use it directly.',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '',
+    ...blocks,
   ].join('\n\n');
 };
 
@@ -395,6 +404,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [showLLMProviderSettings, setShowLLMProviderSettings] = useState(false);
   const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [showCapabilities, setShowCapabilities] = useState(false);
+  const [showMcpSetupGuide, setShowMcpSetupGuide] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showConversationHistory, setShowConversationHistory] = useState(false);
   const [isReadingPage, setIsReadingPage] = useState(false);
@@ -1039,6 +1049,14 @@ I couldn't schedule the task. The background service may not be running. Please 
       if (props.setBrowserDisabled) props.setBrowserDisabled(true);
     }
 
+    // ── Slash Command: /mcp or /mcp claude ──
+    if (/^\/mcp(?:\s+claude)?$/i.test(rawContent)) {
+      setShowMcpSetupGuide(true);
+      setIsLoading(false);
+      setIsThinking(false);
+      return;
+    }
+
     // Skill loading — classify task and load relevant skills
     let skillContexts: string[] = [];
     const skillPatterns: Array<{ pattern: RegExp; skillId: string; label: string }> = [
@@ -1206,6 +1224,8 @@ I couldn't schedule the task. The background service may not be running. Please 
       let iterations = 0;
       let finalSynthesisDone = false;
       let recoveryAttempts = 0;
+      let aiTabOpenCount = 0;
+      const AI_TAB_WARN_THRESHOLD = 5;
       const commandAttemptCounts = new Map<string, number>();
 
       while (iterations < ACTION_CHAIN_MAX_ITERATIONS && !finalSynthesisDone) {
@@ -1431,10 +1451,20 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
+        // Track AI-opened tab count for overflow warning
+        const TAB_OPENING_COMMANDS = ['NAVIGATE', 'WEB_SEARCH', 'SEARCH'];
+        const newTabCount = finalCommands.filter(c =>
+          TAB_OPENING_COMMANDS.includes(c.type) && c.status === 'completed'
+        ).length;
+        aiTabOpenCount += newTabCount;
+
         // Loop Synthesis step: Feed action outputs back into context
+        const tabOverflowWarn = aiTabOpenCount > AI_TAB_WARN_THRESHOLD
+          ? `\n\n⚠️ **TAB OVERFLOW WARNING**: AI has opened ${aiTabOpenCount} tabs in this session. Consider using CLOSE_TAB or ORGANIZE_TABS to reduce clutter before opening more.`
+          : '';
         const actionResults = finalCommands.map(c =>
           `[Action ${c.type}]: ${c.status === 'completed' ? (c.output || 'Success') : ('Error: ' + (c.error || 'Failed'))}`
-        ).join('\n');
+        ).join('\n') + tabOverflowWarn;
 
         const failedCommands = finalCommands
           .filter(command => command.status === 'failed')
@@ -1562,34 +1592,84 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
 
         case 'CLICK_ELEMENT': {
-          const selector = command.value.split('|')[0].trim();
-          const clickStepId = addThinkingStep(`Clicking element: ${selector}...`);
+          // JSON: {"type": "CLICK_ELEMENT", "selector": "#btn", "text": "Submit", "aria": "submit button"}
+          // JSON: {"type": "CLICK_ELEMENT", "text": "Login"}
+          // Pipe: [CLICK_ELEMENT: #submit-btn | text:Login | reason:click login]
+          const rawInput = command.value.trim();
+          const cmdParams = (command as any).params || {};
+
+          // Parse from structured params first
+          let cssSelector = cmdParams.selector || getCmdParam(command as any, 'selector') || '';
+          let textFilter = cmdParams.text || getCmdParam(command as any, 'text') || '';
+          let ariaLabel = cmdParams.aria || cmdParams['aria-label'] || getCmdParam(command as any, 'aria') || '';
+
+          // Fallback: parse from pipe-delimited value
+          if (!cssSelector && !textFilter && !ariaLabel) {
+            cssSelector = rawInput;
+            if (rawInput.startsWith('text:')) {
+              textFilter = rawInput.replace('text:', '').trim();
+              cssSelector = '';
+            } else if (rawInput.startsWith('aria:')) {
+              ariaLabel = rawInput.replace('aria:', '').trim();
+              cssSelector = '';
+            } else {
+              const textMatch = rawInput.match(/\|?\s*text:\s*(.+)/i);
+              const ariaMatch = rawInput.match(/\|?\s*aria:\s*(.+)/i);
+              if (textMatch) {
+                textFilter = textMatch[1].trim();
+                cssSelector = rawInput.replace(textMatch[0], '').replace(/\s*\|\s*$/, '').trim();
+              }
+              if (ariaMatch) {
+                ariaLabel = ariaMatch[1].trim();
+                cssSelector = rawInput.replace(ariaMatch[0], '').replace(/\s*\|\s*$/, '').trim();
+              }
+            }
+          }
+
+          const clickStepId = addThinkingStep(`Clicking${cssSelector ? ': ' + cssSelector : ''}${textFilter ? ' "' + textFilter + '"' : ''}...`);
           try {
             setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'awaiting_permission' } : cmd));
             const confirmed = await requestActionPermission({
               actionType: 'CLICK_ELEMENT',
               action: 'Click Element',
-              target: selector,
-              what: selector,
-              reason: command.reason || 'The AI wants to click a page element in the current tab.',
+              target: cssSelector || textFilter || rawInput,
+              what: cssSelector || textFilter || rawInput,
+              reason: command.reason || 'The AI wants to click a page element.',
               risk: 'medium',
             });
             if (!confirmed) {
-              output = `Click denied for element: ${selector}`;
+              output = 'Click denied';
               resolveThinkingStep(clickStepId, 'error', 'Permission denied');
               break;
             }
             setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing' } : cmd));
-            const res = await window.electronAPI.clickElement(selector);
-            if (res.success) {
-              output = `Successfully clicked element: ${selector}`;
-              resolveThinkingStep(clickStepId, 'done', 'Element clicked');
+
+            // Use dom-click-element with multi-strategy fallback and retry
+            let res: any;
+            if (window.electronAPI.domClickElement) {
+              res = await window.electronAPI.domClickElement({
+                selector: cssSelector || undefined,
+                text: textFilter || undefined,
+                'aria-label': ariaLabel || undefined,
+                retry: 3,
+                verify: true,
+              });
             } else {
-              output = `Failed to click element: ${res.error}`;
-              resolveThinkingStep(clickStepId, 'error', res.error);
+              res = await window.electronAPI.clickElement(cssSelector || rawInput);
+            }
+
+            if (res.success) {
+              output = `Clicked${cssSelector ? ' ' + cssSelector : ''}${textFilter ? ' "' + textFilter + '"' : ''}`;
+              resolveThinkingStep(clickStepId, 'done', 'Clicked');
+            } else {
+              const errMsg = res.error || 'Click failed: element not found';
+              output = `Click failed: ${errMsg}`;
+              commandResult = { output: '', error: output };
+              resolveThinkingStep(clickStepId, 'error', errMsg);
             }
           } catch (e: any) {
             output = `Click error: ${e.message}`;
+            commandResult = { output: '', error: output };
             resolveThinkingStep(clickStepId, 'error', e.message);
           }
           break;
@@ -1620,11 +1700,14 @@ I couldn't schedule the task. The background service may not be running. Please 
               output = `Clicked at coordinates (${x}, ${y})`;
               resolveThinkingStep(clickAtStepId, 'done', 'Clicked at coords');
             } else {
-              output = `Failed to click at coords: ${res.error}`;
-              resolveThinkingStep(clickAtStepId, 'error', res.error);
+              const errMsg = res.error || 'Click at coords failed';
+              output = `Failed to click at coords: ${errMsg}`;
+              commandResult = { output: '', error: output };
+              resolveThinkingStep(clickAtStepId, 'error', errMsg);
             }
           } catch (e: any) {
             output = `Click error: ${e.message}`;
+            commandResult = { output: '', error: output };
             resolveThinkingStep(clickAtStepId, 'error', e.message);
           }
           break;
@@ -1654,21 +1737,26 @@ I couldn't schedule the task. The background service may not be running. Please 
               output = `Found and clicked text: "${textToFind}"`;
               resolveThinkingStep(findClickStepId, 'done', 'Text found and clicked');
             } else {
+              const errMsg = res.error || `Could not find text: "${textToFind}"`;
               output = `Could not find text: "${textToFind}"`;
+              commandResult = { output: '', error: output };
               resolveThinkingStep(findClickStepId, 'error', 'Text not found');
             }
           } catch (e: any) {
             output = `Find and click error: ${e.message}`;
+            commandResult = { output: '', error: output };
             resolveThinkingStep(findClickStepId, 'error', e.message);
           }
           break;
         }
 
         case 'FILL_FORM': {
-          const parts = command.value.split('|').map(s => s.trim());
-          const selector = parts[0];
-          const value = parts[1];
-          const fillStepId = addThinkingStep(`Filling form element ${selector}...`);
+          // JSON: {"type": "FILL_FORM", "selector": "#email", "value": "user@example.com"}
+          // Pipe: [FILL_FORM: #email | user@example.com | reason:enter email]
+          const cmdParams = (command as any).params || {};
+          const selector = cmdParams.selector || getCmdParam(command as any, 'selector') || command.value.split('|')[0]?.trim() || '';
+          const value = cmdParams.value || cmdParams.text || getCmdParam(command as any, 'value') || getCmdParam(command as any, 'text') || command.value.split('|')[1]?.trim() || '';
+          const fillStepId = addThinkingStep(`Filling ${selector}...`);
           try {
             setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'awaiting_permission' } : cmd));
             const confirmed = await requestActionPermission({
@@ -1685,16 +1773,33 @@ I couldn't schedule the task. The background service may not be running. Please 
               break;
             }
             setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing' } : cmd));
-            const res = await window.electronAPI.typeText(selector, value);
+
+            // Use dom-fill-form (enhanced server-side) with retry
+            let res: any;
+            if (window.electronAPI.domFillForm) {
+              res = await window.electronAPI.domFillForm({
+                selector,
+                value,
+                retry: 3,
+                verify: true,
+                clearFirst: true,
+              });
+            } else {
+              res = await window.electronAPI.typeText(selector, value);
+            }
+
             if (res.success) {
-              output = `Filled ${selector} with value: ${value}`;
+              output = `Filled ${selector} with "${value.substring(0, 80)}"`;
               resolveThinkingStep(fillStepId, 'done', 'Form field filled');
             } else {
-              output = `Failed to fill form: ${res.error}`;
-              resolveThinkingStep(fillStepId, 'error', res.error);
+              const errMsg = res.error || `Failed to fill ${selector}`;
+              output = `Failed to fill form: ${errMsg}`;
+              commandResult = { output: '', error: output };
+              resolveThinkingStep(fillStepId, 'error', errMsg);
             }
           } catch (e: any) {
             output = `Fill error: ${e.message}`;
+            commandResult = { output: '', error: output };
             resolveThinkingStep(fillStepId, 'error', e.message);
           }
           break;
@@ -1716,20 +1821,30 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
-        // ✅ FIXED: WEB_SEARCH now stores real results in BrowserAI memory
-        // so the LLM's next synthesis turn gets real data, not hallucination
+        // ✅ WEB_SEARCH with JSON structured params or pipe-delimited
+        // JSON: {"type": "WEB_SEARCH", "query": "AI news", "pages": 5, "url": 2}
+        // JSON: {"type": "WEB_SEARCH", "query": "AI news", "url": "https://specific.url"}
+        // Pipe: [WEB_SEARCH: AI news | pages=5 | url=2]
         case 'SEARCH':
         case 'WEB_SEARCH': {
-          let query = command.value.trim().replace(/^["'](.*)["']$/, '$1') || 'Aartiq Browser';
+          const rawValue = command.value.trim().replace(/^["'](.*)["']$/, '$1') || 'Aartiq Browser';
+
+          // Use structured params if available, fallback to pipe parsing
+          let query = getCmdParam(command as any, 'query') || cleanCmdValue(command as any) || rawValue;
+          const pagesOverride = getCmdParamInt(command as any, 'pages') || null;
+          const specificUrlParam = getCmdParam(command as any, 'url') || null;
+          let specificUrl: string | null = null;
+          if (specificUrlParam) {
+            specificUrl = /^\d+$/.test(specificUrlParam) ? `__INDEX_${specificUrlParam}__` : specificUrlParam;
+          }
+
           let searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-          const originalQuery = query;
           let treatAsDirectUrl = false;
 
-          // If the AI mistakenly uses WEB_SEARCH but provides a direct URL, handle it as a direct navigation
           if (query.match(/^https?:\/\/[^\s]+/i) || query.match(/^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}(\/.*)?$/)) {
             searchUrl = query.startsWith('http') ? query : `https://${query}`;
             treatAsDirectUrl = true;
-            query = `Opening URL: ${searchUrl}`; // Just for logging
+            query = `Opening URL: ${searchUrl}`;
           }
 
           setActiveView('browser');
@@ -1737,40 +1852,65 @@ I couldn't schedule the task. The background service may not be running. Please 
           const navigationResult = await openTabAndWaitForLoad(searchUrl, 'ai-session');
           output = `Opened new tab for: "${query}" (${navigationResult.url || searchUrl})`;
 
-          // Fetch real results and store in vector memory for LLM context
-          const results = treatAsDirectUrl ? [] : await window.electronAPI.webSearchRag(originalQuery);
+          const results = treatAsDirectUrl ? [] : await window.electronAPI.webSearchRag(query || originalQuery);
           const normalizedResults = normalizeSearchResults(results as any[]);
           if (normalizedResults.length > 0) {
-            const injectedResults = normalizedResults.slice(0, 6);
-            const fullSnippet = formatSearchResultsForLLM(originalQuery, injectedResults);
+            const injectedResults = normalizedResults.slice(0, pagesOverride || 6);
+            const fullSnippet = formatSearchResultsForLLM(query || originalQuery, injectedResults);
 
-            // ✅ Store in BrowserAI so the synthesis step gets REAL data
             await BrowserAI.addToVectorMemory(fullSnippet, {
               type: 'web_search',
-              query: originalQuery,
+              query: query || originalQuery,
               timestamp: Date.now()
             });
-            searchContextStore.addWebSearch(originalQuery, fullSnippet);
+            searchContextStore.addWebSearch(query || originalQuery, fullSnippet);
 
-            // Auto-navigate to the top result and read its content
+            // Auto-navigate to results based on AI parameters
             let pageContent = '';
-            const topUrl = injectedResults[0]?.url;
-            if (topUrl) {
-              try {
-                const navResult = await openTabAndWaitForLoad(topUrl, 'ai-session');
-                const activeTabId = useAppStore.getState().activeTabId;
-                const contentRes = await window.electronAPI.extractPageContent(activeTabId || undefined);
-                if (contentRes?.content) {
-                  pageContent = scrubbedContent(contentRes.content).substring(0, 8000);
-                  await BrowserAI.addToVectorMemory(pageContent, { type: 'page_content', url: topUrl, query: originalQuery });
-                  searchContextStore.addPageContent(topUrl, injectedResults[0].title, pageContent);
+            const pageContents: string[] = [];
+
+            // Determine which results to read
+            let resultsToRead: Array<{ url: string; title: string; index: number }> = [];
+            if (specificUrl?.startsWith('__INDEX_')) {
+              // AI specified a specific result index
+              const idx = parseInt(specificUrl.replace('__INDEX_', '').replace('__', ''));
+              const result = injectedResults[idx];
+              if (result) resultsToRead.push({ url: result.url, title: result.title, index: idx });
+            } else if (specificUrl) {
+              // AI specified a specific URL
+              const result = injectedResults.find(r => r.url.includes(specificUrl));
+              if (result) resultsToRead.push({ url: result.url, title: result.title, index: injectedResults.indexOf(result) });
+            } else {
+              // Auto-select based on pages override or default to 3
+              const maxRead = Math.min(pagesOverride || 3, injectedResults.length);
+              for (let i = 0; i < maxRead; i++) {
+                if (injectedResults[i]?.url) {
+                  resultsToRead.push({ url: injectedResults[i].url, title: injectedResults[i].title, index: i });
                 }
-              } catch (navErr) {
-                console.warn('[WebSearch] Auto-navigate to top result failed:', navErr);
               }
             }
 
-            output = `✅ Found ${injectedResults.length} search results for "${originalQuery}"${topUrl ? `, auto-read top result` : ''} — see container below`;
+            for (const { url: resultUrl, title, index } of resultsToRead) {
+              if (!resultUrl) continue;
+              try {
+                const navResult = await openTabAndWaitForLoad(resultUrl, 'ai-session');
+                const activeTabId = useAppStore.getState().activeTabId;
+                const contentRes = await window.electronAPI.extractPageContent(activeTabId || undefined);
+                if (contentRes?.content) {
+                  const cleanContent = scrubbedContent(contentRes.content).substring(0, 6000);
+                  pageContents.push(`[Page ${index + 1}: ${title}](${resultUrl})\n${cleanContent}`);
+                  await BrowserAI.addToVectorMemory(cleanContent, { type: 'page_content', url: resultUrl, query: query || originalQuery });
+                  searchContextStore.addPageContent(resultUrl, title, cleanContent);
+                }
+              } catch (navErr) {
+                console.warn(`[WebSearch] Auto-navigate to result ${index + 1} failed:`, navErr);
+              }
+            }
+            if (pageContents.length > 0) {
+              pageContent = pageContents.join('\n\n---\n\n');
+            }
+
+            output = `✅ Found ${injectedResults.length} results for "${query || originalQuery}", read ${pageContents.length} pages — see container below`;
           } else {
             // Fallback: wait for the search page to load slightly and try DOM / OCR extraction
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -1831,6 +1971,40 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
+        // ✅ SEARCH_RESULTS — returns structured search result URLs directly, no tab opened
+        // JSON: {"type": "SEARCH_RESULTS", "query": "latest AI news", "count": 5}
+        case 'SEARCH_RESULTS': {
+          const srQuery = getCmdParam(command as any, 'query') || cleanCmdValue(command as any) || command.value.trim();
+          const srCount = getCmdParamInt(command as any, 'count') || 8;
+
+          if (!srQuery) {
+            output = 'SEARCH_RESULTS requires a query parameter.';
+            break;
+          }
+
+          const srStepId = addThinkingStep(`Searching Google for "${srQuery}"...`);
+          try {
+            const results = await window.electronAPI.webSearchRag(srQuery);
+            const normalized = normalizeSearchResults(results as any[]).slice(0, srCount);
+
+            if (normalized.length === 0) {
+              output = `No search results found for "${srQuery}".`;
+            } else {
+              const resultLines = normalized.map((r, i) => `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}`);
+              output = `🔍 Google Search Results for "${srQuery}" (${normalized.length}):\n\n${resultLines.join('\n\n')}`;
+              await BrowserAI.addToVectorMemory(
+                `[SEARCH_RESULTS: ${srQuery}]\n${normalized.map(r => `${r.title}: ${r.url}`).join('\n')}`,
+                { type: 'search_results', query: srQuery, url: currentUrl }
+              );
+            }
+            resolveThinkingStep(srStepId, 'done', `${normalized.length} results`);
+          } catch (e: any) {
+            output = `Search failed: ${e.message}`;
+            resolveThinkingStep(srStepId, 'error', e.message);
+          }
+          break;
+        }
+
         case 'READ_PAGE_CONTENT': {
           try {
             const settled = await waitForActiveTabToSettle(15000);
@@ -1842,7 +2016,28 @@ I couldn't schedule the task. The background service may not be running. Please 
             const res = await window.electronAPI.extractPageContent(activeTabId || undefined);
             if (res.content) {
               const scrubbed = scrubbedContent(res.content);
-              output = `✅ Page content read (${scrubbed.length} chars) — see container below`;
+              // Detect form fields and add FILL_FORM suggestions
+              const formFields: { selector: string; placeholder: string; type: string }[] = [];
+              const inputRe = /<input[^>]*name=["']([^"']+)["'][^>]*>|<textarea[^>]*name=["']([^"']+)["'][^>]*>/gi;
+              let fm;
+              while ((fm = inputRe.exec(scrubbed)) !== null) {
+                const name = fm[1] || fm[2];
+                const full = fm[0];
+                const placeholder = full.match(/placeholder=["']([^"']*)["']/)?.[1] || '';
+                const type = full.startsWith('<textarea') ? 'textarea' : (full.match(/type=["']([^"']*)["']/)?.[1] || 'text');
+                formFields.push({ selector: `[name="${name}"]`, placeholder, type });
+              }
+              const hasButton = /<button[^>]*>.*<\/button>|<input[^>]*type=["']submit["'][^>]*>/i.test(scrubbed);
+              let formHint = '';
+              if (formFields.length > 0) {
+                const fieldLines = formFields.map((f, i) =>
+                  `${i + 1}. FILL_FORM: selector="${f.selector}", value="<${f.placeholder || f.type}>"`
+                ).join('\n');
+                formHint = `\n\n📋 FORM FIELDS DETECTED — use these FILL_FORM commands:\n${fieldLines}`;
+                if (hasButton) formHint += `\nThen CLICK_ELEMENT: selector="button[type='submit']" or text="Submit"`;
+                formHint += `\nFormat: {"type": "FILL_FORM", "selector": "${formFields[0].selector}", "value": "your@email.com"}`;
+              }
+              output = `✅ Page content read (${scrubbed.length} chars) — see container below${formHint}`;
               await BrowserAI.addToVectorMemory(scrubbed, { type: 'page_content', url: currentUrl });
               searchContextStore.addPageContent(currentUrl, currentUrl, scrubbed);
               setMessages(prev => {
@@ -2022,6 +2217,57 @@ I couldn't schedule the task. The background service may not be running. Please 
           } else {
             store.removeTab(tabId);
             output = `Closed tab: ${tabId}`;
+          }
+          break;
+        }
+
+        case 'LIST_OPEN_TABS': {
+          const tabs = store.tabs;
+          if (tabs.length === 0) {
+            output = 'No open tabs.';
+          } else {
+            output = `Open tabs (${tabs.length}):\n${tabs.map((t, i) => `${i + 1}. ${t.title || 'Untitled'} (id: ${t.id}) ${t.active ? '[ACTIVE]' : ''}\n   URL: ${t.url}`).join('\n')}`;
+          }
+          break;
+        }
+
+        case 'SWITCH_TAB': {
+          const rawTarget = (getCmdParam(command as any, 'id') || command.value || '').trim();
+          const tabs = store.tabs;
+          if (!rawTarget) {
+            // No ID given — switch to active tab or first tab
+            const activeTab = tabs.find(t => t.active) || tabs[0];
+            if (activeTab) {
+              store.setActiveTabId(activeTab.id);
+              setActiveView('browser');
+              output = `Already on tab: ${activeTab.title || activeTab.url}`;
+            } else {
+              output = 'No tabs available to switch to.';
+            }
+            break;
+          }
+          let targetTab: typeof tabs[0] | undefined;
+          // Try direct ID match first
+          targetTab = tabs.find(t => t.id === rawTarget);
+          // Try index (1-based as shown to user)
+          if (!targetTab && /^\d+$/.test(rawTarget)) {
+            const idx = parseInt(rawTarget, 10) - 1;
+            targetTab = tabs[idx];
+          }
+          // Try title/URL fuzzy match
+          if (!targetTab) {
+            const lower = rawTarget.toLowerCase();
+            targetTab = tabs.find(t => 
+              t.title?.toLowerCase().includes(lower) || 
+              t.url?.toLowerCase().includes(lower)
+            );
+          }
+          if (targetTab) {
+            store.setActiveTabId(targetTab.id);
+            setActiveView('browser');
+            output = `Switched to tab: ${targetTab.title || targetTab.url}`;
+          } else {
+            output = `No tab found matching: ${rawTarget}. Available tabs:\n${tabs.map((t, i) => `${i + 1}. ${t.title} (${t.id})`).join('\n')}`;
           }
           break;
         }
@@ -3347,6 +3593,111 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
+        // ── PLAY_VIDEO: play a YouTube video inline in chat ────────────────
+        // JSON: {"type": "PLAY_VIDEO", "id": "dQw4w9WgXcQ", "title": "Video Title"}
+        // Pipe: [PLAY_VIDEO: dQw4w9WgXcQ | title]
+        case 'PLAY_VIDEO': {
+          const cmdParams = (command as any).params || {};
+          let playVideoId = cmdParams.id || cmdParams.videoId || getCmdParam(command as any, 'id') || '';
+          const playTitle = cmdParams.title || getCmdParam(command as any, 'title') || command.value.split('|')[1]?.trim() || 'Video';
+          const playQuery = cmdParams.query || getCmdParam(command as any, 'query') || command.value.trim().split('|')[0]?.trim() || '';
+
+          // If no explicit ID, try searching YouTube with the provided value
+          if (!playVideoId) {
+            const searchTerm = playQuery || playTitle || command.value.trim();
+            if (searchTerm) {
+              const ytRes = await window.electronAPI.webSearchYoutube(searchTerm, 1);
+              if (ytRes?.success && ytRes.results?.length > 0) {
+                const first = ytRes.results[0];
+                const urlObj = new URL(first.url);
+                playVideoId = urlObj.searchParams.get('v') || '';
+                if (!playVideoId && first.id) playVideoId = first.id;
+                if (playVideoId) output = `Found video: ${first.title} - playing...`;
+              }
+            }
+          }
+
+          if (!playVideoId) { output = 'Could not find a video to play. Try SEARCH_VIDEO first.'; break; }
+
+          const isPlayingYt = /^[a-zA-Z0-9_-]{11}$/.test(playVideoId);
+          if (isPlayingYt) {
+            const watchUrl = `https://www.youtube.com/watch?v=${playVideoId}`;
+            store.addTab(watchUrl);
+            window.electronAPI?.createView?.({ tabId: `yt-${Date.now()}`, url: watchUrl });
+            setActiveView('browser');
+            setMessages(prev => {
+              if (prev.length === 0) return prev;
+              const updated = [...prev];
+              const last = updated[updated.length - 1];
+              const existing = last.mediaItems || [];
+              updated[updated.length - 1] = {
+                ...last,
+                mediaItems: [...existing, {
+                  type: 'video',
+                  videoUrl: watchUrl,
+                  title: playTitle,
+                  source: 'youtube',
+                  videoId: playVideoId,
+                  autoPlay: true,
+                }]
+              };
+              return updated;
+            });
+            output = (output || '') + `Playing video: ${playTitle}\nOpened in new tab: ${watchUrl}`;
+          } else {
+            output = `Invalid YouTube ID: ${playVideoId}`;
+          }
+          break;
+        }
+
+        // ── SEARCH_VIDEO: search YouTube and play top results ──────────
+        // JSON: {"type": "SEARCH_VIDEO", "query": "music", "count": 1}
+        // count=1 (default): play top result; count=N: play top N results
+        case 'SEARCH_VIDEO': {
+          const cmdParams = (command as any).params || {};
+          const videoQuery = cmdParams.query || getCmdParam(command as any, 'query') || command.value.trim().split('|')[0]?.trim() || 'popular';
+          const videoCount = getCmdParamInt(command as any, 'count') || parseInt(cmdParams.count || '1') || 1;
+          try {
+            const ytRes = await window.electronAPI.webSearchYoutube(videoQuery, Math.max(videoCount, 5));
+            if (ytRes?.success && ytRes.results?.length > 0) {
+              const toPlay = ytRes.results.slice(0, videoCount);
+              for (const vid of toPlay) {
+                const watchUrl = vid.url;
+                store.addTab(watchUrl);
+                window.electronAPI?.createView?.({ tabId: `yt-${Date.now()}`, url: watchUrl });
+              }
+              setActiveView('browser');
+              const videoCards = ytRes.results.map((v: any, i: number) =>
+                `**${i + 1}. ${v.title}**\n🔗 ${v.url}\n⏱ ${v.length || 'N/A'} | ${v.channel || 'Unknown'}\n📝 ${v.snippet || ''}`
+              ).join('\n\n');
+              const first = toPlay[0];
+              setMessages(prev => {
+                const updated = [...prev];
+                const last = updated[updated.length - 1];
+                const existing = last.mediaItems || [];
+                updated[updated.length - 1] = {
+                  ...last,
+                  mediaItems: [...existing, {
+                    type: 'video',
+                    videoUrl: first.url,
+                    title: first.title,
+                    source: 'youtube',
+                    videoId: first.videoId,
+                    autoPlay: true,
+                  }]
+                };
+                return updated;
+              });
+              output = `Found ${ytRes.results.length} videos for "${videoQuery}". Playing top ${toPlay.length} result${toPlay.length > 1 ? 's' : ''}.\n${videoCards}`;
+            } else {
+              output = `No YouTube videos found for "${videoQuery}".`;
+            }
+          } catch (e: any) {
+            output = `YouTube search failed: ${e.message}`;
+          }
+          break;
+        }
+
         case 'EXPLAIN_CAPABILITIES': {
           setShowCapabilities(true);
 
@@ -3729,7 +4080,10 @@ I've successfully executed the following real tasks:
           try {
             const res = await window.electronAPI.searchDOM(query);
             if (res.error) {
-              output = `DOM search failed: ${res.error}`;
+              const friendlyMsg = res.error === 'No active view'
+                ? 'No webpage is currently open. Open a page first to search its content.'
+                : `DOM search failed: ${res.error}`;
+              output = friendlyMsg;
               setDOMSearchLoading(false);
             } else {
               const results: DOMSearchResult[] = (res.results || []).map((r: any) => ({
@@ -4663,6 +5017,8 @@ I've successfully executed the following real tasks:
         {showSetupGuide && <AISetupGuide onClose={() => setShowSetupGuide(false)} onComplete={() => { setShowSetupGuide(false); setShowLLMProviderSettings(true); }} />}
       </AnimatePresence>
 
+      <McpSetupGuide isOpen={showMcpSetupGuide} onClose={() => setShowMcpSetupGuide(false)} />
+
       <AnimatePresence>
         {commandQueue.length > 0 && currentCommandIndex < commandQueue.length && (
           <AICommandQueue
@@ -5081,6 +5437,23 @@ I've successfully executed the following real tasks:
                         }
                         if (item.type === 'video') {
                           const isYt = item.source === 'youtube';
+                          const shouldEmbed = isYt && item.videoId && (item as any).autoPlay;
+                          if (shouldEmbed) {
+                            return (
+                              <motion.div
+                                key={midx}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="my-2"
+                              >
+                                <YouTubePlayer
+                                  videoId={item.videoId!}
+                                  title={item.title}
+                                  autoPlay={true}
+                                />
+                              </motion.div>
+                            );
+                          }
                           return (
                             <motion.a
                               key={midx}

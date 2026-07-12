@@ -1,4 +1,5 @@
 const fetch = require('cross-fetch');
+const { JSDOM } = require('jsdom');
 
 class WebSearchProvider {
   constructor() {
@@ -19,10 +20,12 @@ class WebSearchProvider {
 
     switch (provider) {
       case 'google': return this._searchGoogle(query, count);
+      case 'googlescrape': return this._searchGoogleScrape(query, count);
       case 'brave': return this._searchBrave(query, count);
       case 'tavily': return this._searchTavily(query, count);
       case 'serp': return this._searchSerp(query, count);
       case 'duckduckgo': return this._searchDuckDuckGo(query, count);
+      case 'youtube': return this._searchYouTube(query, count);
       default: return this._searchGoogle(query, count);
     }
   }
@@ -32,11 +35,11 @@ class WebSearchProvider {
     if (this._getKey('BRAVE_API_KEY')) return 'brave';
     if (this._getKey('TAVILY_API_KEY')) return 'tavily';
     if (this._getKey('SERP_API_KEY')) return 'serp';
-    return 'duckduckgo';
+    return 'googlescrape';
   }
 
   getAvailableProviders() {
-    const providers = ['duckduckgo'];
+    const providers = ['googlescrape', 'duckduckgo'];
     if (this._getKey('GOOGLE_API_KEY') && this._getKey('GOOGLE_SEARCH_ENGINE_ID')) providers.push('google');
     if (this._getKey('BRAVE_API_KEY')) providers.push('brave');
     if (this._getKey('TAVILY_API_KEY')) providers.push('tavily');
@@ -64,6 +67,155 @@ class WebSearchProvider {
       url: r.link || '',
       snippet: r.snippet || '',
     }));
+  }
+
+  async _searchGoogleScrape(query, count) {
+    try {
+      const res = await fetch(
+        `https://www.google.com/search?q=${encodeURIComponent(query)}&num=${Math.min(count, 20)}&hl=en`,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0',
+          },
+        }
+      );
+
+      if (!res.ok) {
+        if (res.status === 429) {
+          console.warn('[WebSearch] Google returned 429 (rate limited), falling back to DuckDuckGo');
+          return this._searchDuckDuckGo(query, count);
+        }
+        throw new Error(`Google Search scrape error ${res.status}`);
+      }
+
+      const html = await res.text();
+      const dom = new JSDOM(html);
+      const doc = dom.window.document;
+      const results = [];
+
+      // Multiple selector strategies to handle Google DOM changes
+      const selectors = [
+        // Primary: modern div.g containers
+        'div.g',
+        // Fallback: newer container class
+        'div.MjjYud',
+        // Fallback: search result with role
+        'div[jscontroller][role="heading"] ~ div',
+        // Fallback: any div containing h3 within a search result
+        'div.sr-only ~ div.g',
+      ];
+
+      let blocks = [];
+      for (const sel of selectors) {
+        blocks = [...doc.querySelectorAll(sel)];
+        if (blocks.length > 0) break;
+      }
+
+      for (const block of blocks) {
+        if (results.length >= count) break;
+
+        // Try multiple anchor selectors
+        let anchor = block.querySelector('a[href^="http"]:not([href*="google.com"])');
+        if (!anchor) anchor = block.querySelector('a[jsname="UWckNb"]');
+        if (!anchor) anchor = block.querySelector('a[href^="/url?q="]');
+        if (!anchor) continue;
+
+        // Extract title from h3
+        const titleEl = block.querySelector('h3');
+        if (!titleEl) continue;
+        const title = titleEl.textContent.trim();
+        if (!title) continue;
+
+        // Extract URL
+        let url = anchor.getAttribute('href') || '';
+        if (url.startsWith('/url?q=')) {
+          url = decodeURIComponent(url.replace('/url?q=', '').split('&')[0]);
+        }
+        if (!url.startsWith('http')) continue;
+
+        // Try multiple snippet selectors
+        const snippetSelectors = [
+          'div.VwiC3b',
+          'div[data-sncf]',
+          'span.st',
+          'div.lEBKkf',
+          'div[role="heading"] + div',
+        ];
+        let snippet = '';
+        for (const ss of snippetSelectors) {
+          const el = block.querySelector(ss);
+          if (el) {
+            snippet = el.textContent.trim();
+            break;
+          }
+        }
+
+        // Deduplicate by URL
+        if (!results.some(r => r.url === url)) {
+          results.push({ title, url, snippet });
+        }
+      }
+
+      // If no results with CSS selectors, try regex fallback
+      if (results.length === 0) {
+        return this._searchGoogleScrapeFallback(html, count);
+      }
+
+      return results;
+    } catch (e) {
+      console.warn(`[WebSearch] Google scrape failed: ${e.message}`);
+      try {
+        return await this._searchDuckDuckGo(query, count);
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  _searchGoogleScrapeFallback(html, count) {
+    const results = [];
+    const patterns = [
+      // Pattern: <a href="/url?q=URL"> with <h3> title
+      /<a[^>]+href="\/url\?q=([^"&]+)[^"]*"[^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>/gi,
+      // Pattern: Direct links with h3
+      /<a[^>]+href="(https?:\/\/(?!www\.google\.)[^"]+)"[^>]*>[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>/gi,
+    ];
+
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(html)) !== null && results.length < count) {
+        let url = match[1].trim();
+        const title = match[2].replace(/<[^>]*>/g, '').trim();
+        if (!title || !url.startsWith('http')) continue;
+
+        // Extract snippet near this result
+        const beforeText = html.substring(Math.max(0, match.index - 500), match.index);
+        const afterText = html.substring(match.index, match.index + 1000);
+        const context = beforeText + afterText;
+
+        let snippet = '';
+        const snippetMatch = context.match(/<div[^>]*class="[^"]*VwiC3b[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+        if (snippetMatch) {
+          snippet = snippetMatch[1].replace(/<[^>]*>/g, '').trim();
+        }
+
+        if (!results.some(r => r.url === url)) {
+          results.push({ title, url, snippet });
+        }
+      }
+      if (results.length > 0) break;
+    }
+
+    return results;
   }
 
   async _searchBrave(query, count) {
@@ -242,6 +394,118 @@ class WebSearchProvider {
       return decoded;
     } catch {
       return rawUrl;
+    }
+  }
+
+  async fetchPageContent(url, maxChars = 8000) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        timeout: 10000,
+      });
+      if (!res.ok) return '';
+      const html = await res.text();
+      const dom = new JSDOM(html, { url });
+      const doc = dom.window.document;
+
+      // Remove non-content elements
+      const remove = doc.querySelectorAll('script, style, nav, footer, header, noscript, svg, iframe, form, .sidebar, .menu, .footer, .header, .nav, .ad, .advertisement, .cookie, .popup, .modal, .overlay');
+      for (const el of remove) el.remove();
+
+      // Prefer main content regions
+      const main = doc.querySelector('main, article, [role="main"], #content, #main, .content, .post, .entry, .article');
+      const text = main ? main.textContent : doc.body.textContent;
+
+      return text.replace(/\s+/g, ' ').trim().substring(0, maxChars);
+    } catch (e) {
+      console.warn(`[WebSearch] fetchPageContent failed for ${url}: ${e.message}`);
+      return '';
+    }
+  }
+
+  async _searchYouTube(query, count) {
+    try {
+      const res = await fetch(
+        `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en`,
+        {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+        }
+      );
+      if (!res.ok) throw new Error(`YouTube search error ${res.status}`);
+
+      const html = await res.text();
+      const results = [];
+
+      // YouTube embeds initial data in ytInitialData JSON
+      const dataMatch = html.match(/var ytInitialData\s*=\s*({[\s\S]*?});\s*<\/script>/);
+      if (dataMatch) {
+        try {
+          const data = JSON.parse(dataMatch[1]);
+          const contents = data?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+          for (const section of contents) {
+            const items = section?.itemSectionRenderer?.contents || [];
+            for (const item of items) {
+              if (results.length >= count) break;
+              const vid = item?.videoRenderer;
+              if (!vid) continue;
+              const videoId = vid.videoId;
+              const title = vid.title?.runs?.[0]?.text || '';
+              const url = `https://www.youtube.com/watch?v=${videoId}`;
+              const snippet = vid.detailedMetadataSnippets?.[0]?.snippetText?.runs?.map((r) => r.text).join('') ||
+                vid.descriptionSnippet?.runs?.map((r) => r.text).join('') || '';
+              const channel = vid.ownerText?.runs?.[0]?.text || '';
+              const length = vid.lengthText?.simpleText || '';
+              const thumbnail = vid.thumbnail?.thumbnails?.[vid.thumbnail.thumbnails.length - 1]?.url || '';
+
+              results.push({
+                title,
+                url,
+                snippet: snippet || channel,
+                videoId,
+                channel,
+                length,
+                thumbnail,
+              });
+            }
+          }
+        } catch (e) {
+          console.warn('[WebSearch] YouTube JSON parse failed:', e.message);
+        }
+      }
+
+      // Fallback: regex extraction from raw HTML
+      if (results.length === 0) {
+        const urlPattern = /\/watch\?v=([a-zA-Z0-9_-]{11})/g;
+        const seen = new Set();
+        let match;
+        while ((match = urlPattern.exec(html)) !== null && results.length < count) {
+          const videoId = match[1];
+          if (seen.has(videoId)) continue;
+          seen.add(videoId);
+          results.push({
+            title: `YouTube Video ${videoId}`,
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+            snippet: '',
+            videoId,
+            channel: '',
+            length: '',
+            thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+          });
+        }
+      }
+
+      return results;
+    } catch (e) {
+      console.warn(`[WebSearch] YouTube search failed: ${e.message}`);
+      return [];
     }
   }
 

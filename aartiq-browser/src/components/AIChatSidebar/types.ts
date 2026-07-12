@@ -20,6 +20,7 @@ export type MediaItem = {
   thumbnailUrl?: string;
   source: 'youtube' | 'other';
   videoId?: string;
+  autoPlay?: boolean;
 } | {
   type: 'mermaid';
   diagramId: string;

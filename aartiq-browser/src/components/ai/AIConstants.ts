@@ -62,7 +62,7 @@ export const NOT_FOUND_SIGNALS = [
   "access denied", "403 forbidden",
 ];
 
-export const INTERNAL_TAG_RE = /\[\s*(?:READ_PAGE_CONTENT|PAGE_CONTENT_READ|SCREENSHOT_ANALYSIS|SCREENSHOT_AND_ANALYZE|OCR(?:_COORDINATES|_SCREEN)?|EXTRACTED|EXTRACT_DATA|OPEN_TABS|EMAILS|LIST_OPEN_TABS|ORGANIZE_TABS|CLOSE_TAB|NAVIGATE|SEARCH|WEB_SEARCH|GENERATE_IMAGE|FIND_AND_CLICK|CLICK_ELEMENT|CLICK_AT|CLICK_APP_ELEMENT|FILL_FORM|SCROLL_TO|SHELL_COMMAND|OPEN_APP|SET_THEME|SET_VOLUME|SET_BRIGHTNESS|RELOAD|GO_BACK|GO_FORWARD|WAIT|GUIDE_CLICK|GENERATE_PDF|GENERATE_DIAGRAM|OPEN_PRESENTON|EXPLAIN_CAPABILITIES|OPEN_PDF|OPEN_VIEW|GMAIL_\w+|CREATE_NEW_TAB_GROUP|SHOW_IMAGE|SHOW_VIDEO|OPEN_MCP_SETTINGS|OPEN_AUTOMATION_SETTINGS|OPEN_SCHEDULING_MODAL|AI REASONING|ACTION_CHAIN_JSON|OCR_RESULT|MEDIA_ATTACHMENTS_JSON|SCHEDULE_TASK|APPLE_INTELLIGENCE_IMAGE|APPLE_INTELLIGENCE_SUMMARY|CREATE_XLSX_JSON|CROSS_APP_JSON(?:\s*\|\s*[^]]+)?)[^\]]*\]/gi;
+export const INTERNAL_TAG_RE = /\[\s*(?:READ_PAGE_CONTENT|PAGE_CONTENT_READ|SCREENSHOT_ANALYSIS|SCREENSHOT_AND_ANALYZE|OCR(?:_COORDINATES|_SCREEN)?|EXTRACTED|EXTRACT_DATA|OPEN_TABS|EMAILS|LIST_OPEN_TABS|ORGANIZE_TABS|CLOSE_TAB|SWITCH_TAB|NAVIGATE|SEARCH|WEB_SEARCH|GENERATE_IMAGE|FIND_AND_CLICK|CLICK_ELEMENT|CLICK_AT|CLICK_APP_ELEMENT|FILL_FORM|SCROLL_TO|SHELL_COMMAND|OPEN_APP|SET_THEME|SET_VOLUME|SET_BRIGHTNESS|RELOAD|GO_BACK|GO_FORWARD|WAIT|GUIDE_CLICK|GENERATE_PDF|GENERATE_DIAGRAM|OPEN_PRESENTON|EXPLAIN_CAPABILITIES|OPEN_PDF|OPEN_VIEW|GMAIL_\w+|CREATE_NEW_TAB_GROUP|SHOW_IMAGE|SHOW_VIDEO|PLAY_VIDEO|SEARCH_VIDEO|OPEN_MCP_SETTINGS|OPEN_AUTOMATION_SETTINGS|OPEN_SCHEDULING_MODAL|AI REASONING|ACTION_CHAIN_JSON|OCR_RESULT|MEDIA_ATTACHMENTS_JSON|SCHEDULE_TASK|APPLE_INTELLIGENCE_IMAGE|APPLE_INTELLIGENCE_SUMMARY|CREATE_XLSX_JSON|CROSS_APP_JSON(?:\s*\|\s*[^]]+)?)[^\]]*\]/gi;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Queries that ALWAYS require a web search before answering
@@ -170,61 +170,77 @@ SECURITY
 ACTION COMMANDS REFERENCE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Use JSON format for all commands. Bracket format is fallback only.
+Use JSON format inside a \`\`\`json code block:
 
-- [NAVIGATE: url]
-- [WEB_SEARCH: query]
-- [SEARCH: query]
-- [READ_PAGE_CONTENT]
-- [SCREENSHOT_AND_ANALYZE]
-- [LIST_OPEN_TABS]
-- [CREATE_FILE_JSON: <JSON>] — ALL document generation (pdf/docx/pptx)
-- [CREATE_PDF_JSON: <JSON>] — PDF reports
-- [GENERATE_PDF: Title | author:Name | content...] — FALLBACK ONLY
-- [SHOW_IMAGE: url | caption]
-- [SHOW_VIDEO: url | title | description]
-- [GENERATE_DIAGRAM: mermaid_code]
-- [SHELL_COMMAND: command]
-- [SET_BRIGHTNESS: percentage]
-- [SET_VOLUME: percentage]
-- [OPEN_APP: app_name]
-- [SET_THEME: dark|light|system]
-- [OPEN_VIEW: browser|workspace|pdf|media|coding]
-- [RELOAD] [GO_BACK] [GO_FORWARD]
-- [FILL_FORM: selector | value]
-- [SCROLL_TO: selector | position]
-- [EXTRACT_DATA: selector]
-- [CREATE_NEW_TAB_GROUP: name | urls]
-- [OCR_COORDINATES: x,y,w,h]
-- [OCR_SCREEN: x,y,w,h]
-- [CROSS_APP_JSON: {"actions":[...]}]
-- [DOM_SEARCH: query]
-- [DOM_READ_FILTERED: query]
-- [CLICK_ELEMENT: selector | reason]
-- [CLICK_AT: x,y | reason]
-- [CLICK_APP_ELEMENT: app | text | reason]
-- [FIND_AND_CLICK: text | reason]
-- [IMAGE_URL: url | caption:caption]
-- [CAPTURE_SCREEN | caption:caption]
-- [GMAIL_AUTHORIZE] [GMAIL_LIST_MESSAGES: query | max] [GMAIL_GET_MESSAGE: id] [GMAIL_SEND_MESSAGE: to | sub | body | thread] [GMAIL_ADD_LABEL: id | label]
-- [WAIT: ms]
-- [GUIDE_CLICK: desc | x,y,w,h]
-- [OPEN_PRESENTON: prompt]
-- [EXPLAIN_CAPABILITIES]
-- [OPEN_MCP_SETTINGS]
-- [OPEN_AUTOMATION_SETTINGS]
-- [ENABLE_CLI]
-- [ORGANIZE_TABS]
-- [CLOSE_TAB: tabId]
-- [THINK: note] [PLAN: description]
-- [SCHEDULE_TASK: <JSON>]  Schedule recurring tasks. Supported types: open-url (opens a URL), ai-prompt, web-scrape, pdf-generate, workflow, daily-brief, shell. Examples:
-  {"schedule": "41 11 * * *", "type": "open-url", "url": "https://web.whatsapp.com", "name": "Open WhatsApp"}
-  {"schedule": "0 8 * * *", "type": "shell", "command": "open https://news.ycombinator.com", "name": "Open HN"}
-  {"schedule": "0 9 * * 1", "type": "pdf-generate", "name": "Weekly Report", "description": "Generate weekly PDF report"}
-  Always use SCHEDULE_TASK for scheduling — do NOT create shell scripts or manual cron instructions.
-- [APPLE_INTELLIGENCE_SUMMARY: text]
-- [APPLE_INTELLIGENCE_IMAGE: prompt]
-- [GENERATE_IMAGE: prompt]
+\`\`\`json
+{
+  "commands": [
+    {"type": "NAVIGATE", "value": "https://example.com"},
+    {"type": "WEB_SEARCH", "query": "latest AI news", "pages": 5, "reason": "Need research data"},
+    {"type": "CLICK_ELEMENT", "selector": "#submit-btn", "reason": "Submit form"},
+    {"type": "FILL_FORM", "selector": "#email", "value": "user@example.com"},
+    {"type": "PLAY_VIDEO", "id": "dQw4w9WgXcQ", "title": "Video Title"}
+  ]
+}
+\`\`\`
+
+Supported command types with their JSON parameters:
+
+**NAVIGATE** — { value: string }
+**WEB_SEARCH** — { query: string, pages?: number, url?: string|number }
+**SEARCH** — { query: string }
+**READ_PAGE_CONTENT** — (no params)
+**CLICK_ELEMENT** — { selector?: string, text?: string, "aria-label"?: string } ← at least ONE field required
+**FILL_FORM** — { selector: string, value: string } ← BOTH required
+**PLAY_VIDEO** — { id: string, title?: string }
+**SEARCH_VIDEO** — { query: string, count?: number }
+**SHELL_COMMAND** — { value: string }
+**SCREENSHOT_AND_ANALYZE** — (no params)
+**SHOW_IMAGE** — { url: string, caption?: string }
+**SHOW_VIDEO** — { url: string, title?: string, description?: string }
+**GENERATE_DIAGRAM** — { code: string }
+**GENERATE_PDF** — { title: string, content: string }
+**CREATE_FILE_JSON** — { value: json_string }
+**SET_VOLUME** — { value: percentage }
+**SET_BRIGHTNESS** — { value: percentage }
+**OPEN_APP** — { value: app_name }
+**SET_THEME** — { value: dark|light|system }
+**OPEN_VIEW** — { value: browser|workspace|pdf|media|coding }
+**RELOAD** | **GO_BACK** | **GO_FORWARD** — (no params)
+**SCROLL_TO** — { selector: string }
+**DOM_SEARCH** — { query: string }
+**DOM_READ_FILTERED** — { query?: string }
+**CLICK_AT** — { x: number, y: number, reason?: string }
+**FIND_AND_CLICK** — { text: string } ← text must be the EXACT visible label/button text on screen
+**WAIT** — { ms: number }
+**THINK** — { note: string }
+**PLAN** — { description: string }
+**EXPLAIN_CAPABILITIES** — (no params)
+**SCHEDULE_TASK** — { value: json_string }
+**GMAIL_AUTHORIZE** | **GMAIL_LIST_MESSAGES** | **GMAIL_GET_MESSAGE** | **GMAIL_SEND_MESSAGE** | **GMAIL_ADD_LABEL** — (various params)
+**APPLE_INTELLIGENCE_SUMMARY** — { text: string }
+**APPLE_INTELLIGENCE_IMAGE** — { prompt: string }
+**GENERATE_IMAGE** — { prompt: string }
+**ENABLE_CLI** — (no params)
+**SWITCH_TAB** — { id: string } — Switch to a tab by ID or number. Omit id to stay on current tab.
+**LIST_OPEN_TABS** — (no params) — List all open tabs with IDs and URLs.
+**SEARCH_RESULTS** — { query: string, count?: number } — Get Google search result URLs directly (no tab opened).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FORM AUTOMATION — REQUIRED RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When asked to fill a form, ALWAYS follow this workflow:
+1. First use READ_PAGE_CONTENT or SCREENSHOT_AND_ANALYZE to discover the real field IDs/names.
+2. Fill each field with FILL_FORM using the REAL selector from the DOM (e.g. "#name", "input[name='email']").
+3. Click submit with CLICK_ELEMENT using the real button selector.
+
+CRITICAL — these commands FAIL instantly with empty params:
+- CLICK_ELEMENT with no selector/text/aria-label → ALWAYS rejected
+- FIND_AND_CLICK with empty text → ALWAYS rejected
+- FILL_FORM with no selector or value → ALWAYS rejected
+
+NEVER emit: {"type": "CLICK_ELEMENT"} or {"type": "FIND_AND_CLICK", "text": ""}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 THINKING TRANSPARENCY

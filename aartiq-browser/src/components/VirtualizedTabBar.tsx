@@ -57,10 +57,11 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
     }
   };
 
-  const onDragStart = () => {
+  const onDragStart = (event: any, info: any) => {
     dragStartTime.current = Date.now();
     shakeCount.current = 0;
     lastDirection.current = 0;
+    lastX.current = info?.point?.x ?? 0;
     setIsShaking(false);
   };
 
@@ -82,7 +83,7 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
     
     const currentX = info.point.x;
     const deltaX = currentX - lastX.current;
-    const direction = deltaX > 0 ? 1 : deltaX < 0 ? -1 : 0;
+    const direction = deltaX > 5 ? 1 : deltaX < -5 ? -1 : 0; // small deadzone to avoid noise
 
     if (direction !== 0 && direction !== lastDirection.current) {
       shakeCount.current++;

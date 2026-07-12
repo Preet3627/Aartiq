@@ -53,7 +53,7 @@ module.exports = function registerAiHandlers(ipcMain, handlers) {
 
   ipcMain.handle('llm-get-provider-models', async (event, providerId, options = {}) => {
     const { getProviderModels } = require('./ai-utils.js');
-    return await getProviderModels(providerId, options);
+    return await getProviderModels(providerId, options, store);
   });
 
   ipcMain.handle('llm-set-active-provider', (event, providerId) => {
@@ -65,7 +65,7 @@ module.exports = function registerAiHandlers(ipcMain, handlers) {
     if (options.apiKey) {
       await storeApiKey(providerId, options.apiKey);
       const legacyKey = API_KEY_MAP[providerId];
-      if (legacyKey) store.delete(legacyKey);
+      if (legacyKey) store.set(legacyKey, options.apiKey);
     }
     if (providerId === 'google') {
       if (options.model) store.set('gemini_model', options.model);
@@ -124,24 +124,24 @@ module.exports = function registerAiHandlers(ipcMain, handlers) {
     cometAiEngine.configure(keys);
     if (keys.GEMINI_API_KEY) {
       await storeApiKey('google', keys.GEMINI_API_KEY);
-      store.delete('gemini_api_key');
+      store.set('gemini_api_key', keys.GEMINI_API_KEY);
     }
     if (keys.GROQ_API_KEY) {
       await storeApiKey('groq', keys.GROQ_API_KEY);
-      store.delete('groq_api_key');
+      store.set('groq_api_key', keys.GROQ_API_KEY);
     }
     if (keys.OPENAI_API_KEY) {
       await storeApiKey('openai', keys.OPENAI_API_KEY);
-      store.delete('openai_api_key');
+      store.set('openai_api_key', keys.OPENAI_API_KEY);
     }
     if (keys.AZURE_OPENAI_API_KEY) {
       await storeApiKey('azure-openai', keys.AZURE_OPENAI_API_KEY);
-      store.delete('azure_openai_api_key');
+      store.set('azure_openai_api_key', keys.AZURE_OPENAI_API_KEY);
     }
     if (keys.AZURE_OPENAI_BASE_URL) store.set('azure_openai_endpoint', keys.AZURE_OPENAI_BASE_URL);
     if (keys.ANTHROPIC_API_KEY) {
       await storeApiKey('anthropic', keys.ANTHROPIC_API_KEY);
-      store.delete('anthropic_api_key');
+      store.set('anthropic_api_key', keys.ANTHROPIC_API_KEY);
     }
     return { success: true };
   });

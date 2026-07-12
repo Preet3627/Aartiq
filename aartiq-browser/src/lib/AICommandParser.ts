@@ -13,6 +13,36 @@ export interface ParsedCommand {
     category?: string;
     reason?: string;
     risk?: 'low' | 'medium' | 'high';
+    params?: Record<string, string>;
+}
+
+/**
+ * Get a typed parameter from command, with fallback to pipe-delimited parsing
+ */
+export function getCmdParam(cmd: ParsedCommand, key: string, defaultValue = ''): string {
+    // First check structured params
+    if (cmd.params && cmd.params[key] !== undefined) {
+        return cmd.params[key]!;
+    }
+    // Fallback: parse from pipe-delimited value string
+    const pattern = new RegExp(`\\|?\\s*${key}\\s*[:=]\\s*([^|]+)`, 'i');
+    const match = cmd.value.match(pattern);
+    if (match) return match[1].trim();
+    return defaultValue;
+}
+
+export function getCmdParamInt(cmd: ParsedCommand, key: string, defaultValue = 0): number {
+    const val = getCmdParam(cmd, key);
+    const n = parseInt(val, 10);
+    return isNaN(n) ? defaultValue : n;
+}
+
+export function cleanCmdValue(cmd: ParsedCommand): string {
+    if (cmd.params && Object.keys(cmd.params).length > 0) {
+        return cmd.params['query'] || cmd.params['url'] || cmd.params['value'] || cmd.value;
+    }
+    // Strip pipe-delimited params from value
+    return cmd.value.replace(/\s*\|\s*\w+\s*[:=]\s*[^|]+/g, '').trim();
 }
 
 export interface CommandParseResult {
@@ -71,6 +101,10 @@ export const COMMAND_REGISTRY = {
     APPLE_INTELLIGENCE_IMAGE: { desc: 'Generate an image using Apple Intelligence with local models', example: '[APPLE_INTELLIGENCE_IMAGE: a beautiful sunset over mountains]' },
     APPLE_INTELLIGENCE_SUMMARY: { desc: 'Summarize text using Apple Intelligence local models', example: '[APPLE_INTELLIGENCE_SUMMARY: The text to summarize]' },
     ENABLE_CLI: { desc: 'Automatically enable the Aartiq CLI terminal tool', example: '[ENABLE_CLI]' },
+    PLAY_VIDEO: { desc: 'Play a YouTube video inline in chat', example: '{"type": "PLAY_VIDEO", "id": "dQw4w9WgXcQ", "title": "Video"}' },
+    SEARCH_VIDEO: { desc: 'Search YouTube and auto-play top result', example: '{"type": "SEARCH_VIDEO", "query": "music", "count": 5}' },
+    SWITCH_TAB: { desc: 'Switch to a browser tab by ID or index', example: '{"type": "SWITCH_TAB", "id": "tab-123"}' },
+    SEARCH_RESULTS: { desc: 'Get Google search result URLs directly (no tab opened)', example: '{"type": "SEARCH_RESULTS", "query": "latest AI news", "count": 5}' },
 } as const;
 
 export const SUPPORTED_COMMANDS = Object.keys(COMMAND_REGISTRY) as Array<keyof typeof COMMAND_REGISTRY>;
@@ -86,17 +120,17 @@ export const META_COMMANDS = [
  */
 function getCategoryForType(type: string): string {
     const catMap: Record<string, string> = {
-        NAVIGATE: 'navigation', SEARCH: 'navigation', WEB_SEARCH: 'navigation',
+        NAVIGATE: 'navigation', SEARCH: 'navigation', WEB_SEARCH: 'navigation', SEARCH_RESULTS: 'navigation',
         READ_PAGE_CONTENT: 'browser', SCREENSHOT_ANALYZE: 'browser', EXTRACT_DATA: 'browser',
         CLICK_ELEMENT: 'automation', FIND_AND_CLICK: 'automation', FILL_FORM: 'automation',
         SHELL_COMMAND: 'system', OPEN_APP: 'system', SET_VOLUME: 'system', SET_BRIGHTNESS: 'system',
         GENERATE_PDF: 'pdf', CREATE_PDF_JSON: 'pdf', CREATE_FILE_JSON: 'pdf', GENERATE_DIAGRAM: 'pdf', OPEN_PDF: 'pdf',
-        SHOW_IMAGE: 'media', SHOW_VIDEO: 'media', GENERATE_IMAGE: 'media', APPLE_INTELLIGENCE_IMAGE: 'media', APPLE_INTELLIGENCE_SUMMARY: 'utility',
+        SHOW_IMAGE: 'media', SHOW_VIDEO: 'media', PLAY_VIDEO: 'media', SEARCH_VIDEO: 'media', GENERATE_IMAGE: 'media', APPLE_INTELLIGENCE_IMAGE: 'media', APPLE_INTELLIGENCE_SUMMARY: 'utility',
         WAIT: 'utility', OPEN_VIEW: 'utility', OPEN_MCP_SETTINGS: 'utility', OPEN_AUTOMATION_SETTINGS: 'utility', LIST_AUTOMATIONS: 'automation', DELETE_AUTOMATION: 'automation', OPEN_SCHEDULING_MODAL: 'utility', SCHEDULE_TASK: 'utility',
         GMAIL_AUTHORIZE: 'gmail', GMAIL_LIST_MESSAGES: 'gmail', GMAIL_GET_MESSAGE: 'gmail',
         GMAIL_SEND_MESSAGE: 'gmail', GMAIL_ADD_LABEL: 'gmail',
         THINK: 'meta', PLAN: 'meta', EXPLAIN_CAPABILITIES: 'meta',
-        ORGANIZE_TABS: 'automation', CLOSE_TAB: 'browser', ENABLE_CLI: 'automation',
+        ORGANIZE_TABS: 'automation', CLOSE_TAB: 'browser', SWITCH_TAB: 'browser', ENABLE_CLI: 'automation',
     };
     return catMap[type] || 'utility';
 }
@@ -119,6 +153,8 @@ function normalizeCommandValue(value: unknown): string {
 function extractCommandsFromStructuredPayload(payload: any, originalMatch: string, index: number): ParsedCommand[] {
     const commands: ParsedCommand[] = [];
 
+    const KNOWN_KEYS = new Set(['type', 'command', 'value', 'reason', 'risk']);
+
     const appendCommand = (cmd: any) => {
         const cmdType = (cmd?.type || cmd?.command || '').toUpperCase();
         const cmdValue = cmd?.value ?? cmd?.url ?? cmd?.query ?? cmd?.args ?? '';
@@ -127,11 +163,20 @@ function extractCommandsFromStructuredPayload(payload: any, originalMatch: strin
             return;
         }
 
+        // Collect all extra fields as structured params
+        const params: Record<string, string> = {};
+        for (const key of Object.keys(cmd || {})) {
+            if (!KNOWN_KEYS.has(key) && cmd[key] !== undefined && cmd[key] !== null) {
+                params[key] = normalizeCommandValue(cmd[key]);
+            }
+        }
+
         commands.push({
             type: cmdType,
             value: normalizeCommandValue(cmdValue),
             reason: typeof cmd?.reason === 'string' ? cmd.reason : '',
             risk: (['low', 'medium', 'high'].includes(cmd?.risk) ? cmd.risk : 'medium') as any,
+            params: Object.keys(params).length > 0 ? params : undefined,
             originalMatch,
             index,
         });
@@ -497,11 +542,16 @@ export function validateCommand(command: ParsedCommand): { valid: boolean; error
             }
             break;
 
-        case 'FILL_FORM':
-            if (!value.includes('|')) {
-                return { valid: false, error: 'FILL_FORM requires format: selector | value' };
+        case 'FILL_FORM': {
+            // Accept both pipe-format and JSON params
+            const fillParams = command.params || {};
+            const hasPipeFormat = value.includes('|');
+            const hasStructuredParams = !!(fillParams.selector || fillParams.value || fillParams.text);
+            if (!hasPipeFormat && !hasStructuredParams && !value.trim()) {
+                return { valid: false, error: 'FILL_FORM requires format: selector | value, or JSON params with selector and value' };
             }
             break;
+        }
 
         case 'GENERATE_PDF':
             if (!value.includes('|')) {
@@ -514,6 +564,25 @@ export function validateCommand(command: ParsedCommand): { valid: boolean; error
             // Validation is done at execution time
             break;
 
+        case 'CLICK_ELEMENT': {
+            // Accept selector, text, or aria-label as target (pipe or JSON params)
+            const clickParams = command.params || {};
+            const hasClickTarget = !!(clickParams.selector || clickParams.text || clickParams['aria-label'] || clickParams.aria || value.trim());
+            if (!hasClickTarget) {
+                return { valid: false, error: 'CLICK_ELEMENT requires a selector, text, or aria-label target' };
+            }
+            break;
+        }
+
+        case 'FIND_AND_CLICK': {
+            // Must have text to search for
+            const findText = (command.params?.text) || value.split('|')[0]?.trim() || '';
+            if (!findText) {
+                return { valid: false, error: 'FIND_AND_CLICK requires text to search for' };
+            }
+            break;
+        }
+
         // Commands that don't require values
         case 'RELOAD':
         case 'GO_BACK':
@@ -521,12 +590,20 @@ export function validateCommand(command: ParsedCommand): { valid: boolean; error
         case 'SCREENSHOT_AND_ANALYZE':
         case 'READ_PAGE_CONTENT':
         case 'LIST_OPEN_TABS':
+        case 'SWITCH_TAB':
+        case 'PLAY_VIDEO':
+        case 'SEARCH_VIDEO':
         case 'GMAIL_AUTHORIZE':
         case 'EXPLAIN_CAPABILITIES':
         case 'OPEN_MCP_SETTINGS':
         case 'OPEN_AUTOMATION_SETTINGS':
         case 'OPEN_SCHEDULING_MODAL':
-            // These are valid without values
+        case 'SCROLL_TO':
+        case 'DOM_SEARCH':
+        case 'DOM_READ_FILTERED':
+        case 'SHOW_IMAGE':
+        case 'SHOW_VIDEO':
+            // These are valid without values (params are in JSON body)
             break;
 
         default:
@@ -622,6 +699,10 @@ export function getCommandDescription(command: ParsedCommand): string {
         EXPLAIN_CAPABILITIES: () => 'Explain AI capabilities',
         DOM_SEARCH: (v) => `Search DOM for: ${v}`,
         DOM_READ_FILTERED: (v) => v ? `Read filtered DOM matching: ${v}` : 'Read filtered DOM (full)',
+        PLAY_VIDEO: (v) => `Play video: ${v.split('|')[1] || v || 'unknown'}`,
+        SEARCH_VIDEO: (v) => `Search YouTube: ${v}`,
+        SWITCH_TAB: (v) => `Switch to tab: ${v}`,
+        SEARCH_RESULTS: (v) => `Get search result URLs for "${v}"`,
     };
 
     const descFn = descriptions[type];

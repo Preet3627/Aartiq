@@ -84,23 +84,6 @@ module.exports = function registerAutomationHandlers(ipcMain, handlers) {
     } catch (e) { return { success: false, error: e.message }; }
   });
 
-  ipcMain.handle('click-element', async (event, selector) => {
-    const { tabViews, activeTabId, checkAiActionPermission } = handlers;
-    const view = tabViews?.get(activeTabId);
-    if (!view) return { success: false, error: 'No active view' };
-    const permission = checkAiActionPermission ? checkAiActionPermission('CLICK_ELEMENT', selector, 'medium') : { allowed: true };
-    if (!permission.allowed) return { success: false, error: permission.error };
-    try {
-      await view.webContents.executeJavaScript(`
-        (() => {
-          const el = document.querySelector("${selector}");
-          if (el) { el.click(); return true; }
-          return false;
-        })()
-      `);
-      return { success: true };
-    } catch (e) { return { success: false, error: e.message }; }
-  });
 
   console.log('[Handlers] Automation handlers registered');
 };

@@ -57,6 +57,7 @@ Aartiq is a cross-platform AI-native browser with OS automation capabilities. It
 | `Security.ts` / `SecurityValidator.js` | Command validation, risk levels, injection detection |
 | `AIChatSidebar.tsx` | Main AI chat interface |
 | `AICommandParser.ts` | Parses AI output into executable commands |
+| `YouTubePlayer.tsx` | Inline YouTube iframe video player component |
 | `WiFiSyncService.ts` | WebSocket sync between desktop and mobile |
 | `P2PFileSyncService.ts` | Peer-to-peer file transfer |
 | `CloudSyncService.ts` | Firebase cloud sync |
