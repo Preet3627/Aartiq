@@ -19,6 +19,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('add-new-tab', subscription);
     return () => ipcRenderer.removeListener('add-new-tab', subscription);
   },
+  onSwitchTab: (callback) => {
+    const subscription = (event, tabId) => callback(tabId);
+    ipcRenderer.on('switch-tab', subscription);
+    return () => ipcRenderer.removeListener('switch-tab', subscription);
+  },
   onAiQueryDetected: (callback) => {
     const subscription = (event, query) => callback(query);
     ipcRenderer.on('ai-query-detected', subscription);
@@ -145,6 +150,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   webSearchContext: (query, provider) => ipcRenderer.invoke('web-search-context', query, provider),
   webSearchProviders: () => ipcRenderer.invoke('web-search-providers'),
   webSearchConfigure: (keys) => ipcRenderer.invoke('web-search-configure', keys),
+  fetchPageContent: (url, maxChars) => ipcRenderer.invoke('fetch-page-content', url, maxChars),
+  webSearchYoutube: (query, count) => ipcRenderer.invoke('web-search-youtube', query, count),
+  domClickElement: (opts) => ipcRenderer.invoke('dom-click-element', opts),
+  domFillForm: (opts) => ipcRenderer.invoke('dom-fill-form', opts),
   vaultListEntries: () => ipcRenderer.invoke('vault-list-entries'),
   vaultSaveEntry: (entry) => ipcRenderer.invoke('vault-save-entry', entry),
   vaultDeleteEntry: (entryId) => ipcRenderer.invoke('vault-delete-entry', entryId),
@@ -178,6 +187,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('auth-token-received', subscription);
     return () => ipcRenderer.removeListener('auth-token-received', subscription);
   },
+
+  // Auto-configure Claude Desktop MCP
+  autoConfigureClaudeMcp: () => ipcRenderer.invoke('auto-configure-claude-mcp'),
 
   // Popups
   openSettingsPopup: (section) => ipcRenderer.send('open-settings-popup', section),

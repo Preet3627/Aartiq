@@ -178,6 +178,7 @@ declare global {
             mcpListServers: () => Promise<{ success: boolean; servers: any[], error?: string }>;
             mcpGetTools: (serverId: string) => Promise<{ success: boolean; tools: any[], error?: string }>;
             mcpCallTool: (serverId: string, toolName: string, args: any) => Promise<{ success: boolean, result?: any; error?: string }>;
+            autoConfigureClaudeMcp: () => Promise<{ success: boolean; path?: string; error?: string }>;
 
             // Database & Sync
             initDatabase: (config: { host?: string; port?: number; user?: string; password?: string; database?: string }) => Promise<{ success: boolean; error?: string }>;
@@ -468,6 +469,11 @@ declare global {
             webSearchContext: (query: string, provider?: string) => Promise<{ success: boolean; context?: string; error?: string }>;
             webSearchProviders: () => Promise<{ success: boolean; providers?: string[] }>;
             webSearchConfigure: (keys: Record<string, string>) => Promise<{ success: boolean }>;
+            webSearchRag: (query: string) => Promise<Array<{ title: string; url: string; snippet: string; pageContent?: string }>>;
+            webSearchYoutube: (query: string, count?: number) => Promise<{ success: boolean; results?: Array<{ title: string; url: string; snippet: string; videoId: string; channel: string; length: string; thumbnail: string }>; error?: string }>;
+            fetchPageContent: (url: string, maxChars?: number) => Promise<{ success: boolean; content?: string; error?: string }>;
+            domClickElement: (opts: { tabId?: string; selector?: string; text?: string; 'aria-label'?: string; retry?: number; verify?: boolean }) => Promise<{ success: boolean; error?: string; method?: string; tag?: string; text?: string; rect?: { x: number; y: number; w: number; h: number } }>;
+            domFillForm: (opts: { tabId?: string; selector?: string; value: string; retry?: number; verify?: boolean; clearFirst?: boolean }) => Promise<{ success: boolean; error?: string; value?: string; verified?: boolean }>;
 
             // RAG — Local Vector Store
             ragIngest: (text: string, source: string) => Promise<{ success: boolean; chunksAdded?: number; error?: string }>;

@@ -1,6 +1,6 @@
 "use client";
-import React, { useState } from 'react';
-import { Server, Plus, Trash2, Globe, Activity, Shield, Link as LinkIcon, Terminal, Key, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Server, Plus, Trash2, Globe, Activity, Shield, Link as LinkIcon, Terminal, Key, Zap, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -105,6 +105,7 @@ const McpSettings = () => {
     const store = useAppStore();
     const [isAdding, setIsAdding] = useState(false);
     const [selectedPreset, setSelectedPreset] = useState<ServerPreset | null>(null);
+    const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const [newServer, setNewServer] = useState({
         name: '',
         type: 'sse' as 'sse' | 'stdio',
@@ -175,6 +176,97 @@ const McpSettings = () => {
                 <div>
                     <h3 className="text-lg font-bold text-white mb-1">MCP Servers</h3>
                     <p className="text-xs text-white/30">Connect to Model Context Protocol servers to provide the AI with extra tools and resources.</p>
+                </div>
+            </div>
+
+            {/* ── Host MCP Server (for Claude Desktop) ─────── */}
+            <div className="p-6 rounded-[2.5rem] bg-gradient-to-br from-sky-500/5 to-indigo-500/5 border border-sky-500/20 space-y-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-sky-500/15 flex items-center justify-center">
+                            <Server size={20} className="text-sky-400" />
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-bold text-white">Aartiq MCP Host</h4>
+                            <p className="text-[10px] text-white/40">Built-in browser server for Claude Desktop</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-green-400">Running</span>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Endpoint</span>
+                        <p className="text-xs font-mono text-sky-300 mt-1">http://localhost:3001/sse</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Port</span>
+                        <p className="text-xs font-mono text-white mt-1">3001</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-white/30">Available Tools</span>
+                        <p className="text-xs font-mono text-white mt-1">12</p>
+                    </div>
+                </div>
+                <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2">
+                    <div className="flex items-center gap-2 text-indigo-300">
+                        <Terminal size={14} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Claude Desktop Setup</span>
+                    </div>
+                    <p className="text-[11px] text-white/40 leading-relaxed">
+                        Add this to your Claude Desktop config to control Aartiq from Claude:
+                    </p>
+                    <pre className="p-3 rounded-xl bg-black/40 border border-white/5 text-[10px] font-mono text-white/60 leading-relaxed overflow-x-auto">
+{`{
+  "mcpServers": {
+    "aartiq-browser": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote@0.1.17", "http://127.0.0.1:3001/sse"]
+    }
+  }
+}`}
+                    </pre>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={async () => {
+                                if (window.electronAPI) {
+                                    const res = await window.electronAPI.autoConfigureClaudeMcp();
+                                    if (res.success) {
+                                        setStatusMsg('Claude Desktop config updated successfully');
+                                    } else {
+                                        setStatusMsg('Failed: ' + (res.error || 'unknown error'));
+                                    }
+                                    setTimeout(() => setStatusMsg(null), 4000);
+                                }
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-300 transition-all"
+                        >
+                            <Zap size={14} /> Auto-Configure
+                        </button>
+                        <button
+                            onClick={() => {
+                                const config = JSON.stringify({
+                                    mcpServers: {
+                                        "aartiq-browser": {
+                                            command: "npx",
+                                            args: ["-y", "mcp-remote@0.1.17", "http://127.0.0.1:3001/sse"]
+                                        }
+                                    }
+                                }, null, 2);
+                                navigator.clipboard.writeText(config);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/30 rounded-xl text-[10px] font-black uppercase tracking-widest text-indigo-300 transition-all"
+                        >
+                            <ExternalLink size={14} /> Copy Config
+                        </button>
+                    </div>
+                    {statusMsg && (
+                        <div className="text-[10px] font-mono text-indigo-300/80 pt-1">
+                            {statusMsg}
+                        </div>
+                    )}
                 </div>
             </div>
 

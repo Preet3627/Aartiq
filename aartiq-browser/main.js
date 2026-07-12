@@ -245,6 +245,7 @@ const { AartiqAiEngine } = require('./src/lib/ai-engine.js');
 const { ScreenVisionService } = require('./src/lib/screen-vision-service.js');
 const { FlutterBridgeServer } = require('./src/lib/bridge-server.js');
 const { FileSystemMcpServer, NativeAppMcpServer } = require('./src/lib/mcp-desktop-server.js');
+const { BrowserMcpServer } = require('./src/lib/mcp-browser-server.js');
 const { RagService } = require('./src/lib/rag-service.js');
 const { VoiceService } = require('./src/lib/voice-service.js');
 const { WorkflowRecorder } = require('./src/lib/workflow-recorder.js');
@@ -3281,7 +3282,7 @@ ipcMain.handle('get-suggestions', async (event, query) => {
 // When menu opens
 function hideWebview() {
   if (!mainWindow) return;
-  const view = tabViews.get(activeTabId);
+  const view = tabViews.get(tabViews._activeTabId);
   if (view) {
     view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
   }
@@ -3290,7 +3291,7 @@ function hideWebview() {
 // When menu closes
 function showWebview() {
   if (!mainWindow) return;
-  const view = tabViews.get(activeTabId);
+  const view = tabViews.get(tabViews._activeTabId);
   if (view) {
     // Current window bounds are handled by setBrowserViewBounds usually, 
     // but we can force it here if needed.
@@ -3822,15 +3823,15 @@ async function _scanDirectoryRecursive(currentPath, types) {
 ipcMain.on('open-menu', () => {
   const target = getTopWindow();
   const menu = Menu.buildFromTemplate([
-    { label: 'Reload', click: () => { const v = tabViews.get(activeTabId); if (v) v.webContents.reload(); } },
-    { label: 'Back', click: () => { const v = tabViews.get(activeTabId); if (v && v.webContents.canGoBack()) v.webContents.goBack(); } },
-    { label: 'Forward', click: () => { const v = tabViews.get(activeTabId); if (v && v.webContents.canGoForward()) v.webContents.goForward(); } },
+    { label: 'Reload', click: () => { const v = tabViews.get(tabViews._activeTabId); if (v) v.webContents.reload(); } },
+    { label: 'Back', click: () => { const v = tabViews.get(tabViews._activeTabId); if (v && v.webContents.canGoBack()) v.webContents.goBack(); } },
+    { label: 'Forward', click: () => { const v = tabViews.get(tabViews._activeTabId); if (v && v.webContents.canGoForward()) v.webContents.goForward(); } },
     { type: 'separator' },
     { label: 'Save Page As...', click: () => { sendToActiveWindow('execute-shortcut', 'save-page'); } },
-    { label: 'Print...', click: () => { const v = tabViews.get(activeTabId); if (v) v.webContents.print(); } },
+    { label: 'Print...', click: () => { const v = tabViews.get(tabViews._activeTabId); if (v) v.webContents.print(); } },
     { type: 'separator' },
     { label: 'Settings', click: () => { sendToActiveWindow('execute-shortcut', 'open-settings'); } },
-    { label: 'DevTools', click: () => { const v = tabViews.get(activeTabId); if (v) v.webContents.openDevTools({ mode: 'detach' }); } },
+    { label: 'DevTools', click: () => { const v = tabViews.get(tabViews._activeTabId); if (v) v.webContents.openDevTools({ mode: 'detach' }); } },
   ]);
   if (target) {
     menu.popup({ window: target });
@@ -4816,9 +4817,11 @@ ipcMain.on('activate-view', (event, { tabId, bounds }) => {
         height: Math.round(bounds.height),
       };
       newView.setBounds(roundedBounds);
+      if (tabViews._bounds !== undefined) tabViews._bounds = roundedBounds;
     }
   }
   activeTabId = tabId;
+  if (tabViews._activeTabId !== undefined) tabViews._activeTabId = tabId;
 });
 
 ipcMain.on('destroy-view', (event, tabId) => {
@@ -4827,6 +4830,7 @@ ipcMain.on('destroy-view', (event, tabId) => {
     if (activeTabId === tabId) {
       mainWindow.removeBrowserView(view);
       activeTabId = null;
+      if (tabViews._activeTabId !== undefined) tabViews._activeTabId = null;
     }
     if (view.webContents && !view.webContents.isDestroyed()) {
       view.webContents.destroy();
@@ -6394,7 +6398,7 @@ app.whenReady().then(async () => {
   // Web Search v2 API
   ipcMain.handle('web-search', async (_event, query, provider, count) => {
     try {
-      const results = await webSearchProvider.search(query, provider || 'duckduckgo', count || 5);
+      const results = await webSearchProvider.search(query, provider, count || 5);
       return { success: true, results };
     } catch (error) {
       return { success: false, error: error.message };
@@ -6403,7 +6407,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('web-search-context', async (_event, query, provider) => {
     try {
-      const context = await webSearchProvider.searchForContext(query, provider || 'duckduckgo');
+      const context = await webSearchProvider.searchForContext(query, provider);
       return { success: true, context };
     } catch (error) {
       return { success: false, error: error.message };
@@ -6428,23 +6432,20 @@ app.whenReady().then(async () => {
     }
   });
 
-  // Web Search RAG Helper with Caching
+  // Web Search RAG Helper with Caching + auto page content
   ipcMain.handle('web-search-rag', async (event, query) => {
     try {
       const normalizedQuery = query.trim().toLowerCase();
       const cached = searchCache.get(normalizedQuery);
-      const CACHE_TTL = 30 * 60 * 1000; // 30 minutes in ms
+      const CACHE_TTL = 30 * 60 * 1000;
 
       if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
-        console.log(`[RAG] Using cached results for: ${query}`);
         return cached.results;
       }
 
-      console.log(`[RAG] Performing web search for: ${query}`);
-
       let searchResults = [];
       try {
-        const results = await webSearchProvider.search(query, 'duckduckgo', 6);
+        const results = await webSearchProvider.search(query, 'googlescrape', 6);
         searchResults = results.map(r => ({
           title: r.title || 'Untitled result',
           url: r.url || '',
@@ -6452,6 +6453,20 @@ app.whenReady().then(async () => {
         }));
       } catch (e) {
         console.warn(`[RAG] Deep search failed for ${query}`);
+      }
+
+      // Auto-fetch page content for top 2 results
+      if (searchResults.length > 0) {
+        for (let i = 0; i < Math.min(2, searchResults.length); i++) {
+          try {
+            const content = await webSearchProvider.fetchPageContent(searchResults[i].url, 4000);
+            if (content) {
+              searchResults[i].pageContent = content;
+            }
+          } catch (e) {
+            console.warn(`[RAG] Page content fetch failed for ${searchResults[i].url}:`, e.message);
+          }
+        }
       }
 
       if (searchResults.length > 0) {
@@ -6465,6 +6480,26 @@ app.whenReady().then(async () => {
     } catch (error) {
       console.error('[RAG] Web search failed completely:', error);
       return [];
+    }
+  });
+
+  // Fetch page content server-side (no tab needed)
+  ipcMain.handle('fetch-page-content', async (_event, url, maxChars) => {
+    try {
+      const content = await webSearchProvider.fetchPageContent(url, maxChars || 8000);
+      return { success: true, content };
+    } catch (error) {
+      return { success: false, error: error.message, content: '' };
+    }
+  });
+
+  // YouTube search
+  ipcMain.handle('web-search-youtube', async (_event, query, count) => {
+    try {
+      const results = await webSearchProvider._searchYouTube(query, count || 5);
+      return { success: true, results };
+    } catch (error) {
+      return { success: false, error: error.message, results: [] };
     }
   });
 
@@ -7670,8 +7705,11 @@ app.whenReady().then(async () => {
     } catch (e) { return { success: false, error: e.message }; }
   });
 
-  // --- DOM Click Handler (for in-app element clicks) ---
-  ipcMain.handle('dom-click-element', async (event, { tabId, selector, text, index, waitFor }) => {
+  // --- DOM Click Handler with multi-strategy, retry, and verify ---
+  // Accepts: { selector, text, aria-label, retry, verify, tabId }
+  // Supports CSS selector, text content, aria-label, placeholder, role strategies
+  ipcMain.handle('dom-click-element', async (event, opts) => {
+    const { tabId, selector, text, 'aria-label': ariaLabel, retry = 2, verify = false } = opts || {};
     const targetTabId = tabId || activeTabId;
     const view = tabViews.get(targetTabId);
 
@@ -7682,97 +7720,258 @@ app.whenReady().then(async () => {
     try {
       const clickCode = `
         (async () => {
-          const MAX_RETRIES = 3;
-          const RETRY_DELAY = 100;
+          const MAX_RETRIES = ${retry};
+          const RETRY_DELAY = 200;
+          const strategies = [];
+
+          // Strategy 1: CSS selector
+          ${selector ? `strategies.push(() => document.querySelector(${JSON.stringify(selector)}));` : ''}
           
-          async function waitForElement(selector, timeout = 5000) {
-            const startTime = Date.now();
-            while (Date.now() - startTime < timeout) {
-              const el = document.querySelector(selector);
-              if (el) return el;
-              await new Promise(r => setTimeout(r, 50));
+          // Strategy 2: Text content (exact or contains)
+          ${text ? `strategies.push(() => {
+            const t = ${JSON.stringify(text)}.toLowerCase();
+            const clickables = document.querySelectorAll('button, a, input[type="submit"], input[type="button"], [role="button"], [role="link"], [role="option"], [role="tab"], [role="menuitem"], [onclick], .btn, .button');
+            for (const el of clickables) {
+              const elText = (el.textContent || el.value || '').toLowerCase().trim();
+              if (elText === t || elText.includes(t)) return el;
+            }
+            // Fallback: any leaf element matching text
+            const all = document.querySelectorAll('*');
+            for (const el of all) {
+              if (el.children.length === 0 || el.tagName === 'BUTTON' || el.tagName === 'A') {
+                const elText = (el.textContent || '').toLowerCase().trim();
+                if (elText === t || elText.includes(t)) return el;
+              }
             }
             return null;
-          }
+          });` : ''}
           
-          async function clickElement(selector, waitForSelector, retryCount = 0) {
-            if (waitForSelector) {
-              const el = await waitForElement(waitForSelector);
-              if (!el) {
-                return { success: false, error: 'Element not found after waiting: ' + waitForSelector };
-              }
-            }
-            
-            let element;
-            ${selector ? 'element = document.querySelector(selector);' : ''}
-            
-            if (!element && ${text ? 'true' : 'false'}) {
-              const searchText = ${JSON.stringify(text || '')}.toLowerCase();
-              const elements = document.querySelectorAll('*');
-              for (const el of elements) {
-                if (el.children.length === 0) {
-                  const elText = (el.textContent || '').toLowerCase().trim();
-                  if (elText.includes(searchText) || searchText.includes(elText)) {
-                    element = el;
-                    break;
-                  }
-                }
-              }
-              if (!element && ${index !== undefined ? 'true' : 'false'}) {
-                const matches = [];
-                for (const el of elements) {
-                  if (el.children.length === 0) {
-                    const elText = (el.textContent || '').toLowerCase().trim();
-                    if (elText.includes(searchText)) {
-                      matches.push(el);
+          // Strategy 3: aria-label
+          ${ariaLabel ? `strategies.push(() => document.querySelector([aria-label="${ariaLabel.replace(/"/g, '\\"')}"]));` : ''}
+          
+          // Strategy 4: placeholder (for inputs)
+          ${text ? `strategies.push(() => {
+            const t = ${JSON.stringify(text)}.toLowerCase();
+            return document.querySelector([placeholder*="\${t}"], [title*="\${t}"], [aria-label*="\${t}"]);
+          });` : ''}
+
+          async function findAndClick() {
+            for (let retry = 0; retry < MAX_RETRIES; retry++) {
+              for (let si = 0; si < strategies.length; si++) {
+                try {
+                  const element = strategies[si]();
+                  if (!element) continue;
+
+                  // Verify it's visible and clickable
+                  const rect = element.getBoundingClientRect();
+                  if (rect.width === 0 || rect.height === 0) {
+                    // Try parent clickable
+                    const parent = element.closest('button, a, [role="button"], input, select, textarea, label, [onclick]');
+                    if (parent) {
+                      const pr = parent.getBoundingClientRect();
+                      if (pr.width > 0 && pr.height > 0) {
+                        parent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        await new Promise(r => setTimeout(r, 150));
+                        parent.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                        parent.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                        parent.click();
+                        return { success: true, method: 'parent', tag: parent.tagName, text: (parent.textContent || '').trim().substring(0, 100) };
+                      }
                     }
+                    continue;
                   }
-                }
-                element = matches[${index || 0}];
+
+                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  await new Promise(r => setTimeout(r, 150));
+
+                  const centerX = rect.left + rect.width / 2;
+                  const centerY = rect.top + rect.height / 2;
+
+                  element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+                  element.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window, clientX: centerX, clientY: centerY }));
+                  element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                  element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                  element.click();
+
+                  return {
+                    success: true,
+                    method: 'strategy_' + si,
+                    tag: element.tagName,
+                    text: (element.textContent || element.value || '').trim().substring(0, 100),
+                    rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }
+                  };
+                } catch (e) { continue; }
               }
+              if (retry < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, RETRY_DELAY));
             }
-            
-            if (!element) {
-              return { success: false, error: 'Element not found: ' + (${JSON.stringify(selector || text || '')}) };
-            }
-            
-            const rect = element.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) {
-              const parent = element.closest('button, a, [role="button"], input, select, textarea');
-              if (parent) {
-                element = parent;
-              } else {
-                return { success: false, error: 'Element has zero dimensions' };
-              }
-            }
-            
-            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await new Promise(r => setTimeout(r, 100));
-            
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            
-            element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
-            element.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window, clientX: centerX, clientY: centerY }));
-            element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-            element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-            element.click();
-            
-            return { 
-              success: true, 
-              element: selector || 'text:' + ${JSON.stringify(text || '')},
-              rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) }
-            };
+            return { success: false, error: 'Element not found after ' + MAX_RETRIES + ' retries with ' + strategies.length + ' strategies' };
           }
-          
-          return await clickElement(${JSON.stringify(selector)}, ${JSON.stringify(waitFor)}, 0);
+
+          return await findAndClick();
         })()
       `;
 
       const result = await view.webContents.executeJavaScript(clickCode);
+
+      // Optional verification: wait briefly and check for page changes
+      if (result.success && verify) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+
       return result;
     } catch (e) {
       console.error('[Main] DOM click failed:', e);
+      return { success: false, error: e.message };
+    }
+  });
+
+  // --- DOM Fill Form Handler with wait, clear, verify, retry ---
+  // Accepts: { selector, value, retry, verify, clearFirst, tabId }
+  ipcMain.handle('dom-fill-form', async (event, opts) => {
+    const { tabId, selector, value, retry = 2, verify = false, clearFirst = true } = opts || {};
+    const targetTabId = tabId || activeTabId;
+    const view = tabViews.get(targetTabId);
+
+    if (!view || !view.webContents) {
+      return { success: false, error: 'Browser view not found' };
+    }
+
+    try {
+      const fillCode = `
+        (async () => {
+          const MAX_RETRIES = ${retry};
+          const TARGET_VALUE = ${JSON.stringify(value || '')};
+
+          function findElement() {
+            // Strategy 1: exact CSS selector
+            ${selector ? `const el = document.querySelector(${JSON.stringify(selector)});
+            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return el;` : ''}
+
+            // Strategy 2: find by name attribute extracted from selector
+            ${selector ? (() => {
+              const nameMatch = selector.match(/\[name=["']([^"']+)["']\]/);
+              if (nameMatch) {
+                return `{
+                const byName = document.querySelector('input[name="${nameMatch[1]}"], textarea[name="${nameMatch[1]}"]');
+                if (byName) return byName;
+              }`;
+              }
+              return '';
+            })() : ''}
+
+            // Strategy 3: by placeholder
+            const allInputs = document.querySelectorAll('input, textarea, select, [contenteditable="true"], [contenteditable=""]');
+            for (const inp of allInputs) {
+              const ph = (inp.placeholder || inp.title || '').toLowerCase();
+              if (ph && TARGET_VALUE.toLowerCase().includes(ph) && inp.offsetParent !== null) return inp;
+            }
+
+            // Strategy 4: first visible input
+            for (const inp of allInputs) {
+              const r = inp.getBoundingClientRect();
+              if (r.width > 0 && r.height > 0 && inp.offsetParent !== null) return inp;
+            }
+            return null;
+          }
+
+          function reactSetValue(el, val) {
+            const tag = el.tagName;
+            if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+              el.textContent = val;
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+              return;
+            }
+
+            const previousValue = el.value;
+
+            // 1. Use native value setter (bypasses React's override)
+            const proto = el.constructor.prototype;
+            const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+            if (nativeSetter) {
+              nativeSetter.call(el, val);
+            } else {
+              el.value = val;
+            }
+
+            // 2. Update React's internal value tracker (prevents dedup)
+            const tracker = el._valueTracker;
+            if (tracker) tracker.setValue(previousValue);
+
+            // 3. Dispatch InputEvent with inputType for React 16+
+            try {
+              el.dispatchEvent(new InputEvent('input', {
+                bubbles: true,
+                cancelable: true,
+                inputType: 'insertText',
+                data: val
+              }));
+            } catch (_) {
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            // 4. Dispatch change event
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+
+          for (let retry = 0; retry < MAX_RETRIES; retry++) {
+            const element = findElement();
+            if (!element) {
+              if (retry < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, 200));
+              continue;
+            }
+
+            try {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              await new Promise(r => setTimeout(r, 100));
+              element.focus();
+
+              // Clear existing value
+              ${clearFirst ? `
+              if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                const proto = element.constructor.prototype;
+                const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                if (nativeSetter) nativeSetter.call(element, '');
+                else element.value = '';
+                const tracker = element._valueTracker;
+                if (tracker) tracker.setValue(element.value);
+                try {
+                  element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent', data: null }));
+                } catch (_) {
+                  element.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+              } else {
+                element.innerHTML = '';
+              }
+              await new Promise(r => setTimeout(r, 50));
+              ` : ''}
+
+              // Set value using React-aware approach
+              reactSetValue(element, TARGET_VALUE);
+
+              // Verify
+              ${verify ? `
+              await new Promise(r => setTimeout(r, 100));
+              const currentVal = element.value || element.textContent || '';
+              if (currentVal === TARGET_VALUE || currentVal.includes(TARGET_VALUE) || TARGET_VALUE.includes(currentVal)) {
+                return { success: true, value: currentVal.substring(0, 100), verified: true };
+              }
+              ` : ''}
+
+              return { success: true, value: TARGET_VALUE.substring(0, 100) };
+            } catch (e) {
+              if (retry < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, 200));
+            }
+          }
+
+          return { success: false, error: 'Failed to fill form after ' + MAX_RETRIES + ' retries' };
+        })()
+      `;
+
+      const result = await view.webContents.executeJavaScript(fillCode);
+      return result;
+    } catch (e) {
+      console.error('[Main] DOM fill form failed:', e);
       return { success: false, error: e.message };
     }
   });
@@ -8426,30 +8625,7 @@ ${tabData}`;
   const savedShortcuts = store.get('shortcuts') || [];
   registerGlobalShortcuts(savedShortcuts);
 
-  // Reconnect MCP Servers
-  const mcpServers = store.get('mcp_servers');
-  if (mcpServers && mcpServers.length > 0) {
-    // Filter out servers with known issues
-    const validServers = mcpServers.filter(s =>
-      !s.url?.includes('google') && !s.name?.toLowerCase().includes('google')
-    );
-    if (validServers.length > 0) {
-      console.log(`[Main] Reconnecting ${validServers.length} MCP servers...`);
-      validServers.forEach(server => {
-        mcpManager.connect(server.id, server).catch(() => {
-          // Connection errors handled by mcp-server-registry.js
-        });
-      });
-    }
-  } else {
-    // Default MCP servers - users can add their own via settings
-    // Note: Removed github-mcp and brave-search due to connection issues
-    const defaultServers = [
-      { id: 'filesystem-mcp', name: 'Filesystem MCP (Local)', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '.'], type: 'stdio', status: 'offline' }
-    ];
-    console.log('[Main] No MCP servers found, loading defaults.');
-    store.set('mcp_servers', defaultServers);
-  }
+  // MCP reconnection moved to after BrowserMcpServer starts (see below)
 
 
   ipcMain.on('update-shortcuts', (event, shortcuts) => {
@@ -8478,6 +8654,55 @@ ${tabData}`;
 
 
 
+  // ── Auto-configure Claude Desktop MCP ──
+  ipcMain.handle('auto-configure-claude-mcp', async () => {
+    try {
+      const platform = process.platform;
+      let configDir;
+      if (platform === 'darwin') {
+        configDir = path.join(os.homedir(), 'Library', 'Application Support', 'Claude');
+      } else if (platform === 'win32') {
+        configDir = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Claude');
+      } else {
+        configDir = path.join(os.homedir(), '.config', 'Claude');
+      }
+      const configPath = path.join(configDir, 'claude_desktop_config.json');
+      // Claude Desktop only supports stdio servers in its config file.
+      // Use mcp-remote as a stdio-to-SSE bridge.
+      const aartiqConfig = {
+        mcpServers: {
+          "aartiq-browser": {
+            command: "npx",
+            args: ["-y", "mcp-remote@0.1.17", "http://127.0.0.1:3001/sse"],
+          }
+        }
+      };
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+      let existing = {};
+      if (fs.existsSync(configPath)) {
+        try {
+          existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        } catch (e) {
+          existing = {};
+        }
+      }
+      const merged = {
+        ...existing,
+        mcpServers: {
+          ...(existing.mcpServers || {}),
+          ...aartiqConfig.mcpServers,
+        },
+      };
+      fs.writeFileSync(configPath, JSON.stringify(merged, null, 2), 'utf-8');
+      return { success: true, path: configPath };
+    } catch (error) {
+      console.error('[Main] Auto-configure Claude MCP failed:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   ipcMain.handle('open-external-url', async (event, url) => {
     try {
       await shell.openExternal(url);
@@ -8493,10 +8718,12 @@ ${tabData}`;
     if (networkCheckInterval) clearInterval(networkCheckInterval);
     if (clipboardCheckInterval) clearInterval(clipboardCheckInterval);
 
-    // Stop MCP server
-    if (mcpServer) {
+    // Stop MCP browser server
+    if (mcpServer && typeof mcpServer.stop === 'function') {
+      mcpServer.stop().catch(() => {});
+      console.log('[MCP-Browser] Server stopped.');
+    } else if (mcpServer && typeof mcpServer.close === 'function') {
       mcpServer.close();
-      console.log('[Main] MCP Server stopped.');
     }
 
     // Disconnect P2P service
@@ -8570,6 +8797,45 @@ ${tabData}`;
   // Start the Express HTTP bridge so SwiftUI native panels can communicate
   startNativeMacUiBridge();
 
+  // ── MCP Server & Client reconnection ──
+  // Must start BrowserMcpServer first (port 3001) before reconnecting
+  // any MCP clients that depend on it (e.g. mcp-remote localhost:3001/sse).
+  try {
+    tabViews._mainWindow = mainWindow;
+    tabViews._activeTabId = activeTabId;
+    tabViews._bounds = null;
+    mcpServer = new BrowserMcpServer(tabViews, store);
+    const mcpPort = typeof MCP_SERVER_PORT !== 'undefined' ? MCP_SERVER_PORT : 3001;
+    (async () => {
+      await mcpServer.start(mcpPort);
+      console.log(`[MCP-Browser] Server running on http://localhost:${mcpPort}/sse`);
+
+      // Reconnect persisted MCP servers now that the local host is up.
+      const mcpServers = store.get('mcp_servers');
+      if (mcpServers && mcpServers.length > 0) {
+        const validServers = mcpServers.filter(s =>
+          !s.url?.includes('google') && !s.name?.toLowerCase().includes('google')
+        );
+        if (validServers.length > 0) {
+          console.log(`[Main] Reconnecting ${validServers.length} MCP servers...`);
+          await Promise.allSettled(
+            validServers.map(server => mcpManager.connect(server.id, server))
+          );
+        }
+      } else {
+        const defaultServers = [
+          { id: 'filesystem-mcp', name: 'Filesystem MCP (Local)', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '.'], type: 'stdio', status: 'offline' }
+        ];
+        console.log('[Main] No MCP servers found, loading defaults.');
+        store.set('mcp_servers', defaultServers);
+      }
+    })().catch(err => {
+      console.warn(`[MCP-Browser] Initialization error:`, err.message);
+    });
+  } catch (e) {
+    console.warn('[MCP-Browser] Setup error:', e.message);
+  }
+
   // Wire modular IPC handlers from src/main/handlers/
   // NOTE: must be after createWindow() so mainWindow is initialized
   const handlerDeps = {
@@ -8585,6 +8851,7 @@ ${tabData}`;
     popupWindows, createPopupWindow, pluginManager,
     ragService, voiceService, workflowRecorder, popSearch,
     flutterBridge,
+    resolveAndClickWithAi, ensureVaultApprovalForFormFill,
   };
   // --- Native Mac UI Sidebar + Permission bridge IPC ---
   ipcMain.on('native-mac-ui-sidebar-open', () => {
