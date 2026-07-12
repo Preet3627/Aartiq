@@ -210,6 +210,24 @@ Aartiq exposes 18 browser and OS automation tools via the **Model Context Protoc
 | `get_active_window` | Get the active window title |
 | `web_search` | Search the web (Google, Brave, DuckDuckGo, etc.) |
 
+### Permission Model
+
+Each MCP tool has a **risk level** that determines what approval is required:
+
+| Risk Level | Tools | Auto-Approved | Approval UX |
+|------------|-------|---------------|-------------|
+| **Low** | `list_tabs`, `navigate`, `read_page`, `web_search`, `set_volume`, etc. | Yes (configurable) | Silent — no popup |
+| **Medium** | `click_element`, `fill_form`, `open_external_app` | No | Popup window with Approve/Deny |
+| **High** | `execute_shell_command`, `run_applescript`, `run_powershell` | No | Popup window + Touch ID / Windows Hello |
+
+When a medium or high risk tool is called from Claude Desktop:
+
+1. An **Aartiq approval popup** (separate window, not the main browser) appears with the tool name, risk badge, and arguments
+2. Click **Approve** or **Deny** — the MCP call either executes or returns a permission error
+3. For high risk tools, **biometric authentication** (Touch ID on macOS, Windows Hello on Windows) is also required
+4. If auto-approve is enabled in Aartiq's security settings, low risk tools skip the popup entirely
+5. Aartiq's security settings (biometric per-session, biometric every-action, device unlock for manual approval) all apply to MCP tool calls from Claude Desktop
+
 ### `/mcp` Command
 
 Type `/mcp` in the AI chat to open the MCP Settings panel, where you can configure MCP servers and auto-configure Claude Desktop integration.
