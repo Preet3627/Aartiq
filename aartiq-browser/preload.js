@@ -461,6 +461,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openSearchPopup: (options) => ipcRenderer.send('open-search-popup', options),
   openTranslatePopup: (options) => ipcRenderer.send('open-translate-popup', options),
   openContextMenuPopup: (options) => ipcRenderer.send('open-context-menu-popup', options),
+  onMcpApprovalPending: (callback) => {
+    const subscription = (event, details) => callback(details);
+    ipcRenderer.on('mcp-approval-pending', subscription);
+    return () => ipcRenderer.removeListener('mcp-approval-pending', subscription);
+  },
+  mcpApprovalRespond: (requestId, allowed) => ipcRenderer.invoke('mcp-approval-respond', { requestId, allowed }),
+  mcpApprovalStatus: () => ipcRenderer.invoke('mcp-approval-status'),
 
   // Google OAuth Integration
   googleOAuthLogin: () => ipcRenderer.send('google-oauth-login'),

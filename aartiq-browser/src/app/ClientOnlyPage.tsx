@@ -27,6 +27,7 @@ import ClipboardManager from '@/components/ClipboardManager';
 import PhoneCamera from '@/components/PhoneCamera';
 import { GoogleAuthProvider } from 'firebase/auth';
 import SettingsPanel from '@/components/SettingsPanel';
+import McpApprovalPopup from '@/components/McpApprovalPopup';
 import { searchEngines } from '@/components/SearchEngineSettings';
 import UnifiedCartPanel from '@/components/UnifiedCartPanel';
 import WorkspaceDashboard from '@/components/WorkspaceDashboard';
@@ -1989,6 +1990,7 @@ export default function Home() {
         {(panel === 'settings' || panel === 'profile' || panel === 'extensions' || panel === 'downloads') && (
           <SettingsPanel onClose={() => window.close()} defaultSection={settingsSection} />
         )}
+        {panel === 'mcp-approval' && <McpApprovalPopup />}
       </div>
     );
   }

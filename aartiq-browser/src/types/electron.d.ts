@@ -567,6 +567,11 @@ declare global {
             loadUserPreferences: () => Promise<Record<string, { value: any; updatedAt: number }>>;
             deleteUserPreference: (key: string) => Promise<{ success: boolean }>;
 
+            // MCP Approval Popup
+            onMcpApprovalPending: (callback: (details: { requestId: string; tool: string; risk: string; args: any; url?: string }) => void) => () => void;
+            mcpApprovalRespond: (requestId: string, allowed: boolean) => Promise<{ success: boolean; error?: string }>;
+            mcpApprovalStatus: () => Promise<{ pending: Array<{ requestId: string }> }>;
+
         };
     }
 }

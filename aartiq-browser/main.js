@@ -6952,6 +6952,9 @@ app.whenReady().then(async () => {
       case 'tools-menu':
         route = isDev ? '/?panel=tools-menu' : '/tools-menu';
         break;
+      case 'mcp-approval':
+        route = isDev ? '/?panel=mcp-approval' : '/mcp-approval';
+        break;
       default:
         route = `/${type}`;
     }
@@ -7017,6 +7020,22 @@ app.whenReady().then(async () => {
       }
     });
     popupWindows.clear();
+  });
+
+  // MCP Approval popup — triggered by mcp-browser-server when a MCP tool needs approval
+  ipcMain.on('open-mcp-approval-popup', (event, details) => {
+    const popup = createPopupWindow('mcp-approval', { width: 520, height: 500, resizable: false });
+    // After popup loads, send it the approval details
+    const checkLoaded = setInterval(() => {
+      const p = popupWindows.get('mcp-approval');
+      if (p && !p.isDestroyed() && p.webContents) {
+        try {
+          p.webContents.send('mcp-approval-pending', details);
+          clearInterval(checkLoaded);
+        } catch {}
+      }
+    }, 300);
+    setTimeout(() => clearInterval(checkLoaded), 10000);
   });
 
   // Specific popup handlers
@@ -8701,6 +8720,30 @@ ${tabData}`;
       console.error('[Main] Auto-configure Claude MCP failed:', error);
       return { success: false, error: error.message };
     }
+  });
+
+  // ── MCP Approval Popup ──
+  ipcMain.handle('mcp-approval-respond', async (event, { requestId, allowed }) => {
+    if (mcpServer && mcpServer._approvalResolvers) {
+      const resolver = mcpServer._approvalResolvers.get(requestId);
+      if (resolver) {
+        resolver({ allowed, reason: allowed ? 'approved' : 'denied' });
+        mcpServer._approvalResolvers.delete(requestId);
+        // Close the approval popup
+        const popup = popupWindows.get('mcp-approval');
+        if (popup && !popup.isDestroyed()) popup.close();
+        return { success: true };
+      }
+    }
+    return { success: false, error: 'no pending request' };
+  });
+
+  ipcMain.handle('mcp-approval-status', async () => {
+    if (mcpServer && mcpServer._approvalResolvers) {
+      const entries = Array.from(mcpServer._approvalResolvers.entries()).map(([id]) => ({ requestId: id }));
+      return { pending: entries };
+    }
+    return { pending: [] };
   });
 
   ipcMain.handle('open-external-url', async (event, url) => {

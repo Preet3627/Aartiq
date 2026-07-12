@@ -15,6 +15,31 @@ const os = require('os');
 
 const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
+const TOOL_RISK_MAP = {
+  list_tabs: 'low',
+  switch_tab: 'low',
+  close_tab: 'low',
+  navigate: 'low',
+  get_active_tab_url: 'low',
+  read_page: 'low',
+  go_back: 'low',
+  go_forward: 'low',
+  reload: 'low',
+  search_applications: 'low',
+  web_search: 'low',
+  click_element: 'medium',
+  fill_form: 'medium',
+  open_external_app: 'medium',
+  set_volume: 'low',
+  set_brightness: 'low',
+  set_alarm: 'low',
+  get_active_window: 'low',
+  generate_pdf: 'low',
+  execute_shell_command: 'high',
+  run_applescript: 'high',
+  run_powershell: 'high',
+};
+
 class BrowserMcpServer {
   constructor(tabViews, store) {
     this.tabViews = tabViews;
@@ -22,6 +47,116 @@ class BrowserMcpServer {
     this.httpServer = null;
     this.server = null;
     this.transport = null;
+    this._approvalResolvers = new Map();
+    this._pendingBiometricCall = null;
+  }
+
+  async _requestApproval(toolName, args, risk) {
+    return new Promise((resolve) => {
+      const requestId = `mcp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const timeout = setTimeout(() => {
+        this._approvalResolvers.delete(requestId);
+        resolve({ allowed: false, reason: 'timed out' });
+      }, 120000);
+
+      this._approvalResolvers.set(requestId, (result) => {
+        clearTimeout(timeout);
+        resolve(result);
+      });
+
+      const mainWindow = this.tabViews._mainWindow;
+      const winObj = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3003';
+      const popupUrl = `${backendUrl}/?panel=mcp-approval&requestId=${requestId}&tool=${encodeURIComponent(toolName)}&risk=${risk}&args=${encodeURIComponent(JSON.stringify(args))}`;
+
+      if (winObj) {
+        winObj.webContents.send('open-mcp-approval-popup', { requestId, tool: toolName, risk, args, url: popupUrl });
+      } else {
+        const { BrowserWindow, ipcMain } = require('electron');
+        const isDev = !app.isPackaged;
+        const preloadPath = path.join(__dirname, '..', '..', 'preload.js');
+
+        const popup = new BrowserWindow({
+          width: 520, height: 500, alwaysOnTop: true,
+          skipTaskbar: true, resizable: false,
+          minimizable: false, maximizable: false,
+          show: false, title: 'MCP Tool Approval',
+          webPreferences: {
+            preload: preloadPath,
+            contextIsolation: true,
+            nodeIntegration: false,
+          },
+        });
+
+        popup.once('ready-to-show', () => popup.show());
+        popup.on('closed', () => {
+          if (this._approvalResolvers.has(requestId)) {
+            this._approvalResolvers.get(requestId)({ allowed: false, reason: 'window closed' });
+            this._approvalResolvers.delete(requestId);
+          }
+        });
+
+        if (isDev) {
+          popup.loadURL(popupUrl);
+        } else {
+          popup.loadURL(`https://localhost:3003/?panel=mcp-approval&requestId=${requestId}&tool=${encodeURIComponent(toolName)}&risk=${risk}&args=${encodeURIComponent(JSON.stringify(args))}`);
+        }
+      }
+    });
+  }
+
+  async _withBiometric(reason) {
+    try {
+      if (!this._biometricAuth) {
+        const { BiometricAuthManager } = require('../service/biometric-auth.js');
+        this._biometricAuth = new BiometricAuthManager();
+      }
+      return await this._biometricAuth.authenticate(reason || 'Authenticate to proceed');
+    } catch {
+      return false;
+    }
+  }
+
+  _getAutoApprovalConfig() {
+    if (!this.store) return { autoApproveLowRisk: true, autoApproveMidRisk: false, requireBiometricPerSession: false };
+    return {
+      autoApproveLowRisk: this.store.get('security_autoApproveLowRisk', true),
+      autoApproveMidRisk: this.store.get('security_autoApproveMidRisk', false),
+      requireBiometricPerSession: this.store.get('security_requireBiometricPerSession', false),
+      requireBiometricEveryAction: this.store.get('security_requireBiometricEveryAction', false),
+      requireDeviceUnlockForManualApproval: this.store.get('security_requireDeviceUnlockForManualApproval', true),
+    };
+  }
+
+  async _checkPermission(toolName, args) {
+    const risk = TOOL_RISK_MAP[toolName] || 'low';
+    const config = this._getAutoApprovalConfig();
+
+    if (risk === 'low' && config.autoApproveLowRisk) {
+      if (config.requireBiometricEveryAction || (config.requireBiometricPerSession && !this._biometricSessionDone)) {
+        const ok = await this._withBiometric(`Approve ${toolName}`);
+        if (!ok) return { allowed: false, reason: 'biometric denied' };
+        this._biometricSessionDone = true;
+      }
+      return { allowed: true, reason: 'auto-approved (low risk)' };
+    }
+
+    if (risk === 'medium' && config.autoApproveMidRisk) {
+      return { allowed: true, reason: 'auto-approved (medium risk)' };
+    }
+
+    const approval = await this._requestApproval(toolName, args, risk);
+    if (!approval.allowed) {
+      return { allowed: false, reason: approval.reason || 'denied' };
+    }
+
+    if (config.requireDeviceUnlockForManualApproval && risk !== 'low') {
+      const ok = await this._withBiometric(`Approving ${toolName} requires device unlock`);
+      if (!ok) return { allowed: false, reason: 'biometric denied' };
+    }
+
+    return { allowed: true, reason: 'approved' };
   }
 
   getToolDefinitions() {
@@ -690,28 +825,326 @@ class BrowserMcpServer {
       },
       {
         name: 'web_search',
-        description: 'Search the web for information. Supports Google, Brave, Tavily, SerpAPI, DuckDuckGo, and YouTube.',
+        description: 'Search the web by opening a real browser, performing Google/DuckDuckGo search, navigating to top results, and reading their content. Returns structured results with titles, URLs, snippets, and full page content from the top results. No API keys required.',
         inputSchema: {
           type: 'object',
           properties: {
             query: { type: 'string', description: 'Search query' },
-            provider: { type: 'string', description: 'Search provider (google, brave, tavily, serp, duckduckgo, youtube, googlescrape)', enum: ['google', 'brave', 'tavily', 'serp', 'duckduckgo', 'youtube', 'googlescrape'] },
-            count: { type: 'number', description: 'Number of results (default 8)', default: 8 },
+            engine: { type: 'string', description: 'Search engine to use: google (default) or duckduckgo', enum: ['google', 'duckduckgo'], default: 'google' },
+            count: { type: 'number', description: 'Number of top results to navigate to and read (default 3)', default: 3 },
           },
           required: ['query'],
         },
         execute: async (args) => {
           try {
-            const provider = new WebSearchProvider();
-            const keys = ['GOOGLE_API_KEY', 'GOOGLE_SEARCH_ENGINE_ID', 'BRAVE_API_KEY', 'TAVILY_API_KEY', 'SERP_API_KEY'];
-            const config = {};
-            for (const key of keys) {
-              const val = process.env[key];
-              if (val) config[key] = val;
+            const query = args.query;
+            const engine = args.engine || 'google';
+            const count = Math.min(args.count || 3, 5);
+            const searchUrl = engine === 'duckduckgo'
+              ? `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
+              : `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=en`;
+
+            const activeId = this._getActiveTabId();
+            let view = activeId ? this.tabViews.get(activeId) : null;
+
+            if (!view || !view.webContents || view.webContents.isDestroyed()) {
+              const newTabId = `mcp-search-${Date.now()}`;
+              const { BrowserWindow } = require('electron');
+              const searchWindow = new BrowserWindow({
+                width: 1280, height: 800, show: false,
+                webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true }
+              });
+              view = searchWindow.webContents;
+              this.tabViews.set(newTabId, searchWindow);
+              this.tabViews._activeTabId = newTabId;
+              this.tabViews._mainWindow = this.tabViews._mainWindow || { webContents: { send: () => {} }, isDestroyed: () => false };
             }
-            provider.configure(config);
-            const results = await provider.search(args.query, args.provider, args.count || 8);
-            return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
+
+            await view.loadURL(searchUrl);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            let searchResults = [];
+            if (engine === 'google') {
+              searchResults = await view.executeJavaScript(`
+                (() => {
+                  const results = [];
+                  const blocks = document.querySelectorAll('div.g, div.MjjYud');
+                  for (const block of blocks) {
+                    if (results.length >= ${count * 2}) break;
+                    let anchor = block.querySelector('a[href^="http"]:not([href*="google.com"])');
+                    if (!anchor) anchor = block.querySelector('a[href^="/url?q="]');
+                    if (!anchor) continue;
+                    const titleEl = block.querySelector('h3');
+                    if (!titleEl) continue;
+                    const title = titleEl.textContent.trim();
+                    let url = anchor.getAttribute('href') || '';
+                    if (url.startsWith('/url?q=')) {
+                      url = decodeURIComponent(url.replace('/url?q=', '').split('&')[0]);
+                    }
+                    if (!url.startsWith('http')) continue;
+                    let snippet = '';
+                    for (const ss of ['div.VwiC3b', 'span.st', 'div.lEBKkf']) {
+                      const el = block.querySelector(ss);
+                      if (el) { snippet = el.textContent.trim(); break; }
+                    }
+                    if (!results.some(r => r.url === url)) {
+                      results.push({ title, url, snippet });
+                    }
+                  }
+                  return results;
+                })()
+              `);
+            } else {
+              searchResults = await view.executeJavaScript(`
+                (() => {
+                  const results = [];
+                  const links = document.querySelectorAll('a.result__a');
+                  for (const link of links) {
+                    if (results.length >= ${count * 2}) break;
+                    const title = link.textContent.trim();
+                    let rawUrl = link.getAttribute('href') || '';
+                    const urlObj = new URL(rawUrl, 'https://duckduckgo.com');
+                    let url = rawUrl;
+                    if (urlObj.hostname === 'duckduckgo.com' && urlObj.pathname === '/l/') {
+                      url = decodeURIComponent(urlObj.searchParams.get('uddg') || rawUrl);
+                    }
+                    if (!url.startsWith('http')) continue;
+                    let snippet = '';
+                    const snippetEl = link.closest('.result')?.querySelector('.result__snippet');
+                    if (snippetEl) snippet = snippetEl.textContent.trim();
+                    if (!results.some(r => r.url === url)) {
+                      results.push({ title, url, snippet });
+                    }
+                  }
+                  return results;
+                })()
+              `);
+            }
+
+            const finalResults = [];
+            const topResults = searchResults.slice(0, count);
+
+            for (let i = 0; i < topResults.length; i++) {
+              const result = topResults[i];
+              try {
+                await view.loadURL(result.url);
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                const content = await view.executeJavaScript(`
+                  (() => {
+                    document.querySelectorAll('script, style, nav, footer, header, noscript, svg, iframe, form, .sidebar, .menu, .footer, .header, .nav, .ad, .cookie, .popup, .modal, .overlay').forEach(el => el.remove());
+                    const main = document.querySelector('main, article, [role="main"], #content, #main, .content, .post, .entry, .article');
+                    const text = main ? main.textContent : document.body.textContent;
+                    return (text || '').replace(/\\s+/g, ' ').trim().substring(0, 6000);
+                  })()
+                `);
+                finalResults.push({
+                  index: i + 1,
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.snippet,
+                  content: content || '',
+                });
+              } catch (navErr) {
+                finalResults.push({
+                  index: i + 1,
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.snippet,
+                  content: `[Failed to load: ${navErr.message}]`,
+                });
+              }
+            }
+
+            const summary = finalResults.map(r =>
+              `[Result ${r.index}] ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}\nContent: ${r.content.substring(0, 2000)}`
+            ).join('\n\n---\n\n');
+
+            return {
+              content: [{
+                type: 'text',
+                text: `Search Results for "${query}" (${finalResults.length} results):\n\n${summary}`
+              }],
+            };
+          } catch (e) {
+            return { content: [{ type: 'text', text: `Search error: ${e.message}` }], isError: true };
+          }
+        },
+      },
+      {
+        name: 'generate_web_search_command',
+        description: 'Generate a JSON web search command that can be used in the AI sidebar to perform a browser-based search. Returns a JSON object with the command format for the AI to use.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            engine: { type: 'string', description: 'Search engine: google or duckduckgo', enum: ['google', 'duckduckgo'], default: 'google' },
+            pages: { type: 'number', description: 'Number of pages to read (default 3)', default: 3 },
+            url: { type: 'string', description: 'Specific URL or result index to navigate to (optional)' },
+          },
+          required: ['query'],
+        },
+        execute: async (args) => {
+          const command = {
+            type: 'WEB_SEARCH',
+            query: args.query,
+            engine: args.engine || 'google',
+            pages: args.pages || 3,
+          };
+          if (args.url) command.url = args.url;
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                command,
+                usage: 'Use this JSON command in the AI sidebar to perform a browser-based web search. The command will open a real browser, search Google/DuckDuckGo, navigate to top results, and read their content.',
+                example: `[WEB_SEARCH: ${args.query}]`
+              }, null, 2)
+            }],
+          };
+        },
+      },
+      {
+        name: 'search_and_summarize',
+        description: 'Search the web, navigate to top results, read their content, and provide a summarized answer. Uses real browser navigation - no API keys required.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Search query' },
+            engine: { type: 'string', description: 'Search engine: google or duckduckgo', enum: ['google', 'duckduckgo'], default: 'google' },
+            count: { type: 'number', description: 'Number of results to read (default 3)', default: 3 },
+            instruction: { type: 'string', description: 'Specific instruction for summarizing the results (optional)' },
+          },
+          required: ['query'],
+        },
+        execute: async (args) => {
+          try {
+            const query = args.query;
+            const engine = args.engine || 'google';
+            const count = Math.min(args.count || 3, 5);
+            const instruction = args.instruction || 'Summarize the key information';
+            const searchUrl = engine === 'duckduckgo'
+              ? `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
+              : `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=en`;
+
+            const activeId = this._getActiveTabId();
+            let view = activeId ? this.tabViews.get(activeId) : null;
+
+            if (!view || !view.webContents || view.webContents.isDestroyed()) {
+              const newTabId = `mcp-search-${Date.now()}`;
+              const { BrowserWindow } = require('electron');
+              const searchWindow = new BrowserWindow({
+                width: 1280, height: 800, show: false,
+                webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true }
+              });
+              view = searchWindow.webContents;
+              this.tabViews.set(newTabId, searchWindow);
+              this.tabViews._activeTabId = newTabId;
+              this.tabViews._mainWindow = this.tabViews._mainWindow || { webContents: { send: () => {} }, isDestroyed: () => false };
+            }
+
+            await view.loadURL(searchUrl);
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            let searchResults = [];
+            if (engine === 'google') {
+              searchResults = await view.executeJavaScript(`
+                (() => {
+                  const results = [];
+                  const blocks = document.querySelectorAll('div.g, div.MjjYud');
+                  for (const block of blocks) {
+                    if (results.length >= ${count * 2}) break;
+                    let anchor = block.querySelector('a[href^="http"]:not([href*="google.com"])');
+                    if (!anchor) anchor = block.querySelector('a[href^="/url?q="]');
+                    if (!anchor) continue;
+                    const titleEl = block.querySelector('h3');
+                    if (!titleEl) continue;
+                    const title = titleEl.textContent.trim();
+                    let url = anchor.getAttribute('href') || '';
+                    if (url.startsWith('/url?q=')) {
+                      url = decodeURIComponent(url.replace('/url?q=', '').split('&')[0]);
+                    }
+                    if (!url.startsWith('http')) continue;
+                    let snippet = '';
+                    for (const ss of ['div.VwiC3b', 'span.st', 'div.lEBKkf']) {
+                      const el = block.querySelector(ss);
+                      if (el) { snippet = el.textContent.trim(); break; }
+                    }
+                    if (!results.some(r => r.url === url)) {
+                      results.push({ title, url, snippet });
+                    }
+                  }
+                  return results;
+                })()
+              `);
+            } else {
+              searchResults = await view.executeJavaScript(`
+                (() => {
+                  const results = [];
+                  const links = document.querySelectorAll('a.result__a');
+                  for (const link of links) {
+                    if (results.length >= ${count * 2}) break;
+                    const title = link.textContent.trim();
+                    let rawUrl = link.getAttribute('href') || '';
+                    const urlObj = new URL(rawUrl, 'https://duckduckgo.com');
+                    let url = rawUrl;
+                    if (urlObj.hostname === 'duckduckgo.com' && urlObj.pathname === '/l/') {
+                      url = decodeURIComponent(urlObj.searchParams.get('uddg') || rawUrl);
+                    }
+                    if (!url.startsWith('http')) continue;
+                    let snippet = '';
+                    const snippetEl = link.closest('.result')?.querySelector('.result__snippet');
+                    if (snippetEl) snippet = snippetEl.textContent.trim();
+                    if (!results.some(r => r.url === url)) {
+                      results.push({ title, url, snippet });
+                    }
+                  }
+                  return results;
+                })()
+              `);
+            }
+
+            const pageContents = [];
+            const topResults = searchResults.slice(0, count);
+
+            for (let i = 0; i < topResults.length; i++) {
+              const result = topResults[i];
+              try {
+                await view.loadURL(result.url);
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                const content = await view.executeJavaScript(`
+                  (() => {
+                    document.querySelectorAll('script, style, nav, footer, header, noscript, svg, iframe, form, .sidebar, .menu, .footer, .header, .nav, .ad, .cookie, .popup, .modal, .overlay').forEach(el => el.remove());
+                    const main = document.querySelector('main, article, [role="main"], #content, #main, .content, .post, .entry, .article');
+                    const text = main ? main.textContent : document.body.textContent;
+                    return (text || '').replace(/\\s+/g, ' ').trim().substring(0, 4000);
+                  })()
+                `);
+                pageContents.push({
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.snippet,
+                  content: content || '',
+                });
+              } catch (navErr) {
+                pageContents.push({
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.snippet,
+                  content: `[Failed to load: ${navErr.message}]`,
+                });
+              }
+            }
+
+            const contextForLLM = pageContents.map(p =>
+              `[${p.title}](${p.url})\n${p.snippet}\n\nFull Content:\n${p.content}`
+            ).join('\n\n---\n\n');
+
+            return {
+              content: [{
+                type: 'text',
+                text: `Web Search Results for "${query}" (${pageContents.length} pages read):\n\n${contextForLLM}\n\n---\n\nInstruction: ${instruction}\n\nBased on the above search results, please provide a summary answering the original query.`
+              }],
+            };
           } catch (e) {
             return { content: [{ type: 'text', text: `Search error: ${e.message}` }], isError: true };
           }
@@ -803,6 +1236,13 @@ class BrowserMcpServer {
           };
         }
         try {
+          const permission = await this._checkPermission(toolName, args);
+          if (!permission.allowed) {
+            return {
+              content: [{ type: 'text', text: `Permission denied for ${toolName}: ${permission.reason || 'denied'}. Please open Aartiq to approve this request.` }],
+              isError: true,
+            };
+          }
           return await tool.execute(args);
         } catch (e) {
           return {
