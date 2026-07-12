@@ -15,10 +15,14 @@ exports.getAppIconBase64 = async function() {
     const appPath = app.getAppPath();
     const isPackaged = app.isPackaged;
     const candidates = isPackaged ? [
+      path.join(appPath, 'assets', 'icon-transparent.png'),
       path.join(appPath, 'assets', 'icon.png'),
+      path.join(process.resourcesPath, 'app', 'assets', 'icon-transparent.png'),
       path.join(process.resourcesPath, 'app', 'assets', 'icon.png'),
     ] : [
+      path.join(__dirname, '../../assets/icon-transparent.png'),
       path.join(__dirname, '../../assets/icon.png'),
+      path.join(appPath, 'assets/icon-transparent.png'),
       path.join(appPath, 'assets/icon.png'),
     ];
     for (const iconPath of candidates) {
