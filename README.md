@@ -153,6 +153,69 @@ Aartiq/
 | Ollama | Local |
 | Apple Intelligence | Native macOS |
 
+## Claude Desktop MCP Integration
+
+Aartiq exposes 18 browser and OS automation tools via the **Model Context Protocol (MCP)** on port `3001`, enabling Claude Desktop to control the browser and desktop directly.
+
+### Quick Setup (Claude Desktop)
+
+1. Install the bridge package:
+   ```bash
+   npm install -g mcp-remote@0.1.17
+   ```
+
+2. Add this entry to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or the equivalent Windows/Linux path:
+   ```json
+   {
+     "mcpServers": {
+       "aartiq": {
+         "command": "npx",
+         "args": [
+           "mcp-remote@0.1.17",
+           "http://localhost:3001/sse"
+         ]
+       }
+     }
+   }
+   ```
+
+3. Restart Claude Desktop. The `🔌` connection indicator should turn green.
+
+4. Alternatively, open Aartiq, go to **Settings → MCP Servers**, and click **Auto-Configure Claude Desktop** — this writes the config above automatically.
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_tabs` | List all open browser tabs |
+| `switch_tab` | Switch to a specific tab by ID |
+| `close_tab` | Close a tab by ID |
+| `navigate` | Navigate to a URL in the active tab |
+| `get_active_tab_url` | Get the URL of the active tab |
+| `read_page` | Extract page text content |
+| `click_element` | Click an element by CSS selector |
+| `fill_form` | Fill a form field by selector |
+| `go_back` | Navigate back |
+| `go_forward` | Navigate forward |
+| `reload` | Reload the active page |
+| `generate_pdf` | Generate a PDF of the current page |
+| `search_applications` | Search installed applications |
+| `open_external_app` | Open a desktop application |
+| `set_volume` | Set system volume (0-100) |
+| `set_brightness` | Set screen brightness (0-100) |
+| `set_alarm` | Set a system alarm |
+| `execute_shell_command` | Execute a shell command (requires approval) |
+| `run_applescript` | Run AppleScript (macOS only) |
+| `run_powershell` | Run PowerShell (Windows only) |
+| `get_active_window` | Get the active window title |
+| `web_search` | Search the web (Google, Brave, DuckDuckGo, etc.) |
+
+### `/mcp` Command
+
+Type `/mcp` in the AI chat to open the MCP Settings panel, where you can configure MCP servers and auto-configure Claude Desktop integration.
+
+The AI also accepts the `OPEN_MCP_SETTINGS` command to navigate to MCP settings programmatically.
+
 ## Contributing
 
 PRs are welcome. Please open an issue first to discuss significant changes.
