@@ -931,7 +931,7 @@ class BrowserMcpServer {
     const activeId = this._getActiveTabId();
     let view = activeId ? this.tabViews.get(activeId) : null;
     if (view && view.webContents && !view.webContents.isDestroyed()) {
-      return { view, tabId: activeId, isNew: false };
+      return { view: view.webContents, tabId: activeId, isNew: false };
     }
     const { BrowserWindow } = require('electron');
     const newTabId = `mcp-search-${Date.now()}`;
