@@ -3,7 +3,6 @@ const { SSEServerTransport } = require('@modelcontextprotocol/sdk/server/sse.js'
 const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 const http = require('http');
 const { getAppIconBase64, searchApplications, execShellCommand, validateCommand } = require('../main/handlers/utils.js');
-const { WebSearchProvider } = require('./web-search-service.js');
 const { generateAartiqPDFTemplate } = require('../main/handlers/pdf-utils.js');
 const { exec } = require('child_process');
 const { promisify } = require('util');
@@ -27,6 +26,8 @@ const TOOL_RISK_MAP = {
   reload: 'low',
   search_applications: 'low',
   web_search: 'low',
+  generate_web_search_command: 'low',
+  search_and_summarize: 'low',
   click_element: 'medium',
   fill_form: 'medium',
   open_external_app: 'medium',
@@ -825,145 +826,29 @@ class BrowserMcpServer {
       },
       {
         name: 'web_search',
-        description: 'Search the web by opening a real browser, performing Google/DuckDuckGo search, navigating to top results, and reading their content. Returns structured results with titles, URLs, snippets, and full page content from the top results. No API keys required.',
+        description: 'Search the web by opening a real browser, performing DuckDuckGo/Google search, navigating to top results, and reading their content. Returns structured results with titles, URLs, snippets, and full page content. No API keys required.',
         inputSchema: {
           type: 'object',
           properties: {
             query: { type: 'string', description: 'Search query' },
-            engine: { type: 'string', description: 'Search engine to use: google (default) or duckduckgo', enum: ['google', 'duckduckgo'], default: 'google' },
-            count: { type: 'number', description: 'Number of top results to navigate to and read (default 3)', default: 3 },
+            engine: { type: 'string', description: 'Search engine to use: duckduckgo (default, reliable) or google', enum: ['google', 'duckduckgo'], default: 'duckduckgo' },
+            count: { type: 'number', description: 'Number of top results to navigate to and read (default 3, max 5)', default: 3 },
           },
           required: ['query'],
         },
         execute: async (args) => {
           try {
-            const query = args.query;
-            const engine = args.engine || 'google';
-            const count = Math.min(args.count || 3, 5);
-            const searchUrl = engine === 'duckduckgo'
-              ? `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
-              : `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=en`;
-
-            const activeId = this._getActiveTabId();
-            let view = activeId ? this.tabViews.get(activeId) : null;
-
-            if (!view || !view.webContents || view.webContents.isDestroyed()) {
-              const newTabId = `mcp-search-${Date.now()}`;
-              const { BrowserWindow } = require('electron');
-              const searchWindow = new BrowserWindow({
-                width: 1280, height: 800, show: false,
-                webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true }
-              });
-              view = searchWindow.webContents;
-              this.tabViews.set(newTabId, searchWindow);
-              this.tabViews._activeTabId = newTabId;
-              this.tabViews._mainWindow = this.tabViews._mainWindow || { webContents: { send: () => {} }, isDestroyed: () => false };
+            const { results, engine: usedEngine } = await this._browserSearch(
+              args.query, args.engine, Math.min(args.count || 3, 5)
+            );
+            if (results.length === 0) {
+              return { content: [{ type: 'text', text: `No search results found for "${args.query}". Do NOT invent data.` }], isError: true };
             }
-
-            await view.loadURL(searchUrl);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            let searchResults = [];
-            if (engine === 'google') {
-              searchResults = await view.executeJavaScript(`
-                (() => {
-                  const results = [];
-                  const blocks = document.querySelectorAll('div.g, div.MjjYud');
-                  for (const block of blocks) {
-                    if (results.length >= ${count * 2}) break;
-                    let anchor = block.querySelector('a[href^="http"]:not([href*="google.com"])');
-                    if (!anchor) anchor = block.querySelector('a[href^="/url?q="]');
-                    if (!anchor) continue;
-                    const titleEl = block.querySelector('h3');
-                    if (!titleEl) continue;
-                    const title = titleEl.textContent.trim();
-                    let url = anchor.getAttribute('href') || '';
-                    if (url.startsWith('/url?q=')) {
-                      url = decodeURIComponent(url.replace('/url?q=', '').split('&')[0]);
-                    }
-                    if (!url.startsWith('http')) continue;
-                    let snippet = '';
-                    for (const ss of ['div.VwiC3b', 'span.st', 'div.lEBKkf']) {
-                      const el = block.querySelector(ss);
-                      if (el) { snippet = el.textContent.trim(); break; }
-                    }
-                    if (!results.some(r => r.url === url)) {
-                      results.push({ title, url, snippet });
-                    }
-                  }
-                  return results;
-                })()
-              `);
-            } else {
-              searchResults = await view.executeJavaScript(`
-                (() => {
-                  const results = [];
-                  const links = document.querySelectorAll('a.result__a');
-                  for (const link of links) {
-                    if (results.length >= ${count * 2}) break;
-                    const title = link.textContent.trim();
-                    let rawUrl = link.getAttribute('href') || '';
-                    const urlObj = new URL(rawUrl, 'https://duckduckgo.com');
-                    let url = rawUrl;
-                    if (urlObj.hostname === 'duckduckgo.com' && urlObj.pathname === '/l/') {
-                      url = decodeURIComponent(urlObj.searchParams.get('uddg') || rawUrl);
-                    }
-                    if (!url.startsWith('http')) continue;
-                    let snippet = '';
-                    const snippetEl = link.closest('.result')?.querySelector('.result__snippet');
-                    if (snippetEl) snippet = snippetEl.textContent.trim();
-                    if (!results.some(r => r.url === url)) {
-                      results.push({ title, url, snippet });
-                    }
-                  }
-                  return results;
-                })()
-              `);
-            }
-
-            const finalResults = [];
-            const topResults = searchResults.slice(0, count);
-
-            for (let i = 0; i < topResults.length; i++) {
-              const result = topResults[i];
-              try {
-                await view.loadURL(result.url);
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                const content = await view.executeJavaScript(`
-                  (() => {
-                    document.querySelectorAll('script, style, nav, footer, header, noscript, svg, iframe, form, .sidebar, .menu, .footer, .header, .nav, .ad, .cookie, .popup, .modal, .overlay').forEach(el => el.remove());
-                    const main = document.querySelector('main, article, [role="main"], #content, #main, .content, .post, .entry, .article');
-                    const text = main ? main.textContent : document.body.textContent;
-                    return (text || '').replace(/\\s+/g, ' ').trim().substring(0, 6000);
-                  })()
-                `);
-                finalResults.push({
-                  index: i + 1,
-                  title: result.title,
-                  url: result.url,
-                  snippet: result.snippet,
-                  content: content || '',
-                });
-              } catch (navErr) {
-                finalResults.push({
-                  index: i + 1,
-                  title: result.title,
-                  url: result.url,
-                  snippet: result.snippet,
-                  content: `[Failed to load: ${navErr.message}]`,
-                });
-              }
-            }
-
-            const summary = finalResults.map(r =>
+            const summary = results.map(r =>
               `[Result ${r.index}] ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}\nContent: ${r.content.substring(0, 2000)}`
             ).join('\n\n---\n\n');
-
             return {
-              content: [{
-                type: 'text',
-                text: `Search Results for "${query}" (${finalResults.length} results):\n\n${summary}`
-              }],
+              content: [{ type: 'text', text: `Search Results for "${args.query}" via ${usedEngine} (${results.length} results):\n\n${summary}` }],
             };
           } catch (e) {
             return { content: [{ type: 'text', text: `Search error: ${e.message}` }], isError: true };
@@ -972,12 +857,12 @@ class BrowserMcpServer {
       },
       {
         name: 'generate_web_search_command',
-        description: 'Generate a JSON web search command that can be used in the AI sidebar to perform a browser-based search. Returns a JSON object with the command format for the AI to use.',
+        description: 'Generate a JSON web search command that can be used in the AI sidebar to perform a browser-based search.',
         inputSchema: {
           type: 'object',
           properties: {
             query: { type: 'string', description: 'Search query' },
-            engine: { type: 'string', description: 'Search engine: google or duckduckgo', enum: ['google', 'duckduckgo'], default: 'google' },
+            engine: { type: 'string', description: 'Search engine: duckduckgo (default) or google', enum: ['google', 'duckduckgo'], default: 'duckduckgo' },
             pages: { type: 'number', description: 'Number of pages to read (default 3)', default: 3 },
             url: { type: 'string', description: 'Specific URL or result index to navigate to (optional)' },
           },
@@ -987,7 +872,7 @@ class BrowserMcpServer {
           const command = {
             type: 'WEB_SEARCH',
             query: args.query,
-            engine: args.engine || 'google',
+            engine: args.engine || 'duckduckgo',
             pages: args.pages || 3,
           };
           if (args.url) command.url = args.url;
@@ -996,7 +881,7 @@ class BrowserMcpServer {
               type: 'text',
               text: JSON.stringify({
                 command,
-                usage: 'Use this JSON command in the AI sidebar to perform a browser-based web search. The command will open a real browser, search Google/DuckDuckGo, navigate to top results, and read their content.',
+                usage: 'Use this JSON command in the AI sidebar to perform a browser-based web search. The command will open a real browser, search DuckDuckGo/Google, navigate to top results, and read their content.',
                 example: `[WEB_SEARCH: ${args.query}]`
               }, null, 2)
             }],
@@ -1010,139 +895,28 @@ class BrowserMcpServer {
           type: 'object',
           properties: {
             query: { type: 'string', description: 'Search query' },
-            engine: { type: 'string', description: 'Search engine: google or duckduckgo', enum: ['google', 'duckduckgo'], default: 'google' },
-            count: { type: 'number', description: 'Number of results to read (default 3)', default: 3 },
+            engine: { type: 'string', description: 'Search engine: duckduckgo (default, reliable) or google', enum: ['google', 'duckduckgo'], default: 'duckduckgo' },
+            count: { type: 'number', description: 'Number of results to read (default 3, max 5)', default: 3 },
             instruction: { type: 'string', description: 'Specific instruction for summarizing the results (optional)' },
           },
           required: ['query'],
         },
         execute: async (args) => {
           try {
-            const query = args.query;
-            const engine = args.engine || 'google';
-            const count = Math.min(args.count || 3, 5);
             const instruction = args.instruction || 'Summarize the key information';
-            const searchUrl = engine === 'duckduckgo'
-              ? `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
-              : `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=en`;
-
-            const activeId = this._getActiveTabId();
-            let view = activeId ? this.tabViews.get(activeId) : null;
-
-            if (!view || !view.webContents || view.webContents.isDestroyed()) {
-              const newTabId = `mcp-search-${Date.now()}`;
-              const { BrowserWindow } = require('electron');
-              const searchWindow = new BrowserWindow({
-                width: 1280, height: 800, show: false,
-                webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true }
-              });
-              view = searchWindow.webContents;
-              this.tabViews.set(newTabId, searchWindow);
-              this.tabViews._activeTabId = newTabId;
-              this.tabViews._mainWindow = this.tabViews._mainWindow || { webContents: { send: () => {} }, isDestroyed: () => false };
+            const { results, engine: usedEngine } = await this._browserSearch(
+              args.query, args.engine, Math.min(args.count || 3, 5)
+            );
+            if (results.length === 0) {
+              return { content: [{ type: 'text', text: `No search results found for "${args.query}". Do NOT invent data.` }], isError: true };
             }
-
-            await view.loadURL(searchUrl);
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            let searchResults = [];
-            if (engine === 'google') {
-              searchResults = await view.executeJavaScript(`
-                (() => {
-                  const results = [];
-                  const blocks = document.querySelectorAll('div.g, div.MjjYud');
-                  for (const block of blocks) {
-                    if (results.length >= ${count * 2}) break;
-                    let anchor = block.querySelector('a[href^="http"]:not([href*="google.com"])');
-                    if (!anchor) anchor = block.querySelector('a[href^="/url?q="]');
-                    if (!anchor) continue;
-                    const titleEl = block.querySelector('h3');
-                    if (!titleEl) continue;
-                    const title = titleEl.textContent.trim();
-                    let url = anchor.getAttribute('href') || '';
-                    if (url.startsWith('/url?q=')) {
-                      url = decodeURIComponent(url.replace('/url?q=', '').split('&')[0]);
-                    }
-                    if (!url.startsWith('http')) continue;
-                    let snippet = '';
-                    for (const ss of ['div.VwiC3b', 'span.st', 'div.lEBKkf']) {
-                      const el = block.querySelector(ss);
-                      if (el) { snippet = el.textContent.trim(); break; }
-                    }
-                    if (!results.some(r => r.url === url)) {
-                      results.push({ title, url, snippet });
-                    }
-                  }
-                  return results;
-                })()
-              `);
-            } else {
-              searchResults = await view.executeJavaScript(`
-                (() => {
-                  const results = [];
-                  const links = document.querySelectorAll('a.result__a');
-                  for (const link of links) {
-                    if (results.length >= ${count * 2}) break;
-                    const title = link.textContent.trim();
-                    let rawUrl = link.getAttribute('href') || '';
-                    const urlObj = new URL(rawUrl, 'https://duckduckgo.com');
-                    let url = rawUrl;
-                    if (urlObj.hostname === 'duckduckgo.com' && urlObj.pathname === '/l/') {
-                      url = decodeURIComponent(urlObj.searchParams.get('uddg') || rawUrl);
-                    }
-                    if (!url.startsWith('http')) continue;
-                    let snippet = '';
-                    const snippetEl = link.closest('.result')?.querySelector('.result__snippet');
-                    if (snippetEl) snippet = snippetEl.textContent.trim();
-                    if (!results.some(r => r.url === url)) {
-                      results.push({ title, url, snippet });
-                    }
-                  }
-                  return results;
-                })()
-              `);
-            }
-
-            const pageContents = [];
-            const topResults = searchResults.slice(0, count);
-
-            for (let i = 0; i < topResults.length; i++) {
-              const result = topResults[i];
-              try {
-                await view.loadURL(result.url);
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                const content = await view.executeJavaScript(`
-                  (() => {
-                    document.querySelectorAll('script, style, nav, footer, header, noscript, svg, iframe, form, .sidebar, .menu, .footer, .header, .nav, .ad, .cookie, .popup, .modal, .overlay').forEach(el => el.remove());
-                    const main = document.querySelector('main, article, [role="main"], #content, #main, .content, .post, .entry, .article');
-                    const text = main ? main.textContent : document.body.textContent;
-                    return (text || '').replace(/\\s+/g, ' ').trim().substring(0, 4000);
-                  })()
-                `);
-                pageContents.push({
-                  title: result.title,
-                  url: result.url,
-                  snippet: result.snippet,
-                  content: content || '',
-                });
-              } catch (navErr) {
-                pageContents.push({
-                  title: result.title,
-                  url: result.url,
-                  snippet: result.snippet,
-                  content: `[Failed to load: ${navErr.message}]`,
-                });
-              }
-            }
-
-            const contextForLLM = pageContents.map(p =>
+            const contextForLLM = results.map(p =>
               `[${p.title}](${p.url})\n${p.snippet}\n\nFull Content:\n${p.content}`
             ).join('\n\n---\n\n');
-
             return {
               content: [{
                 type: 'text',
-                text: `Web Search Results for "${query}" (${pageContents.length} pages read):\n\n${contextForLLM}\n\n---\n\nInstruction: ${instruction}\n\nBased on the above search results, please provide a summary answering the original query.`
+                text: `Web Search Results for "${args.query}" via ${usedEngine} (${results.length} pages read):\n\n${contextForLLM}\n\n---\n\nInstruction: ${instruction}\n\nBased on the above search results, please provide a summary answering the original query.`
               }],
             };
           } catch (e) {
@@ -1151,6 +925,161 @@ class BrowserMcpServer {
         },
       },
     ];
+  }
+
+  _getSearchView() {
+    const activeId = this._getActiveTabId();
+    let view = activeId ? this.tabViews.get(activeId) : null;
+    if (view && view.webContents && !view.webContents.isDestroyed()) {
+      return { view, tabId: activeId, isNew: false };
+    }
+    const { BrowserWindow } = require('electron');
+    const newTabId = `mcp-search-${Date.now()}`;
+    const searchWindow = new BrowserWindow({
+      width: 1280, height: 800, show: false,
+      webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true }
+    });
+    this.tabViews.set(newTabId, searchWindow);
+    this.tabViews._activeTabId = newTabId;
+    if (!this.tabViews._mainWindow) {
+      this.tabViews._mainWindow = { webContents: { send: () => {} }, isDestroyed: () => false, addBrowserView: () => {}, removeBrowserView: () => {} };
+    }
+    return { view: searchWindow.webContents, tabId: newTabId, isNew: true };
+  }
+
+  async _parseGoogleDOM(view, count) {
+    return view.executeJavaScript(`
+      (() => {
+        const results = [];
+        const seen = new Set();
+        const blocks = document.querySelectorAll('div.g, div.MjjYud');
+        for (const block of blocks) {
+          if (results.length >= ${count * 2}) break;
+          if (block.querySelector('[data-text-ad]') || block.querySelector('.commercial-unit-desktop-rhs')) continue;
+          let anchor = block.querySelector('a[href^="http"]:not([href*="google.com"]):not([href*="googleads"]):not([href*="doubleclick"])');
+          if (!anchor) anchor = block.querySelector('a[href^="/url?q="]');
+          if (!anchor) continue;
+          const titleEl = block.querySelector('h3');
+          if (!titleEl) continue;
+          const title = titleEl.textContent.trim();
+          let url = anchor.getAttribute('href') || '';
+          if (url.startsWith('/url?q=')) {
+            url = decodeURIComponent(url.replace('/url?q=', '').split('&')[0]);
+          }
+          if (!url.startsWith('http') || seen.has(url)) continue;
+          seen.add(url);
+          let snippet = '';
+          for (const ss of ['div.VwiC3b', 'div[data-sncf]', 'span.st', 'div.lEBKkf']) {
+            const el = block.querySelector(ss);
+            if (el) { snippet = el.textContent.trim(); break; }
+          }
+          results.push({ title, url, snippet });
+        }
+        return results;
+      })()
+    `);
+  }
+
+  async _parseDuckDuckGoDOM(view, count) {
+    return view.executeJavaScript(`
+      (() => {
+        const results = [];
+        const seen = new Set();
+        const links = document.querySelectorAll('a.result__a');
+        for (const link of links) {
+          if (results.length >= ${count * 2}) break;
+          const container = link.closest('.result') || link.closest('.web-result') || link.parentElement?.parentElement;
+          if (container) {
+            if (container.querySelector('.result--ad') || container.querySelector('.result--promoted') || container.querySelector('[data-testid="ad-result"]') || container.querySelector('span.result__promoted')) continue;
+          }
+          const title = link.textContent.trim();
+          let rawUrl = link.getAttribute('href') || '';
+          let url = rawUrl;
+          try {
+            const urlObj = new URL(rawUrl, 'https://duckduckgo.com');
+            if (urlObj.hostname === 'duckduckgo.com' && (urlObj.pathname === '/l/' || urlObj.pathname === '/m/')) {
+              url = decodeURIComponent(urlObj.searchParams.get('uddg') || rawUrl);
+            }
+          } catch (_) {}
+          if (!url.startsWith('http') || seen.has(url)) continue;
+          if (url.includes('duckduckgo.com') && url.includes('ad_domain')) continue;
+          seen.add(url);
+          let snippet = '';
+          if (container) {
+            const snippetEl = container.querySelector('.result__snippet');
+            if (snippetEl) snippet = snippetEl.textContent.trim();
+          }
+          results.push({ title, url, snippet });
+        }
+        return results;
+      })()
+    `);
+  }
+
+  async _readPageContent(view, maxChars = 6000) {
+    return view.executeJavaScript(`
+      (() => {
+        document.querySelectorAll('script, style, nav, footer, header, noscript, svg, iframe, form, .sidebar, .menu, .footer, .header, .nav, .ad, .cookie, .popup, .modal, .overlay').forEach(el => el.remove());
+        const main = document.querySelector('main, article, [role="main"], #content, #main, .content, .post, .entry, .article');
+        const text = main ? main.textContent : (document.body ? document.body.textContent : '');
+        return (text || '').replace(/\\s+/g, ' ').trim().substring(0, ${maxChars});
+      })()
+    `);
+  }
+
+  async _browserSearch(query, engine, count) {
+    engine = engine || 'duckduckgo';
+    count = count || 3;
+    const { view } = this._getSearchView();
+    let usedEngine = engine;
+
+    const searchUrl = engine === 'google'
+      ? `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=en`
+      : `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+
+    await view.loadURL(searchUrl);
+    await new Promise(resolve => setTimeout(resolve, 2500));
+
+    let searchResults = engine === 'google'
+      ? await this._parseGoogleDOM(view, count)
+      : await this._parseDuckDuckGoDOM(view, count);
+
+    if (engine === 'google' && searchResults.length === 0) {
+      console.log(`[MCP-Browser] Google returned 0 results for "${query}", falling back to DuckDuckGo`);
+      usedEngine = 'duckduckgo';
+      await view.loadURL(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`);
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      searchResults = await this._parseDuckDuckGoDOM(view, count);
+    }
+
+    const topResults = searchResults.slice(0, count);
+    const results = [];
+
+    for (let i = 0; i < topResults.length; i++) {
+      const result = topResults[i];
+      try {
+        await view.loadURL(result.url);
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const content = await this._readPageContent(view);
+        results.push({
+          index: i + 1,
+          title: result.title,
+          url: result.url,
+          snippet: result.snippet,
+          content: content || '',
+        });
+      } catch (navErr) {
+        results.push({
+          index: i + 1,
+          title: result.title,
+          url: result.url,
+          snippet: result.snippet,
+          content: `[Failed to load: ${navErr.message}]`,
+        });
+      }
+    }
+
+    return { results, engine: usedEngine };
   }
 
   _getTabs() {
