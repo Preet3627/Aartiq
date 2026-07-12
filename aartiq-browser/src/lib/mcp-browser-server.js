@@ -832,14 +832,16 @@ class BrowserMcpServer {
           properties: {
             query: { type: 'string', description: 'Search query' },
             engine: { type: 'string', description: 'Search engine to use: duckduckgo (default, reliable) or google', enum: ['google', 'duckduckgo'], default: 'duckduckgo' },
+            provider: { type: 'string', description: 'Alias for engine — search engine to use', enum: ['google', 'duckduckgo'], default: 'duckduckgo' },
             count: { type: 'number', description: 'Number of top results to navigate to and read (default 3, max 5)', default: 3 },
           },
           required: ['query'],
         },
         execute: async (args) => {
           try {
+            const engine = args.engine || args.provider || 'duckduckgo';
             const { results, engine: usedEngine } = await this._browserSearch(
-              args.query, args.engine, Math.min(args.count || 3, 5)
+              args.query, engine, Math.min(args.count || 3, 5)
             );
             if (results.length === 0) {
               return { content: [{ type: 'text', text: `No search results found for "${args.query}". Do NOT invent data.` }], isError: true };
@@ -847,8 +849,9 @@ class BrowserMcpServer {
             const summary = results.map(r =>
               `[Result ${r.index}] ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}\nContent: ${r.content.substring(0, 2000)}`
             ).join('\n\n---\n\n');
+            const fallbackNote = engine !== usedEngine ? ` (requested ${engine}, fell back to ${usedEngine})` : '';
             return {
-              content: [{ type: 'text', text: `Search Results for "${args.query}" via ${usedEngine} (${results.length} results):\n\n${summary}` }],
+              content: [{ type: 'text', text: `Search Results for "${args.query}" via ${usedEngine}${fallbackNote} (${results.length} results):\n\n${summary}` }],
             };
           } catch (e) {
             return { content: [{ type: 'text', text: `Search error: ${e.message}` }], isError: true };
@@ -863,6 +866,7 @@ class BrowserMcpServer {
           properties: {
             query: { type: 'string', description: 'Search query' },
             engine: { type: 'string', description: 'Search engine: duckduckgo (default) or google', enum: ['google', 'duckduckgo'], default: 'duckduckgo' },
+            provider: { type: 'string', description: 'Alias for engine — search engine to use', enum: ['google', 'duckduckgo'], default: 'duckduckgo' },
             pages: { type: 'number', description: 'Number of pages to read (default 3)', default: 3 },
             url: { type: 'string', description: 'Specific URL or result index to navigate to (optional)' },
           },
@@ -872,7 +876,7 @@ class BrowserMcpServer {
           const command = {
             type: 'WEB_SEARCH',
             query: args.query,
-            engine: args.engine || 'duckduckgo',
+            engine: args.engine || args.provider || 'duckduckgo',
             pages: args.pages || 3,
           };
           if (args.url) command.url = args.url;
@@ -896,6 +900,7 @@ class BrowserMcpServer {
           properties: {
             query: { type: 'string', description: 'Search query' },
             engine: { type: 'string', description: 'Search engine: duckduckgo (default, reliable) or google', enum: ['google', 'duckduckgo'], default: 'duckduckgo' },
+            provider: { type: 'string', description: 'Alias for engine — search engine to use', enum: ['google', 'duckduckgo'], default: 'duckduckgo' },
             count: { type: 'number', description: 'Number of results to read (default 3, max 5)', default: 3 },
             instruction: { type: 'string', description: 'Specific instruction for summarizing the results (optional)' },
           },
@@ -904,8 +909,9 @@ class BrowserMcpServer {
         execute: async (args) => {
           try {
             const instruction = args.instruction || 'Summarize the key information';
+            const engine = args.engine || args.provider || 'duckduckgo';
             const { results, engine: usedEngine } = await this._browserSearch(
-              args.query, args.engine, Math.min(args.count || 3, 5)
+              args.query, engine, Math.min(args.count || 3, 5)
             );
             if (results.length === 0) {
               return { content: [{ type: 'text', text: `No search results found for "${args.query}". Do NOT invent data.` }], isError: true };
@@ -913,10 +919,11 @@ class BrowserMcpServer {
             const contextForLLM = results.map(p =>
               `[${p.title}](${p.url})\n${p.snippet}\n\nFull Content:\n${p.content}`
             ).join('\n\n---\n\n');
+            const fallbackNote = engine !== usedEngine ? ` (requested ${engine}, fell back to ${usedEngine})` : '';
             return {
               content: [{
                 type: 'text',
-                text: `Web Search Results for "${args.query}" via ${usedEngine} (${results.length} pages read):\n\n${contextForLLM}\n\n---\n\nInstruction: ${instruction}\n\nBased on the above search results, please provide a summary answering the original query.`
+                text: `Web Search Results for "${args.query}" via ${usedEngine}${fallbackNote} (${results.length} pages read):\n\n${contextForLLM}\n\n---\n\nInstruction: ${instruction}\n\nBased on the above search results, please provide a summary answering the original query.`
               }],
             };
           } catch (e) {
@@ -937,7 +944,24 @@ class BrowserMcpServer {
     const newTabId = `mcp-search-${Date.now()}`;
     const searchWindow = new BrowserWindow({
       width: 1280, height: 800, show: false,
-      webPreferences: { offscreen: true, nodeIntegration: false, contextIsolation: true }
+      webPreferences: {
+        offscreen: true,
+        nodeIntegration: false,
+        contextIsolation: true,
+        webSecurity: true,
+        allowRunningInsecureContent: false,
+      }
+    });
+    searchWindow.webContents.setUserAgent(CHROME_UA);
+    searchWindow.webContents.on('dom-ready', () => {
+      searchWindow.webContents.executeJavaScript(`
+        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+        Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+        Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel' });
+        window.chrome = { runtime: {} };
+        Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 0 });
+      `).catch(() => {});
     });
     this.tabViews.set(newTabId, searchWindow);
     this.tabViews._activeTabId = newTabId;
