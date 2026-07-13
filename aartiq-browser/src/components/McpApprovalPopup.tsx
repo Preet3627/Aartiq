@@ -39,6 +39,22 @@ function McpApprovalPopup() {
     setLoading(false);
   }, [request]);
 
+  useEffect(() => {
+    if (!request || status !== 'pending') return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Tab' && e.shiftKey) {
+        e.preventDefault();
+        handleApprove();
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleDeny();
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [request, status, handleApprove, handleDeny]);
+
   const riskColor = request?.risk === 'high' ? 'text-red-400' : request?.risk === 'medium' ? 'text-orange-400' : 'text-green-400';
   const riskBg = request?.risk === 'high' ? 'bg-red-500/10 border-red-500/30' : request?.risk === 'medium' ? 'bg-orange-500/10 border-orange-500/30' : 'bg-green-500/10 border-green-500/30';
 
@@ -143,6 +159,13 @@ function McpApprovalPopup() {
             >
               {loading ? 'Processing...' : 'Approve'}
             </button>
+          </div>
+
+          <div className="flex items-center justify-center gap-1.5 mt-3">
+            <kbd className="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-[9px] font-mono text-gray-500">Shift</kbd>
+            <span className="text-[9px] text-gray-600">+</span>
+            <kbd className="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-[9px] font-mono text-gray-500">Tab</kbd>
+            <span className="text-[9px] text-gray-600 ml-1">to quick-approve</span>
           </div>
         </div>
       </div>
