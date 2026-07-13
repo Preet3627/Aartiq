@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "aartiq-mcp",
   "display_name": "Aartiq Browser",
-  "version": "1.0.0",
-  "description": "AI-native browser with autonomous agent capabilities, local LLM support, OS automation, and cross-device sync. Provides browser control, web search, shell execution, PDF generation, and system automation tools.",
-  "long_description": "Aartiq is an open-source, AI-native browser with autonomous agent capabilities. This MCP server exposes 24 tools for browser automation, web search, shell command execution, PDF generation, application search, system controls (volume, brightness, alarms), AppleScript/PowerShell execution, and cross-device sync. All operations are permission-gated with a triple-lock security model.",
+  "version": "2.0.0",
+  "description": "Full app control for Aartiq browser via Claude. Control panels, settings, AI chat with full tool capabilities (PDF, navigation, research), bookmarks, history, permissions, scheduling, video playback, and security management. Works on macOS and Windows.",
+  "long_description": "Aartiq MCP Server v2 gives Claude Desktop complete control over the Aartiq browser. With 60+ tools across 11 categories, Claude can: open/close any panel, change settings and themes, send prompts to the AI sidebar (which has full capabilities including PDF generation, web research, shell commands, and live browser actions), manage bookmarks and history, control permissions and security settings, create and manage scheduled automation tasks, play YouTube videos inline, and query the app's knowledge base for feature explanations and security overviews. The server communicates with the running Aartiq app via an HTTP bridge, enabling real-time control and live AI responses.",
   "author": {
     "name": "Preet3627",
     "url": "https://github.com/Preet3627"
@@ -19,7 +19,7 @@
   "icon": "icon.png",
   "license": "MIT",
   "privacy_policies": ["https://aartiq.ponsrischool.in/privacy"],
-  "keywords": ["browser", "ai", "automation", "search", "agent", "pdf", "shell", "applescript"],
+  "keywords": ["browser", "ai", "automation", "search", "agent", "pdf", "shell", "applescript", "scheduling", "permissions", "security", "bookmarks", "history", "video", "settings", "themes"],
   "tools_generated": true,
   "server": {
     "type": "node",

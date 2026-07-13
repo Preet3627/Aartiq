@@ -1,12 +1,12 @@
 {
   "name": "aartiq-mcp-server",
-  "version": "1.0.0",
-  "description": "Aartiq MCP Server - AI-native browser tools for Claude Desktop",
+  "version": "2.0.0",
+  "description": "Aartiq MCP Server v2 - Full app control for Claude Desktop (60+ tools, panels, AI chat, settings, scheduling, video, security)",
   "main": "server/index.js",
   "bin": {
     "aartiq-mcp": "./server/index.js"
   },
-  "keywords": ["mcp", "browser", "ai", "automation", "claude"],
+  "keywords": ["mcp", "browser", "ai", "automation", "claude", "settings", "permissions", "scheduling", "video", "security", "bookmarks", "history"],
   "license": "MIT",
   "author": "Preet3627",
   "repository": {
