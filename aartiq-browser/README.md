@@ -39,6 +39,7 @@
 **“Aartiq is one of the open-source AI browsers that enables permission-gated OS automation.”**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
+[![MCP Server License: MIT](https://img.shields.io/badge/MCP_Server-License%3A_MIT-green.svg)](../aartiq-mcp/LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-blue)]()
 [![Version](https://img.shields.io/badge/Version-0.3.0--alpha-blue)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)]()
@@ -539,7 +540,14 @@ Proof that strong architecture beats large budgets.
 
 📝 License
 
-Apache License 2.0
+Aartiq uses a **dual-license** model:
+
+| Component | License |
+|-----------|---------|
+| **Aartiq Browser** (this project) | [Apache License 2.0](LICENSE) |
+| **Aartiq MCP Server** (`aartiq-mcp/`) | [MIT License](../aartiq-mcp/LICENSE) |
+
+The MCP server is licensed under MIT for maximum compatibility with the Claude Desktop ecosystem. All other components remain under Apache 2.0.
 
 
 ---

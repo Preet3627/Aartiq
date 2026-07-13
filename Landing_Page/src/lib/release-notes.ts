@@ -17,6 +17,52 @@ export interface ReleaseEntry {
 
 export const releases: ReleaseEntry[] = [
   {
+    version: '0.3.3',
+    date: '2026-07-13',
+    codename: 'Nebula',
+    channel: 'stable',
+    changes: {
+      new: [
+        'Claude Desktop MCP integration — BrowserMcpServer exposes 22 tools (browser, search, shell, PDF, system) via Model Context Protocol on port 3001',
+        'MCP permission gating — every tool call from Claude Desktop goes through risk classification, approval dialog, and optional biometric gate',
+        'MCP Desktop Extension (.mcpb) — one-click install for Claude Desktop with manifest, tool annotations, icon, and privacy policy',
+        'MCP web_search tool — real browser-based web search (DuckDuckGo/Google) with ad filtering, stealth mode, and auto-fallback, no API keys required',
+        'MCP high-risk approval with QR code, PIN, and native OS dialogs (macOS Swift ApprovalCard, Windows/Linux native dialogs)',
+        'Cross-platform native approval manager — Windows and Linux approval dialogs replace Electron popups',
+        'Biometric Every Action toggle — optional stricter mode requiring Touch ID for every low-risk MCP action',
+        "Auto-configure Claude Desktop — one-click writes MCP server config to Claude Desktop's config file",
+      ],
+      fix: [
+        'Reclassified destructive file commands (rm, unlink, del) as high risk instead of silently blocking',
+        'MCP web_search stealth browser for Google — avoids bot detection with real browser user agent',
+        'MCP web_search provider/engine parameter alias — either param works, defaults to DuckDuckGo',
+        'MCP _getSearchView returns webContents consistently instead of BrowserView',
+        'PDF generation uses transparent icon, fixes UTF-8 encoding, adds page break rules',
+        'MCP server startup ordering — auto-configure waits for server to be ready before writing config',
+      ],
+      change: [
+        'Extracted auth handlers from main.js into dedicated auth-handlers.js module',
+        'Added approval preload script for MCP approval popup IPC isolation',
+        'Replaced sidebar rail with inline three-dot tools dropdown for compact toolbar',
+        'Replaced popup BrowserWindows with IPC-forwarded actions (reduces process count)',
+        'Bluetooth, keychain, and associated domains entitlements for macOS',
+      ],
+      docs: [
+        'Rewrote README as explanation-style guide — what Aartiq does, how permission gating works, MCP setup walkthrough',
+        'Added MCP Desktop Extension download link to README',
+        'Added privacy policy page at /privacy with data handling, cloud sync, and MCP disclosure',
+        'Updated landing page changelog and component scanner for v0.3.3',
+      ],
+      security: [
+        'MCP tool risk classification — Low/Medium/High with corresponding approval UX per tool',
+        'Destructive file operations (deletion, disk writes) classified as high risk',
+        'Batch shell approval with per-command toggles and irreversible command warnings',
+        'QR code and PIN fallback for biometric-unavailable devices',
+        'Auth handler extraction isolates credential logic from main process',
+      ]
+    }
+  },
+  {
     version: '0.3.2',
     date: '2026-07-10',
     codename: 'Nebula',
@@ -34,8 +80,13 @@ export const releases: ReleaseEntry[] = [
         'Irreversible command warnings — red/amber banners for destructive commands (rm -rf, dd, mkfs, etc.) before approval',
         'macOS Siri Shortcuts bridge — native Swift binary exposes Aartiq AI commands to Siri and Apple Shortcuts',
         'AES-256-GCM vault encryption with native keychain backup (macOS/Windows/Linux)',
+        'Neural Vault credential management — cross-platform native keychain integration (macOS iCloud Keychain, Windows Credential Manager, Linux secret-tool)',
+        'Native OS credential save dialogs — macOS NSAlert, Windows .NET Forms, Linux zenity',
+        'Autofill engine — form detection, classification (28+ field types), and credential/card/address autofill',
       ],
       fix: [
+        'Fixed Neural Vault save not persisting on macOS — iCloud Keychain sync now fully functional',
+        'Fixed get-passwords-for-site handler (was referencing non-existent keychain.js)',
         'Fixed TypeScript type error in SchedulingIntentDetector (extracted cast to any)',
         'Fixed bare return statements in automation tests (replaced with this.skip())',
         'Fixed model/provider selection not persisting across restarts — llm-set-active-provider and llm-configure-provider handlers now use correct electron-store keys',
@@ -49,6 +100,7 @@ export const releases: ReleaseEntry[] = [
       change: [
         'Upgraded Electron to v43.1.0',
         'Renamed CLI binary from "comet" to "aartiq" in package.json bin field',
+        'API keys now stored in native OS keychain instead of plaintext electron-store',
         'Added build-siri-bridge step to all macOS build and dist scripts',
         'Added RAG IPC handlers (ragIngest, ragRetrieve, ragContext) to preload.js',
         'Conversations now auto-ingest into BrowserAI vector memory on save for cross-session RAG',
@@ -64,6 +116,7 @@ export const releases: ReleaseEntry[] = [
         'Session-scoped biometric authentication — Touch ID required once per session for shell commands',
         'Batch shell approval modal with per-command granular control',
         'AES-256-GCM vault for sensitive credential storage with OS keychain backup',
+        'API keys migrated from plaintext electron-store to native OS keychain',
         'Mobile high-risk approval relay via sync handlers and cloud messages',
       ]
     }

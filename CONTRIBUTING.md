@@ -121,3 +121,14 @@ https://api.github.com/repos/Preet3627/Aartiq/releases/latest
 If you have questions, feel free to contact us via the official website at [https://browser.ponsrischool.in](https://browser.ponsrischool.in).
 
 Thank you for contributing! 🚀
+
+## 📝 License
+
+Aartiq uses a **dual-license** model:
+
+- **Aartiq Browser** (desktop, mobile, all core code): [Apache License 2.0](LICENSE)
+- **Aartiq MCP Server** (`aartiq-mcp/`): [MIT License](aartiq-mcp/LICENSE)
+
+The MCP server is licensed under MIT for maximum compatibility with the Claude Desktop ecosystem and other MCP clients. All other components remain under Apache 2.0.
+
+By contributing, you agree that your contributions will be licensed under the same license as the component you are contributing to.

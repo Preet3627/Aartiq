@@ -31,9 +31,9 @@ Aartiq/
 ## Version System
 
 ### Current Version
-- **Version:** `0.3.2` (alpha)
+- **Version:** `0.3.3` (stable)
 - **Codename:** Nebula
-- **Release Date:** 2026-07-10
+- **Release Date:** 2026-07-13
 
 ### Version Pattern
 - Format: `Major.Minor.Patch` (e.g., `0.2.7`)
@@ -507,8 +507,8 @@ export default function PageName() {
 | `src/components/docs/SearchModal.tsx` | Search UI |
 
 ### Important URLs
-- Website: https://aartiq.vercel.app
-- Docs: https://aartiq.vercel.app/docs
+- Website: https://aartiq.ponsrischool.in
+- Docs: https://aartiq.ponsrischool.in/docs
 - GitHub: https://github.com/Preet3627/Aartiq
 - Releases: https://github.com/Preet3627/Aartiq/releases
 
@@ -526,5 +526,5 @@ export default function PageName() {
 
 ---
 
-*Last Updated: 2026-07-10*
+*Last Updated: 2026-07-13*
 *For AI code writers - maintain consistency and update all related files*
