@@ -38,46 +38,72 @@ const configureStartupSwitches = () => {
 configureStartupSwitches();
 
 const isPackaged = app.isPackaged;
-if (isPackaged && process.platform === 'darwin') {
-  appendStartupSwitch('disable-gpu');
-  appendStartupSwitch('disable-software-rasterizer');
-}
 
-const { mcpManager } = require('./src/lib/mcp-server-registry.js');
+let mcpManager;
+try {
+  ({ mcpManager } = require('./src/lib/mcp-server-registry.js'));
+} catch (e) {
+  console.warn('[Main] mcp-server-registry failed to load:', e.message);
+}
 const QRCode = require('qrcode');
 const contextMenuRaw = require('electron-context-menu');
 const contextMenu = contextMenuRaw.default || contextMenuRaw;
 const fs = require('fs');
-const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
-const PptxGenJS = require('pptxgenjs');
-const {
-  Document,
-  Packer,
-  Paragraph,
-  HeadingLevel,
-  TextRun,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  ImageRun,
-  PageNumber,
-  Header,
-  Footer,
-  BorderStyle,
-  VerticalAlign,
-  AlignmentType,
-  PageOrientation,
-} = require('docx');
+
+let PDFDocument, rgb, StandardFonts;
+try {
+  ({ PDFDocument, rgb, StandardFonts } = require('pdf-lib'));
+} catch (e) {
+  console.warn('[Main] pdf-lib failed to load:', e.message);
+}
+
+let PptxGenJS;
+try {
+  PptxGenJS = require('pptxgenjs');
+} catch (e) {
+  console.warn('[Main] pptxgenjs failed to load:', e.message);
+}
+
+let Document, Packer, Paragraph, HeadingLevel, TextRun, Table, TableRow, TableCell,
+  WidthType, ImageRun, PageNumber, Header, Footer, BorderStyle, VerticalAlign,
+  AlignmentType, PageOrientation;
+try {
+  ({
+    Document, Packer, Paragraph, HeadingLevel, TextRun, Table, TableRow, TableCell,
+    WidthType, ImageRun, PageNumber, Header, Footer, BorderStyle, VerticalAlign,
+    AlignmentType, PageOrientation,
+  } = require('docx'));
+} catch (e) {
+  console.warn('[Main] docx failed to load:', e.message);
+}
+
 const path = require('path');
 const os = require('os');
 const { spawn, exec, execSync, spawnSync } = require('child_process');
 const { randomBytes, createCipheriv, createDecipheriv, randomUUID } = require('crypto');
 const Store = require('electron-store');
 const store = new Store();
-const { createWorker } = require('tesseract.js');
-const screenshot = require('screenshot-desktop');
-const Jimp = require('jimp');
+
+let createWorker;
+try {
+  ({ createWorker } = require('tesseract.js'));
+} catch (e) {
+  console.warn('[Main] tesseract.js failed to load:', e.message);
+}
+
+let screenshot;
+try {
+  screenshot = require('screenshot-desktop');
+} catch (e) {
+  console.warn('[Main] screenshot-desktop failed to load:', e.message);
+}
+
+let Jimp;
+try {
+  Jimp = require('jimp');
+} catch (e) {
+  console.warn('[Main] jimp failed to load:', e.message);
+}
 const util = require('util');
 const execPromise = util.promisify(exec);
 const AUTH_SESSION_KEY = 'secure_auth_session_v1';
@@ -217,15 +243,19 @@ const { getP2PSync } = require('./src/lib/P2PFileSyncService.js'); // Import the
 const { getWiFiSync } = require('./src/lib/WiFiSyncService.js');
 
 // ERROR-PROOFING: Global error handlers for uncaught exceptions
+// Only exit the process for truly fatal errors; log and continue for recoverable ones
+// so that a single bad require() or module init doesn't instantly kill the app.
+let _exceptionCount = 0;
 process.on('uncaughtException', (error) => {
-  console.error('[MAIN] Uncaught Exception:', error.message, error.stack);
-  // Attempt graceful shutdown before exiting
-  try {
-    app.quit();
-  } catch (e) {
-    // app.quit() may fail if app isn't fully initialized
+  _exceptionCount++;
+  console.error(`[MAIN] Uncaught Exception (#${_exceptionCount}):`, error.message, error.stack);
+  // If the app is already running, keep it alive — the error is likely in a
+  // non-critical service (StoreKit, Siri Shortcuts bridge, etc.)
+  if (_exceptionCount > 5) {
+    console.error('[MAIN] Too many uncaught exceptions — forcing exit');
+    try { app.quit(); } catch (e) {}
+    process.exit(1);
   }
-  process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -1083,39 +1113,48 @@ const startNativeMacUiBridge = () => {
       if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'Missing or invalid prompt field' });
       }
-      // Forward to renderer for UI sync (best-effort if sidebar is open)
-      deliverNativeMacUiEvent('native-mac-ui-submit-prompt', { prompt: prompt.slice(0, 32000), source })
-        .catch(() => {});
-      // Optimistically add user message to state so the Swift panel's immediate
-      // refreshState() poll sees it instead of overwriting the optimistic message
       appendNativeMacUiMessage({ role: 'user', content: prompt.slice(0, 16000) });
       nativeMacUiState.isLoading = true;
       nativeMacUiState.updatedAt = Date.now();
       res.json({ received: true });
 
-      // Handle the LLM call directly in main.js so Swift works even without the
-      // Electron AI sidebar being open. The response is appended to the bridge
-      // state where Swift picks it up via polling.
-      const activeProvider = activeLlmProvider || llmProviders[0]?.id || 'google';
-      const systemMsg = 'You are Aartiq, a helpful AI assistant with system automation capabilities. Respond conversationally and helpfully.';
-      AiGateway.generate(
-        [{ role: 'system', content: systemMsg }, { role: 'user', content: prompt.slice(0, 16000) }],
-        { provider: activeProvider, skipTools: true }
-      ).then((result) => {
-        if (result && result.text) {
-          appendNativeMacUiMessage({ role: 'model', content: result.text.slice(0, 16000) });
-        } else if (result && result.error) {
-          appendNativeMacUiMessage({ role: 'model', content: `Error: ${result.error}` });
-          nativeMacUiState.error = result.error;
+      // Forward to renderer for full-power AI processing (PDF, navigation, research, tools).
+      // The renderer's AIChatSidebar only receives this if it is mounted (sidebar open).
+      // We track whether the renderer picked it up by watching the updatedAt timestamp.
+      const preUpdateAt = nativeMacUiState.updatedAt;
+      deliverNativeMacUiEvent('native-mac-ui-submit-prompt', { prompt: prompt.slice(0, 32000), source })
+        .catch(() => {});
+
+      // Wait 5 seconds for the renderer sidebar to pick up the prompt.
+      // If the renderer processes it, it will call updateNativeMacUiState which
+      // updates nativeMacUiState. If nothing changes after 5s, fall back to
+      // the dumb AiGateway (no tools, no PDF, no navigation).
+      const RENDERER_PICKUP_MS = 5000;
+      const rendererFallbackTimer = setTimeout(() => {
+        if (nativeMacUiState.updatedAt <= preUpdateAt || nativeMacUiState.isLoading) {
+          console.log('[NativeMacBridge] Renderer sidebar did not pick up prompt, falling back to AiGateway');
+          const activeProvider = activeLlmProvider || llmProviders[0]?.id || 'google';
+          const systemMsg = 'You are Aartiq, a helpful AI assistant with system automation capabilities. Respond conversationally and helpfully.';
+          AiGateway.generate(
+            [{ role: 'system', content: systemMsg }, { role: 'user', content: prompt.slice(0, 16000) }],
+            { provider: activeProvider, skipTools: true }
+          ).then((result) => {
+            if (result && result.text) {
+              appendNativeMacUiMessage({ role: 'model', content: result.text.slice(0, 16000) });
+            } else if (result && result.error) {
+              appendNativeMacUiMessage({ role: 'model', content: `Error: ${result.error}` });
+              nativeMacUiState.error = result.error;
+            }
+            nativeMacUiState.isLoading = false;
+            nativeMacUiState.updatedAt = Date.now();
+          }).catch((err) => {
+            appendNativeMacUiMessage({ role: 'model', content: `Error: ${err.message}` });
+            nativeMacUiState.isLoading = false;
+            nativeMacUiState.error = err.message;
+            nativeMacUiState.updatedAt = Date.now();
+          });
         }
-        nativeMacUiState.isLoading = false;
-        nativeMacUiState.updatedAt = Date.now();
-      }).catch((err) => {
-        appendNativeMacUiMessage({ role: 'model', content: `Error: ${err.message}` });
-        nativeMacUiState.isLoading = false;
-        nativeMacUiState.error = err.message;
-        nativeMacUiState.updatedAt = Date.now();
-      });
+      }, RENDERER_PICKUP_MS);
     });
 
     bridgeApp.get('/native-mac-ui/state', (_req, res) => {
@@ -1333,6 +1372,323 @@ const startNativeMacUiBridge = () => {
       const result = await llmGenerateHandler(messages, { provider: activeLlmProvider || 'google', skipTools: true });
       if (result.error) return res.json({ error: result.error });
       res.json({ results: [{ title: 'Search Result', url: '', snippet: result.text || '' }] });
+    });
+
+    // ── Sidebar control ──
+
+    bridgeApp.post('/native-mac-ui/sidebar/open', (_req, res) => {
+      const target = getTopWindow();
+      if (target && !target.isDestroyed()) {
+        if (!target.isVisible()) target.show();
+        target.focus();
+        target.webContents.send('execute-shortcut', 'open-ai-chat');
+      }
+      res.json({ opened: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/sidebar/close', (_req, res) => {
+      const target = getTopWindow();
+      if (target && !target.isDestroyed()) {
+        target.webContents.send('execute-shortcut', 'toggle-sidebar');
+      }
+      res.json({ closed: true });
+    });
+
+    bridgeApp.post('/native-mac-ui/sidebar/toggle', (_req, res) => {
+      const target = getTopWindow();
+      if (target && !target.isDestroyed()) {
+        target.webContents.send('execute-shortcut', 'toggle-sidebar');
+      }
+      res.json({ toggled: true });
+    });
+
+    // ── Execute shortcut ──
+
+    bridgeApp.post('/native-mac-ui/execute-shortcut', (req, res) => {
+      const { action } = req.body || {};
+      if (!action) return res.status(400).json({ error: 'Missing action' });
+      triggerShortcut(action);
+      res.json({ executed: action });
+    });
+
+    // ── Bookmarks (delegated to renderer Zustand store via IPC) ──
+
+    bridgeApp.get('/native-mac-ui/bookmarks', async (_req, res) => {
+      try {
+        const target = getTopWindow();
+        if (!target || target.isDestroyed()) {
+          return res.json({ bookmarks: [] });
+        }
+        const bookmarks = await target.webContents.executeJavaScript(
+          'window.__GET_BOOKMARKS__ ? window.__GET_BOOKMARKS__() : null'
+        ).catch(() => null);
+        if (bookmarks) return res.json({ bookmarks });
+
+        const storeBookmarks = store.get('bookmarks');
+        if (Array.isArray(storeBookmarks)) return res.json({ bookmarks: storeBookmarks });
+        res.json({ bookmarks: [] });
+      } catch (e) {
+        res.json({ bookmarks: [], error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/bookmarks/add', (req, res) => {
+      const { url, title } = req.body || {};
+      if (!url) return res.status(400).json({ error: 'Missing url' });
+      deliverNativeMacUiEvent('execute-shortcut', 'open-bookmarks').catch(() => {});
+      const bookmarks = store.get('bookmarks') || [];
+      const newBookmark = { id: `bookmark-${Date.now()}`, url, title: title || url };
+      if (!bookmarks.find(b => b.url === url)) {
+        bookmarks.push(newBookmark);
+        store.set('bookmarks', bookmarks);
+      }
+      res.json({ added: newBookmark });
+    });
+
+    bridgeApp.delete('/native-mac-ui/bookmarks/remove', (req, res) => {
+      const { url } = req.body || {};
+      if (!url) return res.status(400).json({ error: 'Missing url' });
+      let bookmarks = store.get('bookmarks') || [];
+      bookmarks = bookmarks.filter(b => b.url !== url);
+      store.set('bookmarks', bookmarks);
+      res.json({ removed: url, remaining: bookmarks.length });
+    });
+
+    // ── History (delegated to renderer) ──
+
+    bridgeApp.get('/native-mac-ui/history', async (req, res) => {
+      try {
+        const target = getTopWindow();
+        const limit = parseInt(req.query.limit) || 50;
+        if (!target || target.isDestroyed()) {
+          return res.json({ history: [] });
+        }
+        const history = await target.webContents.executeJavaScript(
+          `window.__GET_HISTORY__ ? window.__GET_HISTORY__(${limit}) : null`
+        ).catch(() => null);
+        if (history) return res.json({ history });
+        res.json({ history: [] });
+      } catch (e) {
+        res.json({ history: [], error: e.message });
+      }
+    });
+
+    bridgeApp.delete('/native-mac-ui/history/clear', (_req, res) => {
+      const target = getTopWindow();
+      if (target && !target.isDestroyed()) {
+        target.webContents.send('execute-shortcut', 'clear-history');
+      }
+      res.json({ cleared: true });
+    });
+
+    // ── Settings (read/update via electron-store) ──
+
+    bridgeApp.get('/native-mac-ui/settings', (_req, res) => {
+      try {
+        const allSettings = store.store;
+        const safeSettings = {};
+        const sensitiveKeys = ['openai_api_key', 'gemini_api_key', 'anthropic_api_key', 'groq_api_key', 'xai_api_key', 'azure_openai_api_key', 'secure_auth_session_v1'];
+        for (const [key, value] of Object.entries(allSettings)) {
+          if (sensitiveKeys.some(sk => key.includes(sk))) {
+            safeSettings[key] = value ? '***SET***' : null;
+          } else {
+            safeSettings[key] = value;
+          }
+        }
+        res.json({ settings: safeSettings });
+      } catch (e) {
+        res.json({ settings: {}, error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/settings/update', (req, res) => {
+      const updates = req.body || {};
+      if (typeof updates !== 'object' || Object.keys(updates).length === 0) {
+        return res.status(400).json({ error: 'Empty updates' });
+      }
+      for (const [key, value] of Object.entries(updates)) {
+        store.set(key, value);
+      }
+      res.json({ updated: Object.keys(updates) });
+    });
+
+    // ── Permissions ──
+
+    bridgeApp.get('/native-mac-ui/permissions', (_req, res) => {
+      try {
+        const permStorePath = require('path').join(app.getPath('userData'), 'comet-permissions.json');
+        const secSettingsPath = require('path').join(app.getPath('userData'), 'comet-security-settings.json');
+        let permissions = {};
+        let securitySettings = {};
+        if (fs.existsSync(permStorePath)) {
+          permissions = JSON.parse(fs.readFileSync(permStorePath, 'utf-8'));
+        }
+        if (fs.existsSync(secSettingsPath)) {
+          securitySettings = JSON.parse(fs.readFileSync(secSettingsPath, 'utf-8'));
+        }
+        res.json({ permissions, securitySettings });
+      } catch (e) {
+        res.json({ permissions: {}, securitySettings: {}, error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/permissions/grant', (req, res) => {
+      const { key, level, description } = req.body || {};
+      if (!key) return res.status(400).json({ error: 'Missing key' });
+      try {
+        const permStorePath = require('path').join(app.getPath('userData'), 'comet-permissions.json');
+        let permissions = {};
+        if (fs.existsSync(permStorePath)) {
+          permissions = JSON.parse(fs.readFileSync(permStorePath, 'utf-8'));
+        }
+        permissions[key] = { level: level || 'read', description: description || '', granted_at: Date.now() };
+        fs.writeFileSync(permStorePath, JSON.stringify(permissions, null, 2));
+        res.json({ granted: key });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/permissions/revoke', (req, res) => {
+      const { key } = req.body || {};
+      if (!key) return res.status(400).json({ error: 'Missing key' });
+      try {
+        const permStorePath = require('path').join(app.getPath('userData'), 'comet-permissions.json');
+        let permissions = {};
+        if (fs.existsSync(permStorePath)) {
+          permissions = JSON.parse(fs.readFileSync(permStorePath, 'utf-8'));
+        }
+        delete permissions[key];
+        fs.writeFileSync(permStorePath, JSON.stringify(permissions, null, 2));
+        res.json({ revoked: key });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ── Automation / Scheduling ──
+
+    bridgeApp.post('/native-mac-ui/automation/create', async (req, res) => {
+      const task = req.body || {};
+      if (!task.name) return res.status(400).json({ error: 'Missing task name' });
+      try {
+        const target = getTopWindow();
+        if (!target || target.isDestroyed()) {
+          return res.status(500).json({ error: 'No browser window available' });
+        }
+        const result = await target.webContents.executeJavaScript(
+          `window.electronAPI?.scheduleTask?.(${JSON.stringify(task)})`
+        ).catch(e => ({ error: e.message }));
+        res.json({ created: true, result });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    bridgeApp.get('/native-mac-ui/automation/tasks', async (_req, res) => {
+      try {
+        const target = getTopWindow();
+        if (!target || target.isDestroyed()) {
+          return res.json({ tasks: [] });
+        }
+        const result = await target.webContents.executeJavaScript(
+          'window.electronAPI?.getScheduledTasks?.()'
+        ).catch(() => null);
+        res.json({ tasks: result?.tasks || result || [] });
+      } catch (e) {
+        res.json({ tasks: [], error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/automation/toggle', async (req, res) => {
+      const { taskId, enabled } = req.body || {};
+      if (!taskId) return res.status(400).json({ error: 'Missing taskId' });
+      try {
+        const target = getTopWindow();
+        if (!target || target.isDestroyed()) {
+          return res.status(500).json({ error: 'No browser window available' });
+        }
+        await target.webContents.executeJavaScript(
+          `window.electronAPI?.toggleScheduledTask?.("${taskId}", ${!!enabled})`
+        ).catch(() => {});
+        res.json({ toggled: taskId, enabled });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    bridgeApp.delete('/native-mac-ui/automation/delete', async (req, res) => {
+      const { taskId } = req.body || {};
+      if (!taskId) return res.status(400).json({ error: 'Missing taskId' });
+      try {
+        const target = getTopWindow();
+        if (!target || target.isDestroyed()) {
+          return res.status(500).json({ error: 'No browser window available' });
+        }
+        await target.webContents.executeJavaScript(
+          `window.electronAPI?.deleteScheduledTask?.("${taskId}")`
+        ).catch(() => {});
+        res.json({ deleted: taskId });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/automation/run', async (req, res) => {
+      const { taskId } = req.body || {};
+      if (!taskId) return res.status(400).json({ error: 'Missing taskId' });
+      try {
+        const target = getTopWindow();
+        if (!target || target.isDestroyed()) {
+          return res.status(500).json({ error: 'No browser window available' });
+        }
+        await target.webContents.executeJavaScript(
+          `window.electronAPI?.runScheduledTask?.("${taskId}")`
+        ).catch(() => {});
+        res.json({ run: taskId });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ── App Info ──
+
+    bridgeApp.get('/native-mac-ui/app-info', (_req, res) => {
+      res.json({
+        version: app.getVersion() || '1.0.0',
+        platform: process.platform,
+        arch: process.arch,
+        isPackaged: app.isPackaged,
+        productName: app.name || 'Aartiq',
+        features: {
+          aiChat: true,
+          browserAutomation: true,
+          pdfGeneration: true,
+          ocr: true,
+          screenVision: true,
+          robotAutomation: process.platform === 'darwin',
+          nativePanels: process.platform === 'darwin',
+          appleIntelligence: process.platform === 'darwin',
+          appleScript: process.platform === 'darwin',
+          powerShell: process.platform === 'win32',
+          scheduling: true,
+          cloudSync: true,
+          p2pSync: true,
+          wifiSync: true,
+          mcpServers: true,
+          pluginSystem: true,
+          youtubePlayer: true,
+          voiceService: true,
+          workflowRecorder: true,
+          vaultManager: true,
+          networkSecurity: true,
+          permissionManagement: true,
+          biometricAuth: process.platform === 'darwin',
+        },
+        activeLlmProvider: activeLlmProvider || 'none',
+        bridgePort: nativeMacUiPort,
+        isOnline: global.isOnline !== false,
+      });
     });
 
     nativeMacUiBridgeServer = bridgeApp.listen(nativeMacUiPort, '127.0.0.1', () => {
@@ -6128,7 +6484,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('get-app-icon-base64', async () => {
     try {
       const appPath = app.getAppPath();
-      const isPackaged = app.isPackaged;
+const isPackaged = app.isPackaged;
+if (isPackaged && process.platform === 'darwin') {
+  appendStartupSwitch('disable-gpu');
+}
       const candidates = isPackaged ? [
         path.join(appPath, 'assets', 'icon.png'),
         path.join(process.resourcesPath, 'app', 'assets', 'icon.png'),
