@@ -1,0 +1,39 @@
+{
+  "manifest_version": "0.3",
+  "name": "aartiq-mcp",
+  "display_name": "Aartiq Browser",
+  "version": "1.0.0",
+  "description": "AI-native browser with autonomous agent capabilities, local LLM support, OS automation, and cross-device sync. Provides browser control, web search, shell execution, PDF generation, and system automation tools.",
+  "long_description": "Aartiq is an open-source, AI-native browser with autonomous agent capabilities. This MCP server exposes 24 tools for browser automation, web search, shell command execution, PDF generation, application search, system controls (volume, brightness, alarms), AppleScript/PowerShell execution, and cross-device sync. All operations are permission-gated with a triple-lock security model.",
+  "author": {
+    "name": "Preet3627",
+    "url": "https://github.com/Preet3627"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Preet3627/Aartiq"
+  },
+  "homepage": "https://aartiq.ponsrischool.in",
+  "documentation": "https://aartiq.ponsrischool.in/docs",
+  "support": "https://github.com/Preet3627/Aartiq/issues",
+  "icon": "icon.png",
+  "license": "MIT",
+  "privacy_policies": ["https://aartiq.ponsrischool.in/privacy"],
+  "keywords": ["browser", "ai", "automation", "search", "agent", "pdf", "shell", "applescript"],
+  "tools_generated": true,
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"]
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=1.0.0",
+    "platforms": ["darwin", "win32"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

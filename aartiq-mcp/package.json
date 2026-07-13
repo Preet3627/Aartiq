@@ -1,0 +1,22 @@
+{
+  "name": "aartiq-mcp-server",
+  "version": "1.0.0",
+  "description": "Aartiq MCP Server - AI-native browser tools for Claude Desktop",
+  "main": "server/index.js",
+  "bin": {
+    "aartiq-mcp": "./server/index.js"
+  },
+  "keywords": ["mcp", "browser", "ai", "automation", "claude"],
+  "license": "MIT",
+  "author": "Preet3627",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Preet3627/Aartiq"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
