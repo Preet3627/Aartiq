@@ -181,226 +181,16 @@ struct ApprovalCard: View {
     var body: some View {
         let palette = PanelPalette(appearance: appearance)
         let isHighRisk = approval.risk == "high"
-        let hasQR = approval.highRiskQr != nil && !approval.highRiskQr!.isEmpty
 
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label(isHighRisk ? "SECURITY ALERT" : "PERMISSION REQUIRED", systemImage: isHighRisk ? "exclamationmark.triangle.fill" : "hand.raised.fill")
-                    .font(.system(size: 11, weight: .black, design: .rounded))
-                    .foregroundStyle(isHighRisk ? Color.red : Color.orange)
-                Spacer()
-                StatusPill(text: approval.risk.uppercased(), color: isHighRisk ? Color.red.opacity(0.8) : Color.orange.opacity(0.8))
-            }
-
-            if isMCPSource {
-                HStack(spacing: 6) {
-                    Image(systemName: "link.circle.fill")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.purple)
-                    Text("Claude Desktop via MCP")
-                        .font(.system(size: 10, weight: .bold, design: .rounded))
-                        .foregroundStyle(.purple.opacity(0.8))
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.purple.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-
-            if isDestructiveCommand {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.red)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("DESTRUCTIVE COMMAND")
-                            .font(.system(size: 9, weight: .black, design: .rounded))
-                            .foregroundStyle(.red)
-                        Text("This command can permanently destroy data. Mobile QR approval required.")
-                            .font(.system(size: 10, design: .rounded))
-                            .foregroundStyle(.red.opacity(0.7))
-                    }
-                }
-                .padding(10)
-                .background(Color.red.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(approval.reason)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(palette.primaryText)
-                
-                ScrollView(.horizontal, showsIndicators: false) {
-                    Text(approval.command)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(palette.primaryText)
-                        .padding(10)
-                        .background(Color.black.opacity(appearance == "light" ? 0.05 : 0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                }
-            }
-
-            if isHighRisk, let qrText = approval.highRiskQr {
-                VStack(spacing: 10) {
-                    Text("SCAN TO AUTHORIZE ON MOBILE")
-                        .font(.system(size: 9, weight: .black, design: .rounded))
-                        .foregroundStyle(Color.red.opacity(0.8))
-                        .tracking(1.2)
-                    
-                    if let image = generateQRCode(from: qrText) {
-                        Image(nsImage: image)
-                            .interpolation(.none)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 130, height: 130)
-                            .padding(8)
-                            .background(Color.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .shadow(color: .red.opacity(0.2), radius: 8)
-                    }
-                    
-                    if let pin = approval.expectedPin {
-                        VStack(spacing: 4) {
-                            Text("DEVICE PIN")
-                                .font(.system(size: 8, weight: .black, design: .rounded))
-                                .foregroundStyle(palette.secondaryText)
-                                .tracking(1.5)
-                            Text(pin)
-                                .font(.system(size: 20, weight: .black, design: .monospaced))
-                                .foregroundStyle(palette.primaryText)
-                                .tracking(6)
-                        }
-                    }
-
-                    if mobileApproved {
-                        HStack(spacing: 6) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.green)
-                            Text("Mobile Approval Received")
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundStyle(.green)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.green.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    } else {
-                        HStack(spacing: 6) {
-                            ProgressView()
-                                .controlSize(.tiny)
-                            Text("Waiting for mobile approval...")
-                                .font(.system(size: 10, weight: .bold, design: .rounded))
-                                .foregroundStyle(.orange)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color.orange.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(palette.mutedSurface)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            } else if isHighRisk {
-                HStack(spacing: 8) {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.orange)
-                    Text("This action modifies system files or settings. Device unlock is required.")
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(palette.secondaryText)
-                }
-                .padding(12)
-                .background(Color.orange.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-
-            if isHighRisk, hasQR {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("ENTER PIN TO CONFIRM")
-                        .font(.system(size: 9, weight: .black, design: .rounded))
-                        .foregroundStyle(palette.secondaryText)
-                        .tracking(1)
-                    TextField("6-digit PIN", text: $pinInput)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        .tracking(4)
-                        .multilineTextAlignment(.center)
-                        .padding(10)
-                        .background(Color.black.opacity(appearance == "light" ? 0.05 : 0.3))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(pinInput.isEmpty ? Color.clear : (isPinCorrect ? Color.green.opacity(0.5) : Color.red.opacity(0.5)), lineWidth: 1)
-                        )
-                        .focused($isPinFocused)
-                        .disabled(!mobileApproved)
-                        .onChange(of: pinInput) { _, newValue in
-                            pinInput = newValue.filter(\.isNumber)
-                        }
-                    if !pinInput.isEmpty && !isPinCorrect {
-                        Text("PIN does not match")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .foregroundStyle(.red.opacity(0.8))
-                    }
-                }
-            }
-
-            HStack(spacing: 10) {
-                Button {
-                    viewModel.respondToApproval(approval.requestId, allowed: false)
-                } label: {
-                    Text("Decline")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 11)
-                        .background(palette.mutedSurface)
-                        .foregroundStyle(palette.primaryText)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-                .buttonStyle(.plain)
-
-                Button {
-                    handleApproval(isHighRisk: isHighRisk)
-                } label: {
-                    HStack(spacing: 6) {
-                        if isProcessing {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else if isHighRisk {
-                            Image(systemName: mobileApproved ? "faceid" : "lock.shield")
-                        } else {
-                            Image(systemName: "checkmark")
-                        }
-                        Text(isProcessing ? "Verifying..." : approveButtonLabel)
-                    }
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(approveButtonColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-                .buttonStyle(.plain)
-                .disabled(isProcessing || !canApprove)
-            }
-
-            HStack(spacing: 4) {
-                Text("Press")
-                Text("Shift + Tab").font(.system(size: 9, weight: .black, design: .monospaced))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 2)
-                    .background(Color.white.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
-                Text("to quick-approve")
-                    .foregroundStyle(palette.secondaryText)
-            }
-            .font(.system(size: 9, design: .rounded))
-            .foregroundStyle(Color.white.opacity(0.3))
-            .frame(maxWidth: .infinity)
+            headerBar(isHighRisk: isHighRisk)
+            mcpBadge
+            destructiveWarning
+            commandDisplay(palette: palette)
+            highRiskSection(isHighRisk: isHighRisk, palette: palette)
+            pinInputSection(isHighRisk: isHighRisk, palette: palette)
+            actionButtons(isHighRisk: isHighRisk, palette: palette)
+            shortcutHint(palette: palette)
         }
         .padding(16)
         .background(
@@ -432,6 +222,246 @@ struct ApprovalCard: View {
                 dismissButton: .default(Text("OK")) { unlockError = nil }
             )
         }
+    }
+
+    private func headerBar(isHighRisk: Bool) -> some View {
+        HStack {
+            Label(isHighRisk ? "SECURITY ALERT" : "PERMISSION REQUIRED", systemImage: isHighRisk ? "exclamationmark.triangle.fill" : "hand.raised.fill")
+                .font(.system(size: 11, weight: .black, design: .rounded))
+                .foregroundStyle(isHighRisk ? Color.red : Color.orange)
+            Spacer()
+            StatusPill(text: approval.risk.uppercased(), color: isHighRisk ? Color.red.opacity(0.8) : Color.orange.opacity(0.8))
+        }
+    }
+
+    private var mcpBadge: some View {
+        Group {
+            if isMCPSource {
+                HStack(spacing: 6) {
+                    Image(systemName: "link.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.purple)
+                    Text("Claude Desktop via MCP")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(.purple.opacity(0.8))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.purple.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
+    }
+
+    private var destructiveWarning: some View {
+        Group {
+            if isDestructiveCommand {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.red)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("DESTRUCTIVE COMMAND")
+                            .font(.system(size: 9, weight: .black, design: .rounded))
+                            .foregroundStyle(.red)
+                        Text("This command can permanently destroy data. Mobile QR approval required.")
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundStyle(.red.opacity(0.7))
+                    }
+                }
+                .padding(10)
+                .background(Color.red.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    private func commandDisplay(palette: PanelPalette) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(approval.reason)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(palette.primaryText)
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(approval.command)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(palette.primaryText)
+                    .padding(10)
+                    .background(Color.black.opacity(appearance == "light" ? 0.05 : 0.3))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func highRiskSection(isHighRisk: Bool, palette: PanelPalette) -> some View {
+        if isHighRisk, let qrText = approval.highRiskQr {
+            VStack(spacing: 10) {
+                Text("SCAN TO AUTHORIZE ON MOBILE")
+                    .font(.system(size: 9, weight: .black, design: .rounded))
+                    .foregroundStyle(Color.red.opacity(0.8))
+                    .tracking(1.2)
+
+                if let image = generateQRCode(from: qrText) {
+                    Image(nsImage: image)
+                        .interpolation(.none)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 130, height: 130)
+                        .padding(8)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .shadow(color: .red.opacity(0.2), radius: 8)
+                }
+
+                if let pin = approval.expectedPin {
+                    VStack(spacing: 4) {
+                        Text("DEVICE PIN")
+                            .font(.system(size: 8, weight: .black, design: .rounded))
+                            .foregroundStyle(palette.secondaryText)
+                            .tracking(1.5)
+                        Text(pin)
+                            .font(.system(size: 20, weight: .black, design: .monospaced))
+                            .foregroundStyle(palette.primaryText)
+                            .tracking(6)
+                    }
+                }
+
+                if mobileApproved {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.green)
+                        Text("Mobile Approval Received")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(.green)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.green.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                } else {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Waiting for mobile approval...")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(.orange)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.orange.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(palette.mutedSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        } else if isHighRisk {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.orange)
+                Text("This action modifies system files or settings. Device unlock is required.")
+                    .font(.system(size: 11, design: .rounded))
+                    .foregroundStyle(palette.secondaryText)
+            }
+            .padding(12)
+            .background(Color.orange.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    @ViewBuilder
+    private func pinInputSection(isHighRisk: Bool, palette: PanelPalette) -> some View {
+        let hasQR = approval.highRiskQr != nil && !approval.highRiskQr!.isEmpty
+        if isHighRisk, hasQR {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("ENTER PIN TO CONFIRM")
+                    .font(.system(size: 9, weight: .black, design: .rounded))
+                    .foregroundStyle(palette.secondaryText)
+                    .tracking(1)
+                TextField("6-digit PIN", text: $pinInput)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .tracking(4)
+                    .multilineTextAlignment(.center)
+                    .padding(10)
+                    .background(Color.black.opacity(appearance == "light" ? 0.05 : 0.3))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(pinInput.isEmpty ? Color.clear : (isPinCorrect ? Color.green.opacity(0.5) : Color.red.opacity(0.5)), lineWidth: 1)
+                    )
+                    .focused($isPinFocused)
+                    .disabled(!mobileApproved)
+                    .onChange(of: pinInput) { _, newValue in
+                        pinInput = newValue.filter(\.isNumber)
+                    }
+                if !pinInput.isEmpty && !isPinCorrect {
+                    Text("PIN does not match")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(.red.opacity(0.8))
+                }
+            }
+        }
+    }
+
+    private func actionButtons(isHighRisk: Bool, palette: PanelPalette) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                viewModel.respondToApproval(approval.requestId, allowed: false)
+            } label: {
+                Text("Decline")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(palette.mutedSurface)
+                    .foregroundStyle(palette.primaryText)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                handleApproval(isHighRisk: isHighRisk)
+            } label: {
+                HStack(spacing: 6) {
+                    if isProcessing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else if isHighRisk {
+                        Image(systemName: mobileApproved ? "faceid" : "lock.shield")
+                    } else {
+                        Image(systemName: "checkmark")
+                    }
+                    Text(isProcessing ? "Verifying..." : approveButtonLabel)
+                }
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .background(approveButtonColor)
+                .foregroundStyle(.white)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .disabled(isProcessing || !canApprove)
+        }
+    }
+
+    private func shortcutHint(palette: PanelPalette) -> some View {
+        HStack(spacing: 4) {
+            Text("Press")
+            Text("Shift + Tab").font(.system(size: 9, weight: .black, design: .monospaced))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+            Text("to quick-approve")
+                .foregroundStyle(palette.secondaryText)
+        }
+        .font(.system(size: 9, design: .rounded))
+        .foregroundStyle(Color.white.opacity(0.3))
+        .frame(maxWidth: .infinity)
     }
 
     private var isPinCorrect: Bool {
