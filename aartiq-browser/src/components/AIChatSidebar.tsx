@@ -1159,9 +1159,9 @@ I couldn't schedule the task. The background service may not be running. Please 
         (async () => {
           try {
             const tabs: any[] = await window.electronAPI.getOpenTabs();
-            const activeTab = tabs.find(t => t.active) || tabs[0];
+            const activeTab = tabs.find(t => t.id === store.activeTabId) || tabs[0];
             if (tabs.length > 0) {
-              return `[BROWSER STATE]\n- ACTIVE TAB: ${activeTab?.title || 'Unknown'} (${activeTab?.url || currentUrl || 'N/A'})\n- OPEN TABS (${tabs.length}):\n${tabs.map((t, idx) => `  ${idx + 1}. ${t.title} (${t.url}) ${t.active ? '[ACTIVE]' : ''}`).join('\n')}`;
+              return `[BROWSER STATE]\n- ACTIVE TAB: ${activeTab?.title || 'Unknown'} (${activeTab?.url || currentUrl || 'N/A'})\n- OPEN TABS (${tabs.length}):\n${tabs.map((t, idx) => `  ${idx + 1}. ${t.title} (${t.url}) ${t.id === store.activeTabId ? '[ACTIVE]' : ''}`).join('\n')}`;
             }
           } catch { return ''; }
           return '';          
@@ -1831,6 +1831,7 @@ I couldn't schedule the task. The background service may not be running. Please 
 
           // Use structured params if available, fallback to pipe parsing
           let query = getCmdParam(command as any, 'query') || cleanCmdValue(command as any) || rawValue;
+          const originalQuery = query;
           const pagesOverride = getCmdParamInt(command as any, 'pages') || null;
           const specificUrlParam = getCmdParam(command as any, 'url') || null;
           let specificUrl: string | null = null;
@@ -2226,7 +2227,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           if (tabs.length === 0) {
             output = 'No open tabs.';
           } else {
-            output = `Open tabs (${tabs.length}):\n${tabs.map((t, i) => `${i + 1}. ${t.title || 'Untitled'} (id: ${t.id}) ${t.active ? '[ACTIVE]' : ''}\n   URL: ${t.url}`).join('\n')}`;
+            output = `Open tabs (${tabs.length}):\n${tabs.map((t, i) => `${i + 1}. ${t.title || 'Untitled'} (id: ${t.id}) ${t.id === store.activeTabId ? '[ACTIVE]' : ''}\n   URL: ${t.url}`).join('\n')}`;
           }
           break;
         }
@@ -2236,7 +2237,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           const tabs = store.tabs;
           if (!rawTarget) {
             // No ID given — switch to active tab or first tab
-            const activeTab = tabs.find(t => t.active) || tabs[0];
+            const activeTab = tabs.find(t => t.id === store.activeTabId) || tabs[0];
             if (activeTab) {
               store.setActiveTabId(activeTab.id);
               setActiveView('browser');
@@ -3607,11 +3608,11 @@ I couldn't schedule the task. The background service may not be running. Please 
             const searchTerm = playQuery || playTitle || command.value.trim();
             if (searchTerm) {
               const ytRes = await window.electronAPI.webSearchYoutube(searchTerm, 1);
-              if (ytRes?.success && ytRes.results?.length > 0) {
-                const first = ytRes.results[0];
+              if (ytRes?.success && (ytRes.results?.length ?? 0) > 0) {
+                const first = ytRes.results![0];
                 const urlObj = new URL(first.url);
                 playVideoId = urlObj.searchParams.get('v') || '';
-                if (!playVideoId && first.id) playVideoId = first.id;
+                if (!playVideoId && first.videoId) playVideoId = first.videoId;
                 if (playVideoId) output = `Found video: ${first.title} - playing...`;
               }
             }
@@ -3659,15 +3660,16 @@ I couldn't schedule the task. The background service may not be running. Please 
           const videoCount = getCmdParamInt(command as any, 'count') || parseInt(cmdParams.count || '1') || 1;
           try {
             const ytRes = await window.electronAPI.webSearchYoutube(videoQuery, Math.max(videoCount, 5));
-            if (ytRes?.success && ytRes.results?.length > 0) {
-              const toPlay = ytRes.results.slice(0, videoCount);
+            if (ytRes?.success && (ytRes.results?.length ?? 0) > 0) {
+              const results = ytRes.results!;
+              const toPlay = results.slice(0, videoCount);
               for (const vid of toPlay) {
                 const watchUrl = vid.url;
                 store.addTab(watchUrl);
                 window.electronAPI?.createView?.({ tabId: `yt-${Date.now()}`, url: watchUrl });
               }
               setActiveView('browser');
-              const videoCards = ytRes.results.map((v: any, i: number) =>
+              const videoCards = results.map((v: any, i: number) =>
                 `**${i + 1}. ${v.title}**\n🔗 ${v.url}\n⏱ ${v.length || 'N/A'} | ${v.channel || 'Unknown'}\n📝 ${v.snippet || ''}`
               ).join('\n\n');
               const first = toPlay[0];
@@ -3688,7 +3690,7 @@ I couldn't schedule the task. The background service may not be running. Please 
                 };
                 return updated;
               });
-              output = `Found ${ytRes.results.length} videos for "${videoQuery}". Playing top ${toPlay.length} result${toPlay.length > 1 ? 's' : ''}.\n${videoCards}`;
+              output = `Found ${results.length} videos for "${videoQuery}". Playing top ${toPlay.length} result${toPlay.length > 1 ? 's' : ''}.\n${videoCards}`;
             } else {
               output = `No YouTube videos found for "${videoQuery}".`;
             }
@@ -3725,7 +3727,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           try {
             const searchResults = await window.electronAPI.webSearchRag('latest technology news today 2026');
             if (searchResults && searchResults.length > 0) {
-              newsResults = searchResults.slice(0, 3).map((r: string, i: number) => `${i + 1}. ${r}`).join('\n');
+              newsResults = searchResults.slice(0, 3).map((r: any, i: number) => `${i + 1}. ${r.title || r}`).join('\n');
               setMessages(prev => [...prev, { role: 'model', content: `✅ **News Search Complete:**\n${newsResults}` }]);
             }
           } catch (e) {
@@ -3769,7 +3771,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           setMessages(prev => [...prev, { role: 'model', content: "🌐 **Task 4: Browser Navigation**\nNavigating to Aartiq website..." }]);
           await new Promise(resolve => setTimeout(resolve, 800));
           try {
-            await window.electronAPI.navigate('https://aartiq.com');
+            await window.electronAPI.navigateTo('https://aartiq.com');
             setMessages(prev => [...prev, { role: 'model', content: "✅ **Browser navigated to aartiq.com** — Real browser interaction working" }]);
           } catch (e) {
             setMessages(prev => [...prev, { role: 'model', content: "ℹ️ Browser navigation available via API" }]);
@@ -3820,7 +3822,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           await new Promise(resolve => setTimeout(resolve, 800));
           try {
             const versionResult = await window.electronAPI.getVersion();
-            const versionStr = typeof versionResult === 'string' ? versionResult : versionResult?.version || versionLabel;
+            const versionStr = typeof versionResult === 'string' ? versionResult : versionLabel;
             setMessages(prev => [...prev, { role: 'model', content: `✅ **System info retrieved:** Aartiq ${versionStr} — Running on ${isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux'}` }]);
           } catch (e) {
             setMessages(prev => [...prev, { role: 'model', content: `✅ **Platform detected:** ${isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux'} — File system access ready` }]);

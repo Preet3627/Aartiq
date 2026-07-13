@@ -124,6 +124,8 @@ const PermissionSettings = () => {
             nextSettings.requireDeviceUnlockForVaultAccess !== false,
           requireBiometricPerSession:
             nextSettings.requireBiometricPerSession !== false,
+          requireBiometricEveryTime:
+            (nextSettings as any).requireBiometricEveryTime === true,
           autoApprovedCommands: Array.isArray(nextSettings.autoApprovedCommands)
             ? nextSettings.autoApprovedCommands.map((command) => normalizeCommandKey(command))
             : [],
@@ -144,7 +146,7 @@ const PermissionSettings = () => {
   }, []);
 
   const updateSetting = async (
-    key: 'autoApproveLowRisk' | 'autoApproveMidRisk' | 'requireDeviceUnlockForManualApproval' | 'requireDeviceUnlockForVaultAccess' | 'requireBiometricPerSession',
+    key: 'autoApproveLowRisk' | 'autoApproveMidRisk' | 'requireDeviceUnlockForManualApproval' | 'requireDeviceUnlockForVaultAccess' | 'requireBiometricPerSession' | 'requireBiometricEveryTime',
     value: boolean
   ) => {
     const previous = settings;

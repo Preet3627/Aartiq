@@ -78,7 +78,7 @@ const UpdatesSettings = () => {
     try {
       if (window.electronAPI) {
         const version = await window.electronAPI.getVersion();
-        if (version) setCurrentVersion(typeof version === 'string' ? version : version.version);
+        if (version) setCurrentVersion(typeof version === 'string' ? version : String(version));
       }
       await fetchReleases();
     } catch (err) {

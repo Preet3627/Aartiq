@@ -67,7 +67,7 @@ const LandingPage = () => {
 
     const getFirebaseConfig = async (): Promise<Record<string, string>> => {
         const stored = firebaseConfigStorage.load();
-        if (stored) return stored;
+        if (stored) return stored as unknown as Record<string, string>;
         try {
             const res = await fetch('/api/config');
             const data = await res.json();

@@ -572,6 +572,25 @@ declare global {
             mcpApprovalRespond: (requestId: string, allowed: boolean) => Promise<{ success: boolean; error?: string }>;
             mcpApprovalStatus: () => Promise<{ pending: Array<{ requestId: string }> }>;
 
+            // File Selection
+            selectLocalFile: (options?: { filters?: Array<{ name: string; extensions: string[] }>; properties?: Array<'openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles' | 'createDirectory' | 'promptToCreate' | 'noResolveAliases' | 'treatPackageAsDirectory' | 'dontAddToRecent'> }) => Promise<string | null>;
+
+            // Password Vault
+            vaultListEntries: () => Promise<{ success: boolean; entries?: Array<{ id: string; site: string; url?: string; username: string; hasPassword: boolean; passwordMasked: string; type?: 'login' | 'form' | 'note'; title?: string; created?: string | null; formData?: Array<{ label: string; value: string; name: string }> }>; error?: string }>;
+            vaultSaveEntry: (entry: { id?: string; url?: string; site?: string; username?: string; password: string; name?: string; type?: string; title?: string; formData?: Array<{ label: string; value: string; name: string }> }) => Promise<{ success: boolean; entries?: Array<{ id: string; site: string; url?: string; username: string; hasPassword: boolean; passwordMasked: string; type?: 'login' | 'form' | 'note'; title?: string; created?: string | null; formData?: Array<{ label: string; value: string; name: string }> }>; error?: string }>;
+            vaultDeleteEntry: (entryId: string) => Promise<{ success: boolean; entries?: Array<{ id: string; site: string; url?: string; username: string; hasPassword: boolean; passwordMasked: string; type?: 'login' | 'form' | 'note'; title?: string; created?: string | null; formData?: Array<{ label: string; value: string; name: string }> }>; error?: string }>;
+            vaultReadSecret: (entryId: string) => Promise<{ success: boolean; password?: string; entry?: { id: string; url: string; username: string; password: string }; error?: string }>;
+            vaultCopySecret: (entryId: string) => Promise<{ success: boolean; error?: string }>;
+            proposePasswordSave: (data: any) => void;
+            onShowPasswordSaveDialog: (callback: (data: any) => void) => () => void;
+
+            // JavaScript Execution
+            executeJavaScript: (code: string) => Promise<any>;
+
+            // Ollama Model Management
+            pullOllamaModel: (model: string, callback: (data: any) => void) => () => void;
+            importOllamaModel: (data: any) => Promise<{ success: boolean; error?: string }>;
+
         };
     }
 }

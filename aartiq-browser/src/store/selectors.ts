@@ -49,6 +49,7 @@ export const selectAIChatSidebarStore = (state: BrowserState) => ({
   anthropicModel: state.anthropicModel,
   groqModel: state.groqModel,
   xaiModel: state.xaiModel,
+  setActiveTabId: state.setActiveTabId,
   macNativeSidebarAutoMinimize: state.macNativeSidebarAutoMinimize,
   enableAiPreferenceLearning: state.enableAiPreferenceLearning,
   enableCrossSessionMemory: state.enableCrossSessionMemory,

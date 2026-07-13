@@ -180,7 +180,7 @@ export function useAIActionSecurityManager() {
           const authResult = await window.electronAPI.authenticateBiometric(
             `Verify identity: ${input.action}`
           );
-          return { ...input, actionType, risk, autoApproved: !!authResult?.success as const };
+          return { ...input, actionType, risk, autoApproved: !!authResult?.success };
         }
         if (settings?.requireBiometricPerSession && !biometricVerifiedRef.current && window.electronAPI?.authenticateBiometric) {
           const authResult = await window.electronAPI.authenticateBiometric(
