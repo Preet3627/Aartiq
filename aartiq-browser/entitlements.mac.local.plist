@@ -31,19 +31,5 @@
     <true/>
     <key>com.apple.security.device.bluetooth</key>
     <true/>
-    <key>com.apple.private.tcc.manager</key>
-    <true/>
-    <key>com.apple.private.tcc.manager.check-by-audit-token</key>
-    <true/>
-    <key>com.apple.security.tcc.attributions</key>
-    <true/>
-    <key>keychain-access-groups</key>
-    <array>
-      <string>$(AppIdentifierPrefix)com.latestinssan.aartiqbrowser.webauthn</string>
-    </array>
-    <key>com.apple.developer.associated-domains</key>
-    <array>
-      <string>webcredentials:aartiq-three.vercel.app</string>
-    </array>
   </dict>
 </plist>
