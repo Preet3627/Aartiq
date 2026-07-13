@@ -1,170 +1,64 @@
 # Aartiq Browser
 
-**Website:** https://aartiq.vercel.app
+**Website:** https://aartiq.ponsrischool.in | **Docs:** https://aartiq.ponsrischool.in/docs
 
-Aartiq is an AI-native browser that can browse the web, understand your context, automate desktop tasks, and safely interact with your operating system through permission-gated actions.
+Aartiq is an AI-native browser that understands your intent, automates your workflows, and interacts with your operating system — all through natural language, with every action permission-gated before execution.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
+[![MCP Server: MIT](https://img.shields.io/badge/MCP_Server-License%3A_MIT-green.svg)](aartiq-mcp/LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blue)]()
-[![Version](https://img.shields.io/badge/Version-0.3.2-blue)]()
+[![Version](https://img.shields.io/badge/Version-0.3.3-blue)]()
 [![Downloads](https://img.shields.io/github/downloads/Preet3627/Aartiq/total?color=success&label=Total%20Downloads)](https://github.com/Preet3627/Aartiq/releases)
-[![Downloads Latest](https://img.shields.io/github/downloads/Preet3627/Aartiq/v0.3.2/total?color=blue&label=Downloads%20(v0.3.2))](https://github.com/Preet3627/Aartiq/releases/tag/v0.3.2)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Download-blue?logo=microsoft)](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN)
-
-
-
 
 <img width="1512" height="1012" alt="image" src="https://github.com/user-attachments/assets/f289221f-4d40-451a-94bc-bf4392f28145" />
 
+---
 
-## Features
+## What Aartiq Actually Does
 
-### AI Agent
-- Multi-step autonomous task execution via chained commands
-- RAG using local vector memory with **cross-session persistence** (opt-in privacy toggle)
-- **AI User Preference Auto-Learning** — AI detects and remembers user preferences (response style, language, behavior) with opt-in privacy control
-- **SAVE_PREFERENCE** command for AI-driven preference storage
-- Hybrid context: browser history + live web search + past conversation RAG
-- `<think>` tag parsing for chain-of-thought models
-- Agentic control: CLICK, FILL_FORM, SCROLL, COORDINATE interaction
-- Multi-format command parsing (JSON, bracket `[CMD]:`, HTML comments)
+### Talk to Your Browser
 
-### Browser
-- Chromium-based browsing via Electron BrowserView
-- Tab management with groups
-- Secure DOM extraction with PII scrubbing
-- In-page DOM search
-- OCR-based screen reading (Tesseract.js)
-- Built-in ad blocker
-- **Compact toolbar navigation** — three-dot tools menu for quick access to Passwords, Coding, PDF Tools, Media Studio, and more
+Aartiq has a built-in AI chat sidebar. You describe what you want in plain language — "find the cheapest flight to Tokyo next week and generate a comparison PDF" — and Aartiq's autonomous agent breaks it into steps, navigates pages, fills forms, extracts data, and produces the document. You watch it happen. Every potentially destructive action pops up an approval dialog first.
 
-### Background Scheduling & Automation
-- Natural language scheduling ("schedule PDF at 8am daily")
-- Cron expression support
-- Background service runs tasks when browser is closed
-- Desktop and mobile notifications
+The AI supports your own API keys (OpenAI, Anthropic, Google Gemini, Groq, xAI) or runs entirely offline with Ollama. No data leaves your machine unless you choose to use a cloud provider.
 
-### Document Generation
-- PDF generation with templates (professional, executive, dark, minimalist)
-- Excel (XLSX) and PowerPoint (PPTX) generation
-- Mermaid diagram to PDF/PNG conversion
-- Charts and watermarks
+### Search the Web Without API Keys
 
-### Platform Integration
-- **macOS**: Updated app icon, Siri Shortcuts native Swift bridge (rebranded to Aartiq), Apple Intelligence bridge, native Swift panels, Raycast extension
-- **Windows**: Native title bar controls (minimize/maximize/close), URL scheme, voice control, Microsoft Copilot companion, Power Automate
-- **Linux**: GNOME/KDE detection, espeak TTS, desktop notifications
+Aartiq's `web_search` tool opens a real browser, performs the search on DuckDuckGo or Google, navigates to the top results, reads their content, and returns structured results with titles, URLs, snippets, and full page text. No API keys. No rate limits. No third-party services.
 
-### Mobile App (Flutter)
-- WiFi sync with desktop
-- Remote desktop control (AI Chat, Shell, Click, Type, Screenshot)
-- Push notifications
-- PDF viewer
-- Automation dashboard
+### Automate Your Desktop
 
-### Security
-- Triple-lock architecture: visual sandbox, syntactic firewall, human-in-the-loop
-- **Biometric per-session auth** — Touch ID required once per session; subsequent low-risk actions auto-approve
-- **Biometric Every Action** — optional stricter mode requiring Touch ID for every low-risk action
-- **Batch shell command approval** — multiple consecutive shell commands shown in one modal with per-command toggles
-- **Irreversible command warnings** — red/amber banners for destructive commands (rm -rf, dd, mkfs, etc.) before approval
-- **AES-256-GCM vault** — encrypted credential storage with native OS keychain backup (macOS/Windows/Linux)
-- Prompt injection detection with strike-based banning
-- Mobile high-risk approval relay via cloud sync
+Aartiq can open and control native applications, adjust volume and brightness, set alarms, and execute shell commands — all from the AI chat or via the MCP protocol. On macOS, it bridges to AppleScript and Siri Shortcuts. On Windows, it connects to PowerShell and Windows Hello. On Linux, it integrates with GNOME/KDE and espeak.
 
-## Quick Start
+### Generate Documents from Chat
 
-```bash
-git clone https://github.com/Preet3627/Aartiq.git
-cd Aartiq/aartiq-browser
-npm install
-npm run dev          # Next.js frontend
-npm run electron-start  # Electron shell
-```
+Describe a document — "create a quarterly sales report with charts and a dark theme template" — and Aartiq generates a professional PDF, Excel spreadsheet, or PowerPoint presentation. Supports Markdown tables, headings, code blocks, Mermaid diagrams, charts, and watermarks. Files save to your Downloads folder.
 
-### Mobile (Android)
+---
 
-```bash
-cd flutter_browser_app
-flutter pub get
-flutter run
-```
+## Claude Desktop Integration (MCP)
 
-## Installation
+Aartiq exposes 22 tools to Claude Desktop via the **Model Context Protocol** on port `3001`. Claude can control Aartiq's browser, search the web, run system commands, and generate documents — all through the MCP interface.
 
-See the [releases page](https://github.com/Preet3627/Aartiq/releases) for pre-built binaries:
+### Option 1: Desktop Extension (Recommended)
 
-| Platform | Format |
-|----------|--------|
-| Windows | .exe / .msix |
-| Windows | [Microsoft Store](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN) |
-| macOS (ARM64) | .dmg |
-| macOS (x64) | .dmg |
-| Linux | .AppImage |
-| Android | .apk |
-| iOS | .ipa (beta) |
+Download and double-click the `.mcpb` file for one-click install — no config editing required:
 
-If macOS blocks the app, run:
-```bash
-xattr -cr /Applications/Aartiq.app
-```
+| | |
+|---|---|
+| **Download** | [aartiq-mcp-extension.mcpb](https://github.com/Preet3627/Aartiq/releases/latest) |
+| **Install** | Double-click the `.mcpb` file, or drag it into Claude Desktop |
+| **Requirements** | Aartiq browser running (for browser tools); standalone for system tools |
 
-## Documentation
-
-Full documentation at [Official Site](https://aartiq.vercel.app)
-
-## Development Status
-
-| Platform | Status |
-|----------|--------|
-| Windows | Stable |
-| macOS | Stable |
-| Linux | Stable |
-| Android | Stable |
-| iOS | Beta |
-
-## Architecture
-
-```
-Aartiq/
-├── aartiq-browser/          # Electron desktop app
-│   ├── main.js             # Main process
-│   ├── src/
-│   │   ├── components/     # React UI components
-│   │   ├── lib/            # Core services and utilities
-│   │   ├── service/        # Background automation service
-│   │   └── types/          # TypeScript definitions
-│   └── scripts/            # Build and install scripts
-├── flutter_browser_app/    # Flutter mobile app
-├── Landing_Page/           # Documentation website (Next.js)
-└── docs/                   # Project documentation
-```
-
-## AI Providers
-
-| Provider | Type |
-|----------|------|
-| Google Gemini | Cloud |
-| OpenAI GPT | Cloud |
-| Azure OpenAI | Cloud |
-| Anthropic Claude | Cloud |
-| Groq | Cloud |
-| xAI Grok | Cloud |
-| Ollama | Local |
-| Apple Intelligence | Native macOS |
-
-## Claude Desktop MCP Integration
-
-Aartiq exposes 18 browser and OS automation tools via the **Model Context Protocol (MCP)** on port `3001`, enabling Claude Desktop to control the browser and desktop directly.
-
-### Quick Setup (Claude Desktop)
+### Option 2: Manual Configuration
 
 1. Install the bridge package:
    ```bash
    npm install -g mcp-remote@0.1.17
    ```
 
-2. Add this entry to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or the equivalent Windows/Linux path:
+2. Add this entry to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or the equivalent path on Windows/Linux:
    ```json
    {
      "mcpServers": {
@@ -179,60 +73,154 @@ Aartiq exposes 18 browser and OS automation tools via the **Model Context Protoc
    }
    ```
 
-3. Restart Claude Desktop. The `🔌` connection indicator should turn green.
+3. Restart Claude Desktop. The connection indicator should turn green.
 
-4. Alternatively, open Aartiq, go to **Settings → MCP Servers**, and click **Auto-Configure Claude Desktop** — this writes the config above automatically.
+4. Alternatively, open Aartiq, go to **Settings → MCP Servers**, and click **Auto-Configure Claude Desktop** — this writes the config automatically.
 
-### Available Tools
+### Available MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `list_tabs` | List all open browser tabs |
-| `switch_tab` | Switch to a specific tab by ID |
-| `close_tab` | Close a tab by ID |
-| `navigate` | Navigate to a URL in the active tab |
-| `get_active_tab_url` | Get the URL of the active tab |
-| `read_page` | Extract page text content |
-| `click_element` | Click an element by CSS selector |
-| `fill_form` | Fill a form field by selector |
-| `go_back` | Navigate back |
-| `go_forward` | Navigate forward |
-| `reload` | Reload the active page |
-| `generate_pdf` | Generate a PDF of the current page |
-| `search_applications` | Search installed applications |
-| `open_external_app` | Open a desktop application |
-| `set_volume` | Set system volume (0-100) |
-| `set_brightness` | Set screen brightness (0-100) |
-| `set_alarm` | Set a system alarm |
-| `execute_shell_command` | Execute a shell command (requires approval) |
-| `run_applescript` | Run AppleScript (macOS only) |
-| `run_powershell` | Run PowerShell (Windows only) |
-| `get_active_window` | Get the active window title |
-| `web_search` | Search the web (Google, Brave, DuckDuckGo, etc.) |
+| Tool | Risk | What It Does |
+|------|------|-------------|
+| `list_tabs` | Low | List all open browser tabs with IDs, titles, and URLs |
+| `switch_tab` | Low | Switch to a tab by ID, index, or search term |
+| `navigate` | Low | Navigate to a URL (optionally in a new tab) |
+| `get_active_tab_url` | Low | Get the current tab's URL |
+| `read_page` | Low | Extract the text content of a page |
+| `go_back` / `go_forward` | Low | Browser history navigation |
+| `reload` | Low | Reload the current page |
+| `web_search` | Low | Search DuckDuckGo/Google with real browser navigation |
+| `search_and_summarize` | Low | Search, read results, and generate a summary |
+| `generate_pdf` | Low | Generate a PDF with Markdown content to Downloads |
+| `search_applications` | Low | Find installed apps by name |
+| `get_active_window` | Low | Get the frontmost window's process and title |
+| `set_volume` | Low | Set system volume (0-100), macOS only |
+| `set_brightness` | Low | Set screen brightness (0-1), macOS only |
+| `set_alarm` | Low | Create a system reminder at a specific time |
+| `click_element` | Medium | Click an element by CSS selector or text |
+| `fill_form` | Medium | Fill a form field by CSS selector |
+| `open_external_app` | Medium | Launch a native application |
+| `close_tab` | Medium | Close a specific tab |
+| `execute_shell_command` | **High** | Run a shell command (requires approval + biometric) |
+| `run_applescript` | **High** | Run AppleScript on macOS (requires approval + biometric) |
+| `run_powershell` | **High** | Run PowerShell on Windows (requires approval + biometric) |
 
-### Permission Model
+### How Permission Gating Works
 
-Each MCP tool has a **risk level** that determines what approval is required:
+Every MCP tool call from Claude Desktop goes through Aartiq's triple-lock security model:
 
-| Risk Level | Tools | Auto-Approved | Approval UX |
-|------------|-------|---------------|-------------|
-| **Low** | `list_tabs`, `navigate`, `read_page`, `web_search`, `set_volume`, etc. | Yes (configurable) | Silent — no popup |
-| **Medium** | `click_element`, `fill_form`, `open_external_app` | No | Popup window with Approve/Deny |
-| **High** | `execute_shell_command`, `run_applescript`, `run_powershell` | No | Popup window + Touch ID / Windows Hello |
+1. **Risk classification** — Each tool is pre-tagged as Low, Medium, or High risk
+2. **Approval dialog** — Medium and High risk tools show a popup with the tool name, risk badge, and full argument preview. You click Approve or Deny
+3. **Biometric gate** — High risk tools additionally require Touch ID (macOS) or Windows Hello (Windows) before execution
 
-When a medium or high risk tool is called from Claude Desktop:
+**Configurable security modes:**
+- **Biometric per-session** — Touch ID once per session; subsequent low-risk actions auto-approve
+- **Biometric every-action** — Touch ID for every single tool call
+- **Batch shell approval** — Multiple consecutive shell commands shown in one modal with per-command toggles
+- **Irreversible command warnings** — Red banners for destructive commands (`rm -rf`, `dd`, `mkfs`, etc.) before approval
 
-1. An **Aartiq approval popup** (separate window, not the main browser) appears with the tool name, risk badge, and arguments
-2. Click **Approve** or **Deny** — the MCP call either executes or returns a permission error
-3. For high risk tools, **biometric authentication** (Touch ID on macOS, Windows Hello on Windows) is also required
-4. If auto-approve is enabled in Aartiq's security settings, low risk tools skip the popup entirely
-5. Aartiq's security settings (biometric per-session, biometric every-action, device unlock for manual approval) all apply to MCP tool calls from Claude Desktop
+**Destructive file operations** (file deletion, disk writes) are classified as high risk even if the command itself looks safe.
 
-### `/mcp` Command
+---
 
-Type `/mcp` in the AI chat to open the MCP Settings panel, where you can configure MCP servers and auto-configure Claude Desktop integration.
+## Installation
 
-The AI also accepts the `OPEN_MCP_SETTINGS` command to navigate to MCP settings programmatically.
+### Pre-built Binaries
+
+| Platform | Format |
+|----------|--------|
+| Windows | `.exe` / `.msix` |
+| Windows | [Microsoft Store](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN) |
+| macOS (Apple Silicon) | `.dmg` |
+| macOS (Intel) | `.dmg` |
+| Linux | `.AppImage` |
+| Android | `.apk` |
+
+Download from the [releases page](https://github.com/Preet3627/Aartiq/releases).
+
+If macOS blocks the app:
+```bash
+xattr -cr /Applications/Aartiq.app
+```
+
+### Build from Source
+
+```bash
+git clone https://github.com/Preet3627/Aartiq.git
+cd Aartiq/aartiq-browser
+npm install
+npm run dev              # Start Next.js frontend
+npm run electron-start   # Start Electron shell
+```
+
+### Mobile (Android)
+
+```bash
+cd flutter_browser_app
+flutter pub get
+flutter run
+```
+
+---
+
+## Architecture
+
+```
+aartiq-browser/              Electron desktop app
+├── main.js                  Main process (~8,300 lines)
+├── src/components/          React UI components
+├── src/lib/                 Core services
+│   ├── AIChatSidebar.tsx        AI chat interface
+│   ├── AICommandParser.ts       Parses AI output into executable commands
+│   ├── mcp-browser-server.js    MCP server for Claude Desktop
+│   ├── Security.ts              Triple-lock security model
+│   ├── WiFiSyncService.ts       Desktop ↔ mobile WebSocket sync
+│   ├── CloudSyncService.ts      Firebase E2EE cloud sync
+│   ├── AdvancedDocumentEngine.ts PDF/XLSX/PPTX generation
+│   ├── tesseract-service.js     OCR via Tesseract.js
+│   └── plugin-manager.js        Dynamic plugin loading
+├── src/service/             Background task scheduler
+└── scripts/                 Build scripts, component scanner
+
+flutter_browser_app/         Flutter mobile companion
+├── WiFi sync, remote desktop control
+├── PDF viewer, push notifications
+└── Automation dashboard
+
+Landing_Page/                Documentation website (Next.js)
+```
+
+## AI Providers
+
+| Provider | Type |
+|----------|------|
+| Google Gemini | Cloud |
+| OpenAI GPT | Cloud |
+| Azure OpenAI | Cloud |
+| Anthropic Claude | Cloud |
+| Groq | Cloud |
+| xAI Grok | Cloud |
+| Ollama | Local (offline) |
+| Apple Intelligence | Native macOS |
+
+---
+
+## Platform Integration
+
+- **macOS** — Siri Shortcuts bridge (native Swift), Apple Intelligence integration, native SwiftUI panels, Raycast extension
+- **Windows** — Native title bar controls, URL scheme handler, voice control, Microsoft Copilot companion, Power Automate
+- **Linux** — GNOME/KDE detection, espeak TTS, desktop notifications, `.desktop` file generation
+
+## Development Status
+
+| Platform | Status |
+|----------|--------|
+| Windows | Stable |
+| macOS | Stable |
+| Linux | Stable |
+| Android | Stable |
+| iOS | Beta |
+
+---
 
 ## Contributing
 
@@ -240,4 +228,13 @@ PRs are welcome. Please open an issue first to discuss significant changes.
 
 ## License
 
-[Apache 2.0](LICENSE) © 2026 Aartiq
+Aartiq uses a **dual-license** model:
+
+| Component | License | File |
+|-----------|---------|------|
+| **Aartiq Browser** (desktop, mobile, all core code) | [Apache License 2.0](LICENSE) | [`LICENSE`](LICENSE) |
+| **Aartiq MCP Server** (`aartiq-mcp/`) | [MIT License](aartiq-mcp/LICENSE) | [`aartiq-mcp/LICENSE`](aartiq-mcp/LICENSE) |
+
+The MCP server (`aartiq-mcp/`) is licensed under the **MIT License** for maximum compatibility with the Claude Desktop ecosystem and other MCP clients. All other components remain under the **Apache License 2.0**.
+
+© 2026 Aartiq

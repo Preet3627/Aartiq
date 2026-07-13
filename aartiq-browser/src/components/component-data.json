@@ -1,11 +1,11 @@
 {
-  "generated": "2026-07-07T10:44:30.582Z",
-  "version": "0.3.0",
+  "generated": "2026-07-13T15:01:48.334Z",
+  "version": "0.3.3",
   "desktop": {
-    "total": 121,
-    "totalLines": 35625,
+    "total": 126,
+    "totalLines": 38065,
     "byCategory": {
-      "components": 82,
+      "components": 87,
       "core": 0,
       "automation": 0,
       "service": 0,
@@ -102,14 +102,14 @@
       {
         "name": "types.ts",
         "path": "AIChatSidebar/types.ts",
-        "lines": 150,
+        "lines": 151,
         "description": "Types",
         "tags": [
           "AI",
           "PDF",
           "OCR"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-12",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [
@@ -426,7 +426,7 @@
       {
         "name": "AIChatSidebar.tsx",
         "path": "AIChatSidebar.tsx",
-        "lines": 4975,
+        "lines": 5747,
         "description": "Chat Sidebar",
         "tags": [
           "React",
@@ -443,7 +443,7 @@
           "Windows",
           "Linux"
         ],
-        "lastModified": "2026-07-05",
+        "lastModified": "2026-07-12",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -464,6 +464,7 @@
             "./ai/MessageActions",
             "./ai/ConversationHistoryPanel",
             "./ai/useAIActionSecurityManager",
+            "@/lib/ai-action-security",
             "@/lib/useAppVersion",
             "./ai/AISetupGuide",
             "./ThinkingIndicator",
@@ -474,14 +475,16 @@
             "./ai/SecureDOMReader",
             "./ai/SchedulingIntentDetector",
             "./ai/SchedulingModal",
+            "./ai/McpSetupGuide",
             "./ai/MermaidDiagram",
             "./ai/FlowchartDiagram",
             "./ai/ChartDiagram",
+            "./ai/YouTubePlayer",
             "@/stores/uiStore",
+            "@/lib/AICommandParser",
             "@/store/useAppStore",
             "@/lib/BrowserAI",
             "@/lib/Security",
-            "@/lib/AICommandParser",
             "@/lib/AICommandOutput",
             "@/lib/SearchContextStore",
             "@/lib/ActionLogsStore",
@@ -659,6 +662,7 @@
           "keyFunctions": [
             "parseSearchResultEntry",
             "normalizeSearchResults",
+            "FilePathLink",
             "renderMarkdownContent",
             "StreamingMarkdownMessage",
             "sidebarShellStyle",
@@ -671,7 +675,6 @@
             "generateImage",
             "logEntry",
             "result",
-            "intent",
             "addImage",
             "commonPayload",
             "formatMessageForExport",
@@ -696,7 +699,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-08",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -726,7 +729,7 @@
                 },
                 {
                   "name": "status",
-                  "type": "'pending' | 'executing' | 'completed' | 'failed' | 'awaiting_permission'",
+                  "type": "'pending' | 'executing' | 'completed' | 'failed' | 'awaiting_permission' | 'idle'",
                   "required": true
                 },
                 {
@@ -914,7 +917,7 @@
           "Windows",
           "Linux"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -1006,9 +1009,10 @@
         "tags": [
           "React",
           "AI",
-          "macOS"
+          "macOS",
+          "Windows"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -1070,7 +1074,7 @@
       {
         "name": "AutomationSettings.tsx",
         "path": "AutomationSettings.tsx",
-        "lines": 932,
+        "lines": 965,
         "description": "Automation Settings",
         "tags": [
           "React",
@@ -1080,7 +1084,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-08",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -1400,7 +1404,7 @@
           "React",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -1551,7 +1555,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -1650,7 +1654,7 @@
       {
         "name": "ExtensionManager.tsx",
         "path": "ExtensionManager.tsx",
-        "lines": 162,
+        "lines": 161,
         "description": "Extension Manager",
         "tags": [
           "React",
@@ -1658,7 +1662,7 @@
           "Plugin",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-07",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -1857,7 +1861,7 @@
           "React",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "framer-motion",
@@ -2066,7 +2070,7 @@
       {
         "name": "LandingPage.tsx",
         "path": "LandingPage.tsx",
-        "lines": 216,
+        "lines": 221,
         "description": "Landing Page",
         "tags": [
           "React",
@@ -2075,7 +2079,7 @@
           "Automation",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-11",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -2107,7 +2111,6 @@
           ],
           "keyFunctions": [
             "toggleMute",
-            "getFirebaseConfigFromEnv",
             "handleGuestMode"
           ]
         }
@@ -2141,9 +2144,74 @@
         }
       },
       {
+        "name": "McpApprovalPopup.tsx",
+        "path": "McpApprovalPopup.tsx",
+        "lines": 177,
+        "description": "Mcp Approval Popup",
+        "tags": [
+          "React",
+          "Node.js",
+          "macOS"
+        ],
+        "lastModified": "2026-07-13",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "ApprovalRequest",
+              "properties": [
+                {
+                  "name": "requestId",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "tool",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "risk",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "args",
+                  "type": "any",
+                  "required": true
+                },
+                {
+                  "name": "url",
+                  "type": "string",
+                  "required": false
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState",
+            "useEffect",
+            "useCallback"
+          ],
+          "componentType": "function-component",
+          "exports": [
+            "default McpApprovalPopup"
+          ],
+          "apiUsage": [
+            "electronAPI"
+          ],
+          "keyFunctions": [
+            "handleKey"
+          ]
+        }
+      },
+      {
         "name": "McpSettings.tsx",
         "path": "McpSettings.tsx",
-        "lines": 525,
+        "lines": 617,
         "description": "Mcp Settings",
         "tags": [
           "React",
@@ -2151,7 +2219,7 @@
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-12",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -2229,7 +2297,8 @@
             }
           ],
           "hooks": [
-            "useState"
+            "useState",
+            "useEffect"
           ],
           "componentType": "function-component",
           "exports": [
@@ -2647,6 +2716,86 @@
         }
       },
       {
+        "name": "PasswordSaveDialog.tsx",
+        "path": "PasswordSaveDialog.tsx",
+        "lines": 108,
+        "description": "Password Save Dialog",
+        "tags": [
+          "React",
+          "macOS"
+        ],
+        "lastModified": "2026-07-10",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "lucide-react"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "SaveDialogData",
+              "properties": [
+                {
+                  "name": "domain",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "url",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "username",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "password",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "type",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "PasswordSaveDialogProps",
+              "properties": [
+                {
+                  "name": "data",
+                  "type": "SaveDialogData | null",
+                  "required": true
+                },
+                {
+                  "name": "onClose",
+                  "type": "() => void",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState",
+            "useEffect"
+          ],
+          "componentType": "function-component",
+          "exports": [
+            "default PasswordSaveDialog"
+          ],
+          "apiUsage": [
+            "electronAPI",
+            "lucide-icons"
+          ],
+          "keyFunctions": [
+            "handleDiscard"
+          ]
+        }
+      },
+      {
         "name": "PerformanceSettings.tsx",
         "path": "PerformanceSettings.tsx",
         "lines": 92,
@@ -2680,7 +2829,7 @@
       {
         "name": "PermissionSettings.tsx",
         "path": "PermissionSettings.tsx",
-        "lines": 698,
+        "lines": 744,
         "description": "Permission Settings",
         "tags": [
           "React",
@@ -2688,9 +2837,10 @@
           "AI",
           "Automation",
           "OCR",
-          "macOS"
+          "macOS",
+          "Windows"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-11",
         "codeAnalysis": {
           "importsExternal": [
             "react"
@@ -2772,7 +2922,7 @@
           "Plugin",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -3145,7 +3295,7 @@
       {
         "name": "SettingsPanel.tsx",
         "path": "SettingsPanel.tsx",
-        "lines": 1099,
+        "lines": 1152,
         "description": "Settings Panel",
         "tags": [
           "React",
@@ -3159,7 +3309,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-05",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -3187,7 +3337,8 @@
             "./UpdatesSettings",
             "./PluginSettings",
             "@/lib/useAppVersion",
-            "./ThemeSettings"
+            "./ThemeSettings",
+            "./ai/AiMemoryManagerSection"
           ],
           "interfaces": [],
           "hooks": [
@@ -3221,7 +3372,7 @@
           "Node.js",
           "macOS"
         ],
-        "lastModified": "2026-07-07",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -3644,13 +3795,14 @@
       {
         "name": "TitleBar.tsx",
         "path": "TitleBar.tsx",
-        "lines": 190,
+        "lines": 218,
         "description": "Title Bar",
         "tags": [
           "React",
-          "macOS"
+          "macOS",
+          "Windows"
         ],
-        "lastModified": "2026-07-07",
+        "lastModified": "2026-07-11",
         "codeAnalysis": {
           "importsExternal": [
             "react"
@@ -3713,7 +3865,7 @@
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -3849,7 +4001,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-07",
+        "lastModified": "2026-07-11",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -3981,7 +4133,7 @@
           "Windows",
           "Linux"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react"
@@ -4004,7 +4156,7 @@
       {
         "name": "VirtualizedTabBar.tsx",
         "path": "VirtualizedTabBar.tsx",
-        "lines": 318,
+        "lines": 319,
         "description": "Virtualized Tab Bar",
         "tags": [
           "React",
@@ -4013,7 +4165,7 @@
           "Plugin",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-12",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -4132,7 +4284,7 @@
           "Plugin",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -4162,7 +4314,7 @@
       {
         "name": "WelcomeScreen.tsx",
         "path": "WelcomeScreen.tsx",
-        "lines": 355,
+        "lines": 359,
         "description": "Welcome Screen",
         "tags": [
           "React",
@@ -4173,7 +4325,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-07",
+        "lastModified": "2026-07-11",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -4206,7 +4358,6 @@
             "handleMinimize",
             "handleMaximize",
             "handleClose",
-            "getFirebaseConfigFromEnv",
             "handleContinue",
             "handleGuestMode",
             "handleCloseAuthPopup"
@@ -4224,7 +4375,7 @@
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -4259,11 +4410,10 @@
       {
         "name": "AIConstants.ts",
         "path": "ai/AIConstants.ts",
-        "lines": 666,
+        "lines": 283,
         "description": "AIConstants",
         "tags": [
           "Node.js",
-          "SwiftUI",
           "Security",
           "AI",
           "Automation",
@@ -4271,7 +4421,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-12",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -4293,9 +4443,7 @@
             "CLASSIFY_TABS_PROMPT",
             "THREAT_STORAGE_KEY"
           ],
-          "apiUsage": [
-            "tesseract-ocr"
-          ],
+          "apiUsage": [],
           "keyFunctions": []
         }
       },
@@ -4313,7 +4461,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -4470,7 +4618,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [
@@ -4879,6 +5027,62 @@
         }
       },
       {
+        "name": "AiMemoryManagerSection.tsx",
+        "path": "ai/AiMemoryManagerSection.tsx",
+        "lines": 214,
+        "description": "Ai Memory Manager Section",
+        "tags": [
+          "React",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-07-10",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "lucide-react"
+          ],
+          "importsInternal": [
+            "@/lib/BrowserAI"
+          ],
+          "interfaces": [
+            {
+              "name": "UserPreference",
+              "properties": [
+                {
+                  "name": "value",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "updatedAt",
+                  "type": "number",
+                  "required": false
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState",
+            "useEffect",
+            "useCallback"
+          ],
+          "componentType": "function-component",
+          "exports": [
+            "default AiMemoryManagerSection"
+          ],
+          "apiUsage": [
+            "electronAPI",
+            "lucide-icons"
+          ],
+          "keyFunctions": [
+            "next",
+            "handleEditStart",
+            "handleEditCancel"
+          ]
+        }
+      },
+      {
         "name": "ChartDiagram.tsx",
         "path": "ai/ChartDiagram.tsx",
         "lines": 147,
@@ -4997,15 +5201,16 @@
       {
         "name": "ClickPermissionModal.tsx",
         "path": "ai/ClickPermissionModal.tsx",
-        "lines": 232,
+        "lines": 474,
         "description": "Click Permission Modal",
         "tags": [
           "React",
+          "Node.js",
           "AI",
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-11",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -5015,12 +5220,47 @@
           "importsInternal": [],
           "interfaces": [
             {
+              "name": "BatchCommandInfo",
+              "properties": [
+                {
+                  "name": "index",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "command",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "description",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "irreversible",
+                  "type": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "risk",
+                  "type": "'low' | 'medium' | 'high'",
+                  "required": true
+                },
+                {
+                  "name": "reason",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            },
+            {
               "name": "ClickPermissionModalProps",
               "properties": [
                 {
                   "name": "context",
                   "type": "{",
-                  "required": true
+                  "required": false
                 },
                 {
                   "name": "action",
@@ -5051,6 +5291,16 @@
                   "name": "what",
                   "type": "string",
                   "required": false
+                },
+                {
+                  "name": "highRiskQr",
+                  "type": "string | null",
+                  "required": false
+                },
+                {
+                  "name": "requiresDeviceUnlock",
+                  "type": "boolean",
+                  "required": false
                 }
               ]
             }
@@ -5069,6 +5319,9 @@
           ],
           "keyFunctions": [
             "RISK_CONFIG",
+            "IrreversibleWarning",
+            "toggleIndex",
+            "toggleAll",
             "handleKey"
           ]
         }
@@ -5523,6 +5776,61 @@
         }
       },
       {
+        "name": "McpSetupGuide.tsx",
+        "path": "ai/McpSetupGuide.tsx",
+        "lines": 339,
+        "description": "Mcp Setup Guide",
+        "tags": [
+          "React",
+          "Node.js",
+          "AI",
+          "macOS",
+          "Windows",
+          "Linux"
+        ],
+        "lastModified": "2026-07-12",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "framer-motion",
+            "lucide-react"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "McpSetupGuideProps",
+              "properties": [
+                {
+                  "name": "isOpen",
+                  "type": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "onClose",
+                  "type": "() => void",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState",
+            "useEffect",
+            "useCallback"
+          ],
+          "componentType": "function-component",
+          "exports": [
+            "default McpSetupGuide"
+          ],
+          "apiUsage": [
+            "electronAPI",
+            "framer-motion",
+            "lucide-icons"
+          ],
+          "keyFunctions": []
+        }
+      },
+      {
         "name": "MermaidDiagram.tsx",
         "path": "ai/MermaidDiagram.tsx",
         "lines": 129,
@@ -5689,7 +5997,7 @@
       {
         "name": "SchedulingIntentDetector.ts",
         "path": "ai/SchedulingIntentDetector.ts",
-        "lines": 369,
+        "lines": 376,
         "description": "Scheduling Intent Detector",
         "tags": [
           "Node.js",
@@ -5698,7 +6006,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-08",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -5723,7 +6031,7 @@
                 },
                 {
                   "name": "taskType",
-                  "type": "'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell'",
+                  "type": "'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell' | 'open-url'",
                   "required": true
                 },
                 {
@@ -5768,7 +6076,7 @@
       {
         "name": "SchedulingModal.tsx",
         "path": "ai/SchedulingModal.tsx",
-        "lines": 496,
+        "lines": 516,
         "description": "Scheduling Modal",
         "tags": [
           "React",
@@ -5778,7 +6086,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-08",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -5818,7 +6126,7 @@
                 },
                 {
                   "name": "taskType",
-                  "type": "'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell'",
+                  "type": "'ai-prompt' | 'web-scrape' | 'pdf-generate' | 'workflow' | 'daily-brief' | 'shell' | 'open-url'",
                   "required": true
                 },
                 {
@@ -5828,6 +6136,16 @@
                 },
                 {
                   "name": "description",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "url",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "command",
                   "type": "string",
                   "required": false
                 }
@@ -5918,7 +6236,6 @@
             "default SchedulingModal"
           ],
           "apiUsage": [
-            "electronAPI",
             "zustand-store",
             "lucide-icons"
           ],
@@ -5927,6 +6244,7 @@
             "handleCronSelect",
             "handleModelSelect",
             "handleOutputSelect",
+            "handleConfirm",
             "formatSchedule",
             "getSelectedModel"
           ]
@@ -6219,9 +6537,71 @@
         }
       },
       {
+        "name": "YouTubePlayer.tsx",
+        "path": "ai/YouTubePlayer.tsx",
+        "lines": 118,
+        "description": "You Tube Player",
+        "tags": [
+          "React",
+          "macOS"
+        ],
+        "lastModified": "2026-07-12",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "lucide-react"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "YouTubePlayerProps",
+              "properties": [
+                {
+                  "name": "videoId",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "onClose",
+                  "type": "() => void",
+                  "required": false
+                },
+                {
+                  "name": "autoPlay",
+                  "type": "boolean",
+                  "required": false
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState",
+            "useEffect",
+            "useRef"
+          ],
+          "componentType": "function-component",
+          "exports": [
+            "default YouTubePlayer"
+          ],
+          "apiUsage": [
+            "electronAPI",
+            "lucide-icons"
+          ],
+          "keyFunctions": [
+            "handleIframeLoad",
+            "handleIframeError"
+          ]
+        }
+      },
+      {
         "name": "useAIActionSecurityManager.tsx",
         "path": "ai/useAIActionSecurityManager.tsx",
-        "lines": 214,
+        "lines": 432,
         "description": "Action Security Manager",
         "tags": [
           "React",
@@ -6229,7 +6609,7 @@
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-11",
         "codeAnalysis": {
           "importsExternal": [
             "react"
@@ -6284,6 +6664,41 @@
               ]
             },
             {
+              "name": "BatchCommandInfo",
+              "properties": [
+                {
+                  "name": "index",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "command",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "description",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "irreversible",
+                  "type": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "risk",
+                  "type": "ActionRiskLevel",
+                  "required": true
+                },
+                {
+                  "name": "reason",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            },
+            {
               "name": "PendingPermission",
               "properties": [
                 {
@@ -6300,6 +6715,11 @@
                   "name": "context",
                   "type": "PermissionContext",
                   "required": true
+                },
+                {
+                  "name": "batchCommands",
+                  "type": "BatchCommandInfo[]",
+                  "required": false
                 }
               ]
             },
@@ -6343,6 +6763,7 @@
             "useState",
             "useEffect",
             "useCallback",
+            "useRef",
             "useMemo"
           ],
           "componentType": "function-component",
@@ -6430,7 +6851,7 @@
       {
         "name": "AICommandParser.ts",
         "path": "AICommandParser.ts",
-        "lines": 657,
+        "lines": 738,
         "description": "Command Parser",
         "tags": [
           "Node.js",
@@ -6442,7 +6863,7 @@
           "Plugin",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-12",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [
@@ -6485,6 +6906,11 @@
                 {
                   "name": "risk",
                   "type": "'low' | 'medium' | 'high'",
+                  "required": false
+                },
+                {
+                  "name": "params",
+                  "type": "Record<string, string>",
                   "required": false
                 }
               ]
@@ -6544,6 +6970,9 @@
           "componentType": "utility",
           "exports": [
             "ParsedCommand",
+            "getCmdParam",
+            "getCmdParamInt",
+            "cleanCmdValue",
             "CommandParseResult",
             "COMMAND_REGISTRY",
             "SUPPORTED_COMMANDS",
@@ -6579,7 +7008,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [
@@ -7068,13 +7497,13 @@
       {
         "name": "BrowserAI.ts",
         "path": "BrowserAI.ts",
-        "lines": 384,
+        "lines": 404,
         "description": "BrowserAI",
         "tags": [
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "@tensorflow/tfjs"
@@ -7210,12 +7639,12 @@
       {
         "name": "FirebaseService.ts",
         "path": "FirebaseService.ts",
-        "lines": 204,
+        "lines": 190,
         "description": "Firebase Service",
         "tags": [
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-11",
         "codeAnalysis": {
           "importsExternal": [
             "firebase/app",
@@ -7234,9 +7663,7 @@
           "apiUsage": [
             "firebase"
           ],
-          "keyFunctions": [
-            "getFirebaseConfig"
-          ]
+          "keyFunctions": []
         }
       },
       {
@@ -7281,7 +7708,7 @@
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -7853,7 +8280,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-10",
         "codeAnalysis": {
           "importsExternal": [
             "fs",
@@ -8210,7 +8637,7 @@
       {
         "name": "ai-action-security.ts",
         "path": "ai-action-security.ts",
-        "lines": 216,
+        "lines": 475,
         "description": "Ai Action Security",
         "tags": [
           "Security",
@@ -8219,9 +8646,11 @@
           "Automation",
           "PDF",
           "OCR",
-          "macOS"
+          "macOS",
+          "Windows",
+          "Linux"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-13",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -8283,6 +8712,11 @@
                   "name": "autoApprovedActions",
                   "type": "string[]",
                   "required": false
+                },
+                {
+                  "name": "requireBiometricPerSession",
+                  "type": "boolean",
+                  "required": false
                 }
               ]
             }
@@ -8299,6 +8733,10 @@
             "normalizeRiskLevel",
             "getActionPermissionKey",
             "getActionSecurityDefinition",
+            "getShellCommandRisk",
+            "getShellBaseCommand",
+            "isIrreversibleCommand",
+            "getCommandDescription",
             "isActionAutoApproved"
           ],
           "apiUsage": [],
@@ -9143,7 +9581,7 @@
     "components": []
   },
   "summary": {
-    "total": 121,
-    "totalLines": 35625
+    "total": 126,
+    "totalLines": 38065
   }
 }
