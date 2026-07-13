@@ -156,3 +156,4 @@ aartiq-browser/bin/
 # Firebase config (generated per-environment, stored in GitHub Secrets)
 flutter_browser_app/android/app/google-services.json
 flutter_browser_app/ios/Runner/GoogleService-Info.plist
+aartiq-browser/Test_Reports/GreenTea_Summary.pdf
