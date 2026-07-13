@@ -330,6 +330,38 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
     return matches;
   });
 
+  ipcMain.handle('get-autofill-data', async (event, domain) => {
+    try {
+      const entries = getVaultEntries();
+      const normalizedDomain = (domain || '').toLowerCase().replace(/^https?:\/\//i, '').split('/')[0];
+      const matches = entries.filter(entry => {
+        const site = `${entry.site || ''}`.toLowerCase().replace(/^https?:\/\//i, '').split('/')[0];
+        return normalizedDomain
+          ? site.includes(normalizedDomain) || normalizedDomain.includes(site)
+          : false;
+      });
+      if (!matches.length) return { credentials: [], cards: [], addresses: [] };
+      const credentials = matches.filter(e => (e.type || 'login') === 'login').map(e => ({
+        id: e.id, username: e.username || '', password: e.password || '',
+        title: e.title || '', site: e.site || '',
+      }));
+      const cards = matches.filter(e => e.type === 'card' || e.type === 'credit-card').map(e => ({
+        id: e.id, number: e.number || e.cardNumber || '', name: e.name || e.cardName || '',
+        expiry: e.expiry || '', expMonth: e.expMonth || '', expYear: e.expYear || '',
+        cvc: e.cvc || '', site: e.site || '',
+      }));
+      const addresses = matches.filter(e => e.type === 'address').map(e => ({
+        id: e.id, street: e.street || e.streetAddress || '', line2: e.line2 || '',
+        city: e.city || '', state: e.state || '', zip: e.zip || e.postalCode || '',
+        country: e.country || '', site: e.site || '',
+      }));
+      return { credentials, cards, addresses };
+    } catch (e) {
+      console.error('[Autofill] get-autofill-data error:', e);
+      return { credentials: [], cards: [], addresses: [] };
+    }
+  });
+
   ipcMain.handle('vault-list-entries', async () => {
     return { success: true, entries: maskAllEntries() };
   });
@@ -552,7 +584,38 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
       if (!isMacPlatform) authWindow.setMenuBarVisibility(false);
       authWindow.webContents.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
 
-      authWindow.webContents.setWindowOpenHandler(({ url }) => ({ action: 'allow' }));
+      authWindow.webContents.setWindowOpenHandler(({ url }) => {
+        const isPopupAuthUrl = url.includes('accounts.google.com') ||
+          url.includes('googleusercontent.com') ||
+          url.includes('firebaseapp.com') ||
+          url.includes('/__/auth/') ||
+          url.includes('login.microsoftonline.com') ||
+          url.includes('login.live.com') ||
+          url.includes('microsoft.com') ||
+          url.includes('oauth');
+
+        if (isPopupAuthUrl) {
+          return {
+            action: 'allow',
+            overrideBrowserWindowOptions: {
+              width: 520,
+              height: 720,
+              center: true,
+              autoHideMenuBar: true,
+              modal: false,
+              parent: authWindow || mainWindow,
+              backgroundColor: '#02030a',
+              webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                sandbox: false,
+              },
+            }
+          };
+        }
+
+        return { action: 'allow' };
+      });
 
       const closeAuthWindowSafely = () => {
         if (authWindow && !authWindow.isDestroyed()) { authWindow.destroy(); authWindow = null; }
@@ -572,10 +635,34 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
 
       authWindow.webContents.on('will-redirect', (event, url) => {
         if (url.startsWith('aartiq-browser://')) { event.preventDefault(); dispatchAuthCallback(url); }
+        else if (url.startsWith('http://localhost') && url.includes('code=')) {
+          event.preventDefault();
+          const code = new URLSearchParams(new URL(url).search).get('code');
+          if (code) { ipcMain.emit('gmail-oauth-code', null, code); closeAuthWindowSafely(); }
+        }
       });
 
       authWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
         if (validatedURL?.startsWith('aartiq-browser://')) dispatchAuthCallback(validatedURL);
+      });
+
+      authWindow.webContents.on('console-message', (event) => {
+        const message = event.message || '';
+        try {
+          if (message.includes('comet-auth-success')) {
+            const data = JSON.parse(message);
+            if (data.type === 'comet-auth-success' && data.data) {
+              const d = data.data;
+              const params = new URLSearchParams({ auth_status: 'success', uid: d.uid || '', email: d.email || '' });
+              if (d.name) params.set('name', d.name);
+              if (d.photo) params.set('photo', d.photo);
+              if (d.idToken) params.set('id_token', d.idToken);
+              if (d.id_token) params.set('id_token', d.id_token);
+              if (d.firebaseConfig) params.set('firebase_config', btoa(JSON.stringify(d.firebaseConfig)));
+              dispatchAuthCallback(`aartiq-browser://auth?${params.toString()}`);
+            }
+          }
+        } catch (e) { }
       });
 
       authWindow.loadURL(authUrl);

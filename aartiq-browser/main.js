@@ -4204,6 +4204,8 @@ async function ensureVaultApprovalForFormFill(formData = {}) {
   return { success: true, protected: true, mode: verification.mode };
 }
 
+// get-autofill-data handler moved to auth-handlers.js
+
 ipcMain.handle('save-persistent-data', async (event, { key, data }) => {
   try {
     if (key === 'user-passwords') {
@@ -4403,205 +4405,7 @@ ipcMain.on('update-native-mac-ui-state', (event, nextState = {}) => {
   }
 });
 
-// Auth - Create proper OAuth window instead of opening in external browser
-let authWindow = null;
-
-ipcMain.on('open-auth-window', (event, authUrl) => {
-  // Check if this is an OAuth URL (Firebase, Google, etc.)
-  const isOAuthUrl = authUrl.includes('accounts.google.com') ||
-    authUrl.includes('firebase') ||
-    authUrl.includes('oauth') ||
-    authUrl.includes('auth');
-
-  if (isOAuthUrl) {
-    // Direct Google OAuth URLs should still use the system browser.
-    // Our hosted /auth page should stay inside Aartiq so Firebase popup can open as a child window.
-    if (authUrl.includes('accounts.google.com')) {
-      if (authWindow && !authWindow.isDestroyed()) {
-        authWindow.destroy();
-        authWindow = null;
-      }
-      shell.openExternal(authUrl);
-      console.log('[Auth] Google OAuth: Opening external browser');
-      return;
-    }
-
-    // For other OAuth that doesn't block Electron, we can use BrowserWindow
-    if (authWindow) {
-      if (!authWindow.isDestroyed()) {
-        authWindow.focus();
-        authWindow.loadURL(authUrl);
-        return;
-      }
-      authWindow = null;
-    }
-
-    const authPreloadPath = path.join(__dirname, 'auth-preload.js');
-    const isMacPlatform = process.platform === 'darwin';
-    const isWinPlatform = process.platform === 'win32';
-
-    authWindow = new BrowserWindow({
-      width: 540,
-      height: 780,
-      frame: isMacPlatform ? true : false, // frame must be true on Mac for titleBarStyle: 'hidden' to show traffic lights
-      transparent: false,
-      backgroundColor: '#02030a',
-      hasShadow: true,
-      resizable: true,
-      parent: mainWindow,
-      modal: isMacPlatform ? false : true, // On Mac, modal: true makes it a sheet which hides traffic lights
-      show: false,
-      titleBarStyle: 'hidden',
-      trafficLightPosition: isMacPlatform ? { x: 18, y: 18 } : undefined,
-      titleBarOverlay: isWinPlatform ? {
-        color: '#02030a',
-        symbolColor: '#ffffff',
-        height: 32
-      } : false,
-      webPreferences: {
-        preload: authPreloadPath, // Always use auth-preload to handle drag and custom close if needed
-        nodeIntegration: false,
-        contextIsolation: true,
-      },
-    });
-
-    if (!isMacPlatform) {
-      authWindow.setMenuBarVisibility(false);
-    }
-
-    // Fix "Unsecure Browser" error by setting a modern User-Agent
-    authWindow.webContents.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
-
-    authWindow.webContents.setWindowOpenHandler(({ url }) => {
-      const isPopupAuthUrl = url.includes('accounts.google.com') ||
-        url.includes('googleusercontent.com') ||
-        url.includes('firebaseapp.com') ||
-        url.includes('/__/auth/') ||
-        url.includes('oauth');
-
-      if (isPopupAuthUrl) {
-        return {
-          action: 'allow',
-          overrideBrowserWindowOptions: {
-            width: 520,
-            height: 720,
-            center: true,
-            autoHideMenuBar: true,
-            modal: false,
-            parent: authWindow || mainWindow,
-            backgroundColor: '#02030a',
-            webPreferences: {
-              nodeIntegration: false,
-              contextIsolation: true,
-              sandbox: false,
-            },
-          }
-        };
-      }
-
-      return { action: 'allow' };
-    });
-
-    authWindow.loadURL(authUrl);
-
-    authWindow.once('ready-to-show', () => {
-      authWindow.show();
-    });
-
-    let authPoller = null;
-
-    const closeAuthWindowSafely = () => {
-      if (authPoller) { clearInterval(authPoller); authPoller = null; }
-      if (authWindow && !authWindow.isDestroyed()) {
-        console.log('[Auth] Closing auth window');
-        authWindow.destroy();
-        authWindow = null;
-      }
-    };
-
-    const dispatchAuthCallback = (deepLinkUrl) => {
-      console.log('[Auth] Dispatching callback to main window:', deepLinkUrl.substring(0, 80) + '...');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('auth-callback', deepLinkUrl);
-        mainWindow.focus();
-      }
-      setTimeout(closeAuthWindowSafely, 300);
-    };
-
-    // ─── PRIMARY: will-navigate fires when window.location.href is set ─────────
-    // When the landing page does `window.location.href = 'aartiq-browser://auth?...'`
-    // Electron intercepts this here before attempting to navigate
-    authWindow.webContents.on('will-navigate', (event, url) => {
-      if (url.startsWith('aartiq-browser://')) {
-        event.preventDefault();
-        console.log('[Auth] will-navigate intercepted aartiq-browser:// URL');
-        dispatchAuthCallback(url);
-      }
-    });
-
-    // ─── SECONDARY: will-redirect for server-side HTTP 302 redirects ───────────
-    authWindow.webContents.on('will-redirect', (event, url) => {
-      if (url.startsWith('aartiq-browser://')) {
-        event.preventDefault();
-        console.log('[Auth] will-redirect intercepted aartiq-browser:// URL');
-        dispatchAuthCallback(url);
-      } else if (url.startsWith('http://localhost') && url.includes('code=')) {
-        event.preventDefault();
-        const code = new URLSearchParams(new URL(url).search).get('code');
-        if (code) { ipcMain.emit('gmail-oauth-code', null, code); closeAuthWindowSafely(); }
-      }
-    });
-
-    // ─── KEY FIX: did-fail-load catches failed aartiq-browser:// navigation ──────
-    // When the web engine cannot resolve `aartiq-browser://` (it's not a web scheme),
-    // Electron fires did-fail-load with errorCode -300 (ERR_FAILED).
-    // The `validatedURL` param still contains the full aartiq-browser:// URL with all params.
-    authWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-      if (validatedURL && validatedURL.startsWith('aartiq-browser://')) {
-        console.log('[Auth] did-fail-load caught aartiq-browser:// navigation:', validatedURL.substring(0, 80));
-        dispatchAuthCallback(validatedURL);
-      }
-    });
-
-    // ─── BACKUP: Landing page console.log signal ───────────────────────────────
-    authWindow.webContents.on('console-message', (event) => {
-      const message = event.message || '';
-      try {
-        if (message.includes('comet-auth-success')) {
-          const data = JSON.parse(message);
-          if (data.type === 'comet-auth-success' && data.data) {
-            const d = data.data;
-            const params = new URLSearchParams({ auth_status: 'success', uid: d.uid || '', email: d.email || '' });
-            if (d.name) params.set('name', d.name);
-            if (d.photo) params.set('photo', d.photo);
-            if (d.idToken) params.set('id_token', d.idToken);
-            if (d.id_token) params.set('id_token', d.id_token);
-            if (d.firebaseConfig) params.set('firebase_config', btoa(JSON.stringify(d.firebaseConfig)));
-            console.log('[Auth] console-message auth signal received, dispatching...');
-            dispatchAuthCallback(`aartiq-browser://auth?${params.toString()}`);
-          }
-        }
-      } catch (e) { }
-    });
-
-    authWindow.on('closed', () => {
-      if (authPoller) { clearInterval(authPoller); authPoller = null; }
-      authWindow = null;
-    });
-
-  } else {
-    // For non-OAuth URLs, open in external browser
-    shell.openExternal(authUrl);
-  }
-
-});
-
-ipcMain.on('close-auth-window', () => {
-  if (authWindow && !authWindow.isDestroyed()) {
-    authWindow.close();
-  }
-  authWindow = null;
-});
+// Auth window handler is in src/main/handlers/auth-handlers.js (cleaned up and re-registered by index.js)
 
 ipcMain.on('raycast-update-state', (event, state) => {
   if (state?.tabs) {
@@ -5936,6 +5740,42 @@ function checkAiActionPermission(actionType, target, riskLevel) {
 }
 
 app.whenReady().then(async () => {
+  // ─── Passkey / WebAuthn support ────────────────────────────────────────────
+  // macOS: Enables Touch ID (Secure Enclave) + platform passkeys (iCloud Keychain, 1Password, etc.)
+  // Windows: Chromium's built-in Windows Hello WebAuthn is active by default.
+  if (process.platform === 'darwin') {
+    try {
+      app.configureWebAuthn({
+        touchID: {
+          keychainAccessGroup: 'com.latestinssan.aartiqbrowser.webauthn',
+          promptReason: 'Authenticate with Touch ID for passkey',
+        },
+        platformPasskeys: true,
+      });
+      console.log('[Passkey] WebAuthn configured: Touch ID + platform passkeys (macOS)');
+    } catch (e) {
+      console.warn('[Passkey] configureWebAuthn failed (non-fatal):', e.message);
+    }
+  } else if (process.platform === 'win32') {
+    console.log('[Passkey] Windows Hello WebAuthn active (Chromium built-in)');
+  } else {
+    console.log('[Passkey] Linux: Generic WebAuthn via Chromium');
+  }
+
+  // Handle authenticator selection when both Touch ID and platform passkeys are available
+  if (process.platform === 'darwin') {
+    session.defaultSession.on('select-webauthn-authenticator', (event, details, callback) => {
+      // Prefer platform passkeys (synced via iCloud Keychain / 1Password / etc.) for better UX
+      if (details.authenticators.includes('platformPasskeys')) {
+        callback('platformPasskeys');
+      } else if (details.authenticators.includes('touchID')) {
+        callback('touchID');
+      } else {
+        callback(details.authenticators[0]);
+      }
+    });
+  }
+
   async function streamPromptToMobile(promptId, prompt, model, provider) {
     const messages = [{ role: 'user', content: prompt }];
     const streamEvent = {
@@ -8847,7 +8687,7 @@ ${tabData}`;
     tabViews._mainWindow = mainWindow;
     tabViews._activeTabId = activeTabId;
     tabViews._bounds = null;
-    mcpServer = new BrowserMcpServer(tabViews, store);
+    mcpServer = new BrowserMcpServer(tabViews, store, mainWindow);
     const mcpPort = typeof MCP_SERVER_PORT !== 'undefined' ? MCP_SERVER_PORT : 3001;
     (async () => {
       await mcpServer.start(mcpPort);
@@ -8878,6 +8718,16 @@ ${tabData}`;
   } catch (e) {
     console.warn('[MCP-Browser] Setup error:', e.message);
   }
+
+  ipcMain.on('mcp-approval-response', (_event, { requestId, allowed }) => {
+    if (mcpServer && requestId) {
+      const resolver = mcpServer._approvalResolvers?.get(requestId);
+      if (resolver) {
+        mcpServer._approvalResolvers.delete(requestId);
+        resolver({ allowed: !!allowed });
+      }
+    }
+  });
 
   // Wire modular IPC handlers from src/main/handlers/
   // NOTE: must be after createWindow() so mainWindow is initialized

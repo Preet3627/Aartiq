@@ -34,7 +34,7 @@ function registerAllHandlers(ipcMain, handlers) {
     'extract-secure-dom',
     'translate-website','extract-page-content','extract-search-results','get-suggestions',
     'get-auth-token','get-user-info','get-auth-session',
-    'get-passwords-for-site','vault-list-entries','vault-save-entry',
+    'get-autofill-data','get-passwords-for-site','vault-list-entries','vault-save-entry',
     'vault-delete-entry','vault-read-secret','vault-copy-secret',
     'llm-get-available-providers','llm-get-provider-models','llm-set-active-provider',
     'llm-configure-provider','llm-generate-chat-content',
