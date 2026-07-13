@@ -161,6 +161,8 @@
       "main.js",
       "preload.js",
       "auth-preload.js",
+      "approval-preload.js",
+      "view_preload.js",
       "src/lib/**/*",
       "src/service/**/*",
       "src/automation/**/*",
@@ -211,7 +213,11 @@
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.local.plist",
-      "entitlementsInherit": "entitlements.mac.local.plist"
+      "entitlementsInherit": "entitlements.mac.local.plist",
+      "extendInfo": {
+        "NSBluetoothAlwaysUsageDescription": "Aartiq needs Bluetooth to communicate with passkeys and security keys via FIDO/WebAuthn.",
+        "NSBluetoothPeripheralUsageDescription": "Aartiq needs Bluetooth to communicate with passkeys and security keys via FIDO/WebAuthn."
+      }
     },
     "linux": {
       "icon": "assets/icon-transparent.png",
