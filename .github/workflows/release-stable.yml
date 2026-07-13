@@ -187,6 +187,42 @@ jobs:
           path: flutter_browser_app/Aartiq.ipa
 
   # ============================================================================
+  # MCP EXTENSION BUILD
+  # ============================================================================
+  build-mcp-extension:
+    name: Build MCP Extension (.mcpb)
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install MCP Server Dependencies
+        working-directory: aartiq-mcp
+        run: npm install --omit=dev
+
+      - name: Build .mcpb Bundle
+        working-directory: aartiq-mcp
+        run: |
+          zip -r ../aartiq-mcp-extension.mcpb \
+            manifest.json \
+            package.json \
+            icon.png \
+            server/ \
+            node_modules/ \
+            -x "*.DS_Store" "*.mcpb" ".git/*"
+
+      - name: Upload MCP Extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: aartiq-mcp-extension
+          path: aartiq-mcp-extension.mcpb
+
+  # ============================================================================
   # DESKTOP BUILD - WINDOWS
   # ============================================================================
   build-desktop-windows:
@@ -414,7 +450,7 @@ jobs:
   # ============================================================================
   create-release:
     name: Create Release
-    needs: [get-version, build-android, build-ios, build-desktop-windows, build-desktop-macos-arm64, build-desktop-macos-x64, build-desktop-linux]
+    needs: [get-version, build-android, build-ios, build-desktop-windows, build-desktop-macos-arm64, build-desktop-macos-x64, build-desktop-linux, build-mcp-extension]
     runs-on: ubuntu-latest
     environment: Production
     if: always() && needs.get-version.outputs.tag != ''
@@ -445,11 +481,12 @@ jobs:
             | macOS Apple Silicon | `*-arm64.dmg` |
             | macOS Intel | `*-x64.dmg` |
             | Linux | `Aartiq.Browser-*.AppImage` |
+            | Claude Desktop | `aartiq-mcp-extension.mcpb` (double-click to install) |
             | Android | `app-release.apk` |
             | iOS | `Aartiq.ipa` |
 
             ---
-            Built with by [Latestinssan](https://github.com/Preet3627)
+            Built with ❤️ by [Latestinssan](https://github.com/Preet3627)
           draft: false
           prerelease: ${{ needs.get-version.outputs.is_stable == 'false' }}
           token: ${{ secrets.GITHUB_TOKEN }}

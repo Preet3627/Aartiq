@@ -285,6 +285,42 @@ jobs:
           path: flutter_browser_app/Aartiq.ipa
 
   # ============================================================================
+  # MCP EXTENSION BUILD
+  # ============================================================================
+  build-mcp-extension:
+    name: Build MCP Extension (.mcpb)
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install MCP Server Dependencies
+        working-directory: aartiq-mcp
+        run: npm install --omit=dev
+
+      - name: Build .mcpb Bundle
+        working-directory: aartiq-mcp
+        run: |
+          zip -r ../aartiq-mcp-extension.mcpb \
+            manifest.json \
+            package.json \
+            icon.png \
+            server/ \
+            node_modules/ \
+            -x "*.DS_Store" "*.mcpb" ".git/*"
+
+      - name: Upload MCP Extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: aartiq-mcp-extension
+          path: aartiq-mcp-extension.mcpb
+
+  # ============================================================================
   # DESKTOP BUILD
   # ============================================================================
   build-desktop:
@@ -390,7 +426,7 @@ jobs:
   # ============================================================================
   create-release:
     name: Create Release
-    needs: [get-version, changelog, build-android, build-ios, build-desktop]
+    needs: [get-version, changelog, build-android, build-ios, build-desktop, build-mcp-extension]
     runs-on: ubuntu-latest
     if: needs.get-version.outputs.tag != ''
     steps:
@@ -425,6 +461,11 @@ jobs:
             | 🍎 macOS Apple Silicon | `*-arm64.dmg` |
             | 🍎 macOS Intel | `*-x64.dmg` |
             | 🐧 Linux | `Aartiq.Browser-*.AppImage` |
+            
+            ### Claude Desktop
+            | Platform | File |
+            |----------|------|
+            | 🤖 Claude Desktop | `aartiq-mcp-extension.mcpb` (double-click to install) |
             
             ### Mobile
             | Platform | File |

@@ -108,7 +108,7 @@ Download and double-click the `.mcpb` file — no config editing required:
 
 | | |
 |---|---|
-| **Download** | [aartiq-mcp-extension.mcpb](https://github.com/Preet3627/Aartiq/releases/latest) |
+| **Download** | [aartiq-mcp-extension.mcpb](https://github.com/Preet3627/Aartiq/releases/latest/download/aartiq-mcp-extension.mcpb) |
 | **Install** | Double-click the `.mcpb` file, or drag it into Claude Desktop |
 | **Requirements** | Aartiq browser running (for browser tools); standalone for system tools |
 
