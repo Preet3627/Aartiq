@@ -28,8 +28,12 @@ const COMMAND_WHITELIST = new Set([
 ]);
 
 const BLOCKED_COMMANDS = new Set([
-  'sudo', 'su', 'passwd', 'chmod', 'chown', 'chgrp',
-  'rm', 'del', 'format', 'fdisk', 'dd',
+  'sudo', 'su', 'passwd', 'chgrp',
+]);
+
+const HIGH_RISK_FILE_COMMANDS = new Set([
+  'rm', 'del', 'format', 'fdisk', 'dd', 'mkfs',
+  'chmod', 'chown',
   'shutdown', 'reboot', 'halt', 'poweroff',
   'iptables', 'ufw', 'firewall-cmd',
   'mount', 'umount', 'eject',
@@ -88,6 +92,10 @@ function validateCommand(command) {
   
   if (BLOCKED_COMMANDS.has(firstWord)) {
     errors.push(`Command "${firstWord}" is blocked for security reasons`);
+  }
+  
+  if (HIGH_RISK_FILE_COMMANDS.has(firstWord)) {
+    warnings.push(`Command "${firstWord}" is classified as HIGH RISK and requires explicit approval`);
   }
   
   if (command.includes('..')) {
@@ -208,6 +216,8 @@ function validateAiCommand(command) {
     'CLICK_ELEMENT', 'FIND_AND_CLICK', 'OCR_SCREEN', 'OCR_COORDINATES',
     'SET_VOLUME', 'OPEN_APP', 'SCROLL_DOWN', 'SCROLL_UP',
     'SHELL_COMMAND_LIGHT', 'SCHEDULE_TASK', 'PLUGIN_COMMAND',
+    'DELETE_FILE', 'REMOVE_FILE', 'FORMAT_DISK', 'PARTITION_DISK',
+    'WRITE_DISK', 'POWER_ACTION', 'FIREWALL_CHANGE', 'PERMISSION_CHANGE',
   ];
   
   if (command.command && !knownCommands.includes(command.command)) {
@@ -254,6 +264,14 @@ function getRiskLevel(commandType) {
     'FIND_AND_CLICK': RISK_LEVELS.HIGH,
     'SCHEDULE_TASK': RISK_LEVELS.HIGH,
     'PLUGIN_COMMAND': RISK_LEVELS.HIGH,
+    'DELETE_FILE': RISK_LEVELS.HIGH,
+    'REMOVE_FILE': RISK_LEVELS.HIGH,
+    'FORMAT_DISK': RISK_LEVELS.HIGH,
+    'PARTITION_DISK': RISK_LEVELS.HIGH,
+    'WRITE_DISK': RISK_LEVELS.HIGH,
+    'POWER_ACTION': RISK_LEVELS.HIGH,
+    'FIREWALL_CHANGE': RISK_LEVELS.HIGH,
+    'PERMISSION_CHANGE': RISK_LEVELS.HIGH,
   };
   
   return riskMap[commandType] || RISK_LEVELS.MEDIUM;
