@@ -1,5 +1,40 @@
 # Aartiq Browser - Recent Changes
 
+## Version 0.3.3 - Claude Desktop MCP Server (2026-07-13)
+
+### Overview
+Complete rewrite of the Claude Desktop MCP server from 21 standalone tools to 64 integrated tools. Claude Desktop now has full control over a running Aartiq browser — AI chat with RAG/web search/PDF generation, bookmarks, history, settings, scheduling, permissions, security, and panel management.
+
+### Changes
+
+#### Claude Desktop MCP Server (64 Tools)
+- **Architecture rewrite**: MCP server runs as Node.js stdio process → HTTP bridge (port 46203) → running Aartiq browser
+- **No standalone mode**: All tools require the browser to be running, so Claude gets the full AI pipeline (RAG, web search, PDF, navigation, structured output) instead of dumb standalone commands
+- **AI sidebar integration**: `send_ai_prompt` goes through the actual sidebar component, not the simplified `/cli/ask` endpoint
+- **8 tool categories**: AI Chat (8), Tabs (8), Page Interaction (2), Bookmarks & History (5), Document & Media (3), Settings (8), Scheduling (6), Permissions & Security (8), System (5), Panels (9), App Knowledge (3)
+
+#### New Bridge Endpoints (main.js)
+- Sidebar control: `GET /sidebar-state`, `POST /sidebar/open|close|toggle`
+- Bookmarks: `GET /bookmarks`, `POST /bookmarks/add|remove`
+- History: `GET /history`, `POST /history/clear`
+- Settings: `GET /settings`, `POST /settings/update`
+- Permissions: `GET /permissions`, `POST /permissions/grant|revoke`
+- Automation: `GET /automation/tasks`, `POST /automation/tasks/create|toggle|delete|run`
+- App info: `GET /app-info`
+
+#### Prompt Handler Fix
+- Fixed `native-mac-ui-submit-prompt` handler to wait 5s for the renderer sidebar to pick up the prompt before falling back to the dumb AiGateway path
+- Ensures full-power AI pipeline runs when sidebar is mounted
+
+#### Files
+- `aartiq-mcp/server/index.js` — Rewritten: 64 tools
+- `aartiq-mcp/server/bridge-client.js` — New: HTTP bridge client with prompt-wait logic
+- `aartiq-browser/main.js` — Added bridge endpoints + prompt handler fix
+- `aartiq-mcp/manifest.json` — Updated to v2.0.0
+- `aartiq-mcp/package.json` — Updated to v2.0.0
+
+---
+
 ## Version 0.3.0 - Microsoft Store & Security Hardening (2026-07-07)
 
 ### Overview
