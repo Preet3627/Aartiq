@@ -180,6 +180,51 @@ export const AI_ACTION_SECURITY_CATALOG: AIActionSecurityDefinition[] = [
     detail: 'Low-level disk write and formatting commands that are irreversible once executed.',
     toggleable: false,
   },
+  {
+    actionType: 'DELETE_FILE',
+    label: 'Delete files or directories',
+    description: 'Remove files, folders, or entire directory trees from the filesystem.',
+    category: 'Files',
+    risk: 'high',
+    detail: 'File deletion operations including rm, del, rmdir, and recursive removal. These actions permanently destroy data.',
+    toggleable: false,
+  },
+  {
+    actionType: 'REMOVE_FILE',
+    label: 'Remove files or directories',
+    description: 'Permanently remove files and folders from the system.',
+    category: 'Files',
+    risk: 'high',
+    detail: 'Irreversible file removal operations. Data cannot be recovered after execution.',
+    toggleable: false,
+  },
+  {
+    actionType: 'FORMAT_DISK',
+    label: 'Format disk or partition',
+    description: 'Format storage devices or partitions, destroying all data.',
+    category: 'System',
+    risk: 'high',
+    detail: 'Disk formatting operations that permanently erase all data on the target device.',
+    toggleable: false,
+  },
+  {
+    actionType: 'PARTITION_DISK',
+    label: 'Partition disk',
+    description: 'Modify disk partition tables and layouts.',
+    category: 'System',
+    risk: 'high',
+    detail: 'Partition manipulation that can destroy data and render disks unbootable.',
+    toggleable: false,
+  },
+  {
+    actionType: 'WRITE_DISK',
+    label: 'Low-level disk write',
+    description: 'Direct disk write operations that bypass filesystem safeguards.',
+    category: 'System',
+    risk: 'high',
+    detail: 'Raw disk write commands like dd that can overwrite any data on the system.',
+    toggleable: false,
+  },
 ];
 
 export const AI_ACTIONS_BY_RISK = AI_ACTION_SECURITY_CATALOG.reduce<Record<ActionRiskLevel, AIActionSecurityDefinition[]>>(
@@ -351,9 +396,27 @@ const COMMAND_DESCRIPTIONS: Record<string, string> = {
 
 export function getShellCommandRisk(command: string): ActionRiskLevel {
   const base = (command || '').trim().split(/\s+/)[0].toLowerCase();
+  const lower = (command || '').toLowerCase();
+  
   if (LOW_RISK_COMMANDS.has(base)) return 'low';
+  
   if (HIGH_RISK_COMMANDS_SET.has(base)) return 'high';
-  if (MEDIUM_RISK_COMMANDS_SET.has(base)) return 'medium';
+  
+  if (MEDIUM_RISK_COMMANDS_SET.has(base)) {
+    if (base === 'mv' && (lower.includes('rm') || lower.includes('del') || lower.includes('/dev'))) return 'high';
+    if (base === 'cp' && lower.includes('/dev')) return 'high';
+    return 'medium';
+  }
+  
+  if (lower.includes('rm ') || lower.includes('rm\t') || lower.includes('rm -')) return 'high';
+  if (lower.includes('del ') || lower.includes('del/') || lower.includes('del\\')) return 'high';
+  if (lower.includes('rmdir') || lower.includes('rd /s')) return 'high';
+  if (lower.includes(' unlink') || lower.includes('unlink ')) return 'high';
+  if (lower.includes('shred') || lower.includes('wipe')) return 'high';
+  if (lower.includes('find ') && lower.includes('-delete')) return 'high';
+  if (lower.includes('find ') && lower.includes('-exec rm')) return 'high';
+  if (lower.includes('xargs rm') || lower.includes('xargs del')) return 'high';
+  
   return 'medium';
 }
 
@@ -366,8 +429,15 @@ export function isIrreversibleCommand(command: string): boolean {
   const lower = command.toLowerCase();
   if (IRREVERSIBLE_COMMANDS.has(base)) return true;
   if (base === 'rm' && (lower.includes('-rf') || lower.includes('-r') || lower.includes('-f'))) return true;
+  if (base === 'rm') return true;
   if (base === 'mv' && lower.includes('/')) return true;
   if (lower.includes('>') || lower.includes('>>') || lower.includes('|')) return true;
+  if (lower.includes('shred') || lower.includes('wipe')) return true;
+  if (lower.includes('find ') && lower.includes('-delete')) return true;
+  if (lower.includes('find ') && lower.includes('-exec rm')) return true;
+  if (lower.includes('xargs rm') || lower.includes('xargs del')) return true;
+  if (lower.includes('rmdir') || lower.includes('rd /s')) return true;
+  if (lower.includes(' unlink')) return true;
   return false;
 }
 
