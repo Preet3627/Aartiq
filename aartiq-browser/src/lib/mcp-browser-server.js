@@ -41,15 +41,77 @@ const TOOL_RISK_MAP = {
   run_powershell: 'high',
 };
 
+const DESTRUCTIVE_COMMAND_PATTERNS = [
+  /\brm\s/i,
+  /\bdel\s/i,
+  /\bdel\//i,
+  /\brmdir/i,
+  /\brd\s\/[sfq]/i,
+  /\bformat\s/i,
+  /\bfdisk/i,
+  /\bmkfs/i,
+  /\bdd\s+if=/i,
+  /\bshred/i,
+  /\bwipe/i,
+  /\bfind\s.*-delete/i,
+  /\bfind\s.*-exec\s+rm/i,
+  /\bxargs\s+rm/i,
+  /\bxargs\s+del/i,
+  /\bunlk\b/i,
+  /\bunlink\s/i,
+  /\bsudo\s/i,
+  /\bsu\s/i,
+  /\bkill\s/i,
+  /\bkillall/i,
+  /\bpkill/i,
+  />\s*\/dev\//i,
+  /\bshutdown/i,
+  /\breboot/i,
+  /\bhalt\b/i,
+  /\bpoweroff/i,
+  /\binit\s/i,
+  /\bchmod\s/i,
+  /\bchown\s/i,
+  /\bchgrp\s/i,
+  /\bmount\s/i,
+  /\bumount/i,
+  /\beject/i,
+  /\biptables/i,
+  /\bufw\b/i,
+  /\bfirewall/i,
+];
+
+function detectShellCommandRisk(command) {
+  if (!command || typeof command !== 'string') return 'medium';
+  for (const pattern of DESTRUCTIVE_COMMAND_PATTERNS) {
+    if (pattern.test(command)) return 'high';
+  }
+  return 'medium';
+}
+
 class BrowserMcpServer {
-  constructor(tabViews, store) {
+  constructor(tabViews, store, mainWindow) {
     this.tabViews = tabViews;
     this.store = store;
+    this.mainWindow = mainWindow;
     this.httpServer = null;
     this.server = null;
     this.transport = null;
     this._approvalResolvers = new Map();
     this._pendingBiometricCall = null;
+    this._nativeApprovalManager = null;
+  }
+
+  _getNativeApprovalManager() {
+    if (!this._nativeApprovalManager && this.mainWindow) {
+      try {
+        const { NativeApprovalManager } = require('../main/handlers/native-approval-manager.js');
+        this._nativeApprovalManager = new NativeApprovalManager(this.mainWindow);
+      } catch (e) {
+        console.error('[MCP] Failed to load NativeApprovalManager:', e.message);
+      }
+    }
+    return this._nativeApprovalManager;
   }
 
   async _requestApproval(toolName, args, risk) {
@@ -60,50 +122,520 @@ class BrowserMcpServer {
         resolve({ allowed: false, reason: 'timed out' });
       }, 120000);
 
-      this._approvalResolvers.set(requestId, (result) => {
-        clearTimeout(timeout);
-        resolve(result);
+      const isHighRisk = risk === 'high';
+
+      const nativeManager = this._getNativeApprovalManager();
+      if (isHighRisk && nativeManager && process.platform === 'darwin') {
+        nativeManager.requestNativeApproval(toolName, args, risk, requestId).then((result) => {
+          this._approvalResolvers.delete(requestId);
+          clearTimeout(timeout);
+          resolve({ allowed: result.approved, reason: result.approved ? 'approved (native)' : 'denied (native)' });
+        }).catch(() => {
+          this._showHtmlApprovalPopup(toolName, args, risk, requestId, resolve, timeout);
+        });
+        return;
+      }
+
+      this._showHtmlApprovalPopup(toolName, args, risk, requestId, resolve, timeout);
+    });
+  }
+
+  _showHtmlApprovalPopup(toolName, args, risk, requestId, resolve, timeout) {
+    this._approvalResolvers.set(requestId, (result) => {
+      clearTimeout(timeout);
+      resolve(result);
+    });
+
+    const { BrowserWindow } = require('electron');
+
+    const riskColor = risk === 'high' ? '#ef4444' : risk === 'medium' ? '#f59e0b' : '#22c55e';
+    const riskLabel = risk === 'high' ? 'HIGH RISK' : risk === 'medium' ? 'MEDIUM RISK' : 'LOW RISK';
+    const argsPreview = typeof args === 'object' ? JSON.stringify(args, null, 2) : String(args || '');
+
+    const isHighRisk = risk === 'high';
+    let qrSection = '';
+    let pinCode = '';
+    let qrToken = '';
+
+    if (isHighRisk) {
+      try {
+        const { randomBytes } = require('crypto');
+        const QRCode = require('qrcode');
+        const os = require('os');
+        const deviceId = os.hostname();
+        qrToken = randomBytes(5).toString('hex');
+        pinCode = String(100000 + (randomBytes(4).readUInt32BE(0) % 900000));
+        const deepLinkUrl = `aartiq://approve?id=${qrToken}&deviceId=${encodeURIComponent(deviceId)}&pin=${pinCode}&command=${encodeURIComponent(toolName + ': ' + (args?.command || args?.script || JSON.stringify(args || '')))}`;
+        
+        const qrHtml = QRCode.generateSVG(deepLinkUrl, { margin: 0, width: 160 });
+        
+        qrSection = `
+          <div class="qr-section">
+            <div class="qr-label">Scan with Aartiq Mobile to Authorize</div>
+            <div class="qr-container">${qrHtml}</div>
+            <div class="pin-display">
+              <div class="pin-label">Device PIN</div>
+              <div class="pin-code">${pinCode}</div>
+            </div>
+            <div class="qr-status" id="qr-status">
+              <div class="status-dot waiting"></div>
+              <span>Waiting for mobile approval...</span>
+            </div>
+          </div>
+        `;
+      } catch (e) {
+        console.error('[MCP] Failed to generate QR code:', e);
+      }
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Aartiq — MCP Approval</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#0a0a1a; color:#e2e8f0; min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .card { background:#111827; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:32px; width:${isHighRisk ? '520px' : '460px'}; box-shadow:0 20px 60px rgba(0,0,0,0.6); max-height:90vh; overflow-y:auto; }
+  .header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+  .icon { width:40px; height:40px; border-radius:12px; background:${isHighRisk ? 'rgba(239,68,68,0.15)' : 'rgba(139,92,246,0.15)'}; display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .title { font-size:18px; font-weight:700; color:#f8fafc; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:800; letter-spacing:0.08em; color:#fff; background:${riskColor}; margin-left:auto; }
+  .tool { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:12px 16px; margin-bottom:16px; }
+  .tool-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; margin-bottom:4px; }
+  .tool-name { font-size:15px; font-weight:600; color:${isHighRisk ? '#ef4444' : '#a78bfa'}; font-family:monospace; }
+  .args { background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.05); border-radius:8px; padding:12px; margin-bottom:24px; max-height:180px; overflow:auto; }
+  .args-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; margin-bottom:8px; }
+  pre { font-size:12px; font-family:'SF Mono',Menlo,monospace; color:#94a3b8; white-space:pre-wrap; word-break:break-all; line-height:1.5; }
+  .qr-section { text-align:center; margin:20px 0; padding:20px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.2); border-radius:12px; }
+  .qr-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.15em; color:#ef4444; margin-bottom:12px; animation:pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+  .qr-container { display:inline-block; background:white; padding:12px; border-radius:12px; margin-bottom:12px; }
+  .qr-container svg { width:140px; height:140px; }
+  .pin-display { margin-top:12px; }
+  .pin-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; margin-bottom:4px; }
+  .pin-code { font-size:28px; font-weight:900; font-family:'SF Mono',Menlo,monospace; letter-spacing:0.3em; color:#f8fafc; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px 16px; display:inline-block; }
+  .qr-status { margin-top:12px; padding:8px 16px; border-radius:8px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); display:flex; align-items:center; gap:8px; justify-content:center; }
+  .qr-status.approved { background:rgba(34,197,94,0.1); border-color:rgba(34,197,94,0.2); }
+  .qr-status.approved span { color:#22c55e; }
+  .status-dot { width:8px; height:8px; border-radius:50%; }
+  .status-dot.waiting { background:#f59e0b; animation:pulse 1.5s ease-in-out infinite; }
+  .status-dot.approved { background:#22c55e; }
+  .qr-status span { font-size:11px; font-weight:600; color:#f59e0b; }
+  .pin-input-section { margin-top:16px; }
+  .pin-input-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; margin-bottom:8px; text-align:left; }
+  .pin-input { width:100%; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.3); color:#f8fafc; font-size:20px; font-family:'SF Mono',Menlo,monospace; letter-spacing:0.3em; text-align:center; outline:none; }
+  .pin-input:focus { border-color:rgba(239,68,68,0.5); }
+  .pin-input:disabled { opacity:0.4; }
+  .pin-mismatch { font-size:11px; color:#ef4444; margin-top:4px; text-align:center; }
+  .btns { display:flex; gap:12px; }
+  .btn { flex:1; padding:12px; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; transition:all 0.15s; }
+  .btn-approve { background:#7c3aed; color:#fff; }
+  .btn-approve:hover { background:#6d28d9; }
+  .btn-approve:disabled { background:#4c1d95; color:#6b7280; cursor:not-allowed; }
+  .btn-deny { background:rgba(255,255,255,0.06); color:#94a3b8; border:1px solid rgba(255,255,255,0.08); }
+  .btn-deny:hover { background:rgba(239,68,68,0.15); color:#ef4444; border-color:rgba(239,68,68,0.3); }
+  .btn-approve-high { background:#dc2626; color:#fff; }
+  .btn-approve-high:hover { background:#b91c1c; }
+  .footer { text-align:center; margin-top:16px; font-size:10px; color:#475569; }
+  .shortcut-hint { text-align:center; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:4px; }
+  .shortcut-hint kbd { display:inline-block; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); font-size:9px; font-family:'SF Mono',Menlo,monospace; color:rgba(255,255,255,0.4); }
+  .shortcut-hint span { font-size:9px; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:0.1em; }
+  .destructive-warning { background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:10px 14px; margin-bottom:16px; }
+  .destructive-warning-title { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:#ef4444; margin-bottom:4px; }
+  .destructive-warning-text { font-size:11px; color:#fca5a5; line-height:1.4; }
+</style></head><body>
+<div class="card">
+  <div class="header">
+    <div class="icon">${isHighRisk ? '&#9888;' : '&#9889;'}</div>
+    <div class="title">MCP Tool Approval</div>
+    <div class="badge">${riskLabel}</div>
+  </div>
+  
+  ${isHighRisk ? '<div class="destructive-warning"><div class="destructive-warning-title">&#9888; Destructive Command Detected</div><div class="destructive-warning-text">This command can permanently modify or destroy data. Mobile QR approval and PIN verification are required.</div></div>' : ''}
+  
+  <div class="tool">
+    <div class="tool-label">Tool</div>
+    <div class="tool-name">${toolName}</div>
+  </div>
+  <div class="args">
+    <div class="args-label">Arguments</div>
+    <pre>${argsPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+  </div>
+  
+  ${qrSection}
+  
+  ${isHighRisk ? `
+  <div class="pin-input-section">
+    <div class="pin-input-label">Enter PIN to Confirm</div>
+    <input type="password" id="pin-input" class="pin-input" placeholder="Enter 6-digit PIN" maxlength="6" inputmode="numeric" pattern="[0-9]*" disabled autocomplete="off" />
+    <div class="pin-mismatch" id="pin-error" style="display:none;"></div>
+  </div>
+  ` : ''}
+  
+  <div class="btns" style="margin-top:${isHighRisk ? '20px' : '0'}">
+    <button class="btn btn-deny" id="deny">Deny</button>
+    <button class="btn ${isHighRisk ? 'btn-approve-high' : 'btn-approve'}" id="approve" ${isHighRisk ? 'disabled' : ''}>${isHighRisk ? 'Awaiting Mobile Approval' : 'Approve'}</button>
+  </div>
+  <div class="footer">Aartiq Neural Vault &middot; This window closes automatically</div>
+  ${!isHighRisk ? '<div class="shortcut-hint"><kbd>Shift</kbd><span>+</span><kbd>Tab</kbd><span>&nbsp;to quick-approve</span></div>' : ''}
+</div>
+<script>
+  const isHighRisk = ${isHighRisk};
+  const expectedPin = '${pinCode}';
+  const qrToken = '${qrToken}';
+  let mobileApproved = false;
+  let pinVerified = false;
+
+  const approveBtn = document.getElementById('approve');
+  const pinInput = document.getElementById('pin-input');
+  const pinError = document.getElementById('pin-error');
+  const qrStatus = document.getElementById('qr-status');
+
+  function updateApproveButton() {
+    if (!isHighRisk) {
+      approveBtn.disabled = false;
+      approveBtn.textContent = 'Approve';
+      return;
+    }
+    if (mobileApproved && pinVerified) {
+      approveBtn.disabled = false;
+      approveBtn.textContent = 'Approve';
+    } else if (mobileApproved) {
+      approveBtn.disabled = true;
+      approveBtn.textContent = 'Enter Matching PIN';
+    } else {
+      approveBtn.disabled = true;
+      approveBtn.textContent = 'Awaiting Mobile Approval';
+    }
+  }
+
+  if (pinInput) {
+    pinInput.addEventListener('input', function() {
+      const val = this.value.replace(/\\D/g, '');
+      this.value = val;
+      pinError.style.display = 'none';
+      if (val.length === expectedPin.length) {
+        if (val === expectedPin) {
+          pinVerified = true;
+          pinInput.style.borderColor = 'rgba(34,197,94,0.5)';
+          pinInput.style.background = 'rgba(34,197,94,0.05)';
+        } else {
+          pinVerified = false;
+          pinInput.style.borderColor = 'rgba(239,68,68,0.5)';
+          pinError.textContent = 'PIN does not match. Please check the code.';
+          pinError.style.display = 'block';
+        }
+      } else {
+        pinVerified = false;
+        pinInput.style.borderColor = 'rgba(255,255,255,0.1)';
+        pinInput.style.background = 'rgba(0,0,0,0.3)';
+      }
+      updateApproveButton();
+    });
+  }
+
+  if (isHighRisk) {
+    approveBtn.disabled = true;
+    
+    if (window.electronAPI && window.electronAPI.onMcpMobileApproval) {
+      window.electronAPI.onMcpMobileApproval(function(data) {
+        if (data && data.pin === expectedPin && data.id === qrToken) {
+          mobileApproved = true;
+          if (qrStatus) {
+            qrStatus.className = 'qr-status approved';
+            qrStatus.innerHTML = '<div class="status-dot approved"></div><span>Mobile approval received!</span>';
+          }
+          if (pinInput) {
+            pinInput.disabled = false;
+            pinInput.focus();
+          }
+          updateApproveButton();
+        }
+      });
+    }
+  }
+
+  document.getElementById('approve').onclick = function() {
+    if (this.disabled) return;
+    window.electronAPI.mcpApprovalResponse('${requestId}', true);
+    window.close();
+  };
+  document.getElementById('deny').onclick = function() {
+    window.electronAPI.mcpApprovalResponse('${requestId}', false);
+    window.close();
+  };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault();
+      if (!isHighRisk || (mobileApproved && pinVerified)) {
+        window.electronAPI.mcpApprovalResponse('${requestId}', true);
+        window.close();
+      }
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      window.electronAPI.mcpApprovalResponse('${requestId}', false);
+      window.close();
+    }
+  });
+</script></body></html>`;
+
+    const preloadPath = path.join(__dirname, '..', '..', 'approval-preload.js');
+    const popup = new BrowserWindow({
+      width: isHighRisk ? 600 : 540, height: isHighRisk ? 780 : 480, alwaysOnTop: true,
+      skipTaskbar: false, resizable: false,
+      minimizable: false, maximizable: false,
+      show: false, title: `Aartiq — Approve: ${toolName}`,
+      webPreferences: {
+        preload: preloadPath,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+
+    popup.once('ready-to-show', () => popup.show());
+    popup.on('closed', () => {
+      if (this._approvalResolvers.has(requestId)) {
+        this._approvalResolvers.get(requestId)({ allowed: false, reason: 'window closed' });
+        this._approvalResolvers.delete(requestId);
+      }
+    });
+
+    popup.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  }
+      }
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Aartiq — MCP Approval</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:#0a0a1a; color:#e2e8f0; min-height:100vh; display:flex; align-items:center; justify-content:center; }
+  .card { background:#111827; border:1px solid rgba(255,255,255,0.08); border-radius:16px; padding:32px; width:${isHighRisk ? '520px' : '460px'}; box-shadow:0 20px 60px rgba(0,0,0,0.6); max-height:90vh; overflow-y:auto; }
+  .header { display:flex; align-items:center; gap:12px; margin-bottom:20px; }
+  .icon { width:40px; height:40px; border-radius:12px; background:${isHighRisk ? 'rgba(239,68,68,0.15)' : 'rgba(139,92,246,0.15)'}; display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .title { font-size:18px; font-weight:700; color:#f8fafc; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:800; letter-spacing:0.08em; color:#fff; background:${riskColor}; margin-left:auto; }
+  .tool { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:12px 16px; margin-bottom:16px; }
+  .tool-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; margin-bottom:4px; }
+  .tool-name { font-size:15px; font-weight:600; color:${isHighRisk ? '#ef4444' : '#a78bfa'}; font-family:monospace; }
+  .args { background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.05); border-radius:8px; padding:12px; margin-bottom:24px; max-height:180px; overflow:auto; }
+  .args-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; margin-bottom:8px; }
+  pre { font-size:12px; font-family:'SF Mono',Menlo,monospace; color:#94a3b8; white-space:pre-wrap; word-break:break-all; line-height:1.5; }
+  .qr-section { text-align:center; margin:20px 0; padding:20px; background:rgba(239,68,68,0.05); border:1px solid rgba(239,68,68,0.2); border-radius:12px; }
+  .qr-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.15em; color:#ef4444; margin-bottom:12px; animation:pulse 2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+  .qr-container { display:inline-block; background:white; padding:12px; border-radius:12px; margin-bottom:12px; }
+  .qr-container svg { width:140px; height:140px; }
+  .pin-display { margin-top:12px; }
+  .pin-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; margin-bottom:4px; }
+  .pin-code { font-size:28px; font-weight:900; font-family:'SF Mono',Menlo,monospace; letter-spacing:0.3em; color:#f8fafc; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:8px 16px; display:inline-block; }
+  .qr-status { margin-top:12px; padding:8px 16px; border-radius:8px; background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.2); display:flex; align-items:center; gap:8px; justify-content:center; }
+  .qr-status.approved { background:rgba(34,197,94,0.1); border-color:rgba(34,197,94,0.2); }
+  .qr-status.approved span { color:#22c55e; }
+  .status-dot { width:8px; height:8px; border-radius:50%; }
+  .status-dot.waiting { background:#f59e0b; animation:pulse 1.5s ease-in-out infinite; }
+  .status-dot.approved { background:#22c55e; }
+  .qr-status span { font-size:11px; font-weight:600; color:#f59e0b; }
+  .pin-input-section { margin-top:16px; }
+  .pin-input-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:#64748b; margin-bottom:8px; text-align:left; }
+  .pin-input { width:100%; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); background:rgba(0,0,0,0.3); color:#f8fafc; font-size:20px; font-family:'SF Mono',Menlo,monospace; letter-spacing:0.3em; text-align:center; outline:none; }
+  .pin-input:focus { border-color:rgba(239,68,68,0.5); }
+  .pin-input:disabled { opacity:0.4; }
+  .pin-mismatch { font-size:11px; color:#ef4444; margin-top:4px; text-align:center; }
+  .btns { display:flex; gap:12px; }
+  .btn { flex:1; padding:12px; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; transition:all 0.15s; }
+  .btn-approve { background:#7c3aed; color:#fff; }
+  .btn-approve:hover { background:#6d28d9; }
+  .btn-approve:disabled { background:#4c1d95; color:#6b7280; cursor:not-allowed; }
+  .btn-deny { background:rgba(255,255,255,0.06); color:#94a3b8; border:1px solid rgba(255,255,255,0.08); }
+  .btn-deny:hover { background:rgba(239,68,68,0.15); color:#ef4444; border-color:rgba(239,68,68,0.3); }
+  .btn-approve-high { background:#dc2626; color:#fff; }
+  .btn-approve-high:hover { background:#b91c1c; }
+  .footer { text-align:center; margin-top:16px; font-size:10px; color:#475569; }
+  .shortcut-hint { text-align:center; margin-top:8px; display:flex; align-items:center; justify-content:center; gap:4px; }
+  .shortcut-hint kbd { display:inline-block; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); font-size:9px; font-family:'SF Mono',Menlo,monospace; color:rgba(255,255,255,0.4); }
+  .shortcut-hint span { font-size:9px; color:rgba(255,255,255,0.3); text-transform:uppercase; letter-spacing:0.1em; }
+  .destructive-warning { background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.2); border-radius:8px; padding:10px 14px; margin-bottom:16px; }
+  .destructive-warning-title { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.1em; color:#ef4444; margin-bottom:4px; }
+  .destructive-warning-text { font-size:11px; color:#fca5a5; line-height:1.4; }
+</style></head><body>
+<div class="card">
+  <div class="header">
+    <div class="icon">${isHighRisk ? '&#9888;' : '&#9889;'}</div>
+    <div class="title">MCP Tool Approval</div>
+    <div class="badge">${riskLabel}</div>
+  </div>
+  
+  ${isHighRisk ? '<div class="destructive-warning"><div class="destructive-warning-title">&#9888; Destructive Command Detected</div><div class="destructive-warning-text">This command can permanently modify or destroy data. Mobile QR approval and PIN verification are required.</div></div>' : ''}
+  
+  <div class="tool">
+    <div class="tool-label">Tool</div>
+    <div class="tool-name">${toolName}</div>
+  </div>
+  <div class="args">
+    <div class="args-label">Arguments</div>
+    <pre>${argsPreview.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+  </div>
+  
+  ${qrSection}
+  
+  ${isHighRisk ? `
+  <div class="pin-input-section">
+    <div class="pin-input-label">Enter PIN to Confirm</div>
+    <input type="password" id="pin-input" class="pin-input" placeholder="Enter 6-digit PIN" maxlength="6" inputmode="numeric" pattern="[0-9]*" disabled autocomplete="off" />
+    <div class="pin-mismatch" id="pin-error" style="display:none;"></div>
+  </div>
+  ` : ''}
+  
+  <div class="btns" style="margin-top:${isHighRisk ? '20px' : '0'}">
+    <button class="btn btn-deny" id="deny">Deny</button>
+    <button class="btn ${isHighRisk ? 'btn-approve-high' : 'btn-approve'}" id="approve" ${isHighRisk ? 'disabled' : ''}>${isHighRisk ? 'Awaiting Mobile Approval' : 'Approve'}</button>
+  </div>
+  <div class="footer">Aartiq Neural Vault &middot; This window closes automatically</div>
+  ${!isHighRisk ? '<div class="shortcut-hint"><kbd>Shift</kbd><span>+</span><kbd>Tab</kbd><span>&nbsp;to quick-approve</span></div>' : ''}
+</div>
+<script>
+  const isHighRisk = ${isHighRisk};
+  const expectedPin = '${pinCode}';
+  const qrToken = '${qrToken}';
+  let mobileApproved = false;
+  let pinVerified = false;
+
+  const approveBtn = document.getElementById('approve');
+  const pinInput = document.getElementById('pin-input');
+  const pinError = document.getElementById('pin-error');
+  const qrStatus = document.getElementById('qr-status');
+
+  function updateApproveButton() {
+    if (!isHighRisk) {
+      approveBtn.disabled = false;
+      approveBtn.textContent = 'Approve';
+      return;
+    }
+    if (mobileApproved && pinVerified) {
+      approveBtn.disabled = false;
+      approveBtn.textContent = 'Approve';
+    } else if (mobileApproved) {
+      approveBtn.disabled = true;
+      approveBtn.textContent = 'Enter Matching PIN';
+    } else {
+      approveBtn.disabled = true;
+      approveBtn.textContent = 'Awaiting Mobile Approval';
+    }
+  }
+
+  if (pinInput) {
+    pinInput.addEventListener('input', function() {
+      const val = this.value.replace(/\\D/g, '');
+      this.value = val;
+      pinError.style.display = 'none';
+      if (val.length === expectedPin.length) {
+        if (val === expectedPin) {
+          pinVerified = true;
+          pinInput.style.borderColor = 'rgba(34,197,94,0.5)';
+          pinInput.style.background = 'rgba(34,197,94,0.05)';
+        } else {
+          pinVerified = false;
+          pinInput.style.borderColor = 'rgba(239,68,68,0.5)';
+          pinError.textContent = 'PIN does not match. Please check the code.';
+          pinError.style.display = 'block';
+        }
+      } else {
+        pinVerified = false;
+        pinInput.style.borderColor = 'rgba(255,255,255,0.1)';
+        pinInput.style.background = 'rgba(0,0,0,0.3)';
+      }
+      updateApproveButton();
+    });
+  }
+
+  if (isHighRisk) {
+    approveBtn.disabled = true;
+    
+    if (window.electronAPI && window.electronAPI.onMcpMobileApproval) {
+      window.electronAPI.onMcpMobileApproval(function(data) {
+        if (data && data.pin === expectedPin && data.id === qrToken) {
+          mobileApproved = true;
+          if (qrStatus) {
+            qrStatus.className = 'qr-status approved';
+            qrStatus.innerHTML = '<div class="status-dot approved"></div><span>Mobile approval received!</span>';
+          }
+          if (pinInput) {
+            pinInput.disabled = false;
+            pinInput.focus();
+          }
+          updateApproveButton();
+        }
+      });
+    }
+    
+    if (window.electronAPI && window.electronAPI.pollMcpApprovalStatus) {
+      const pollInterval = setInterval(async function() {
+        try {
+          const status = await window.electronAPI.pollMcpMobileApproval(requestId);
+          if (status && status.approved) {
+            mobileApproved = true;
+            clearInterval(pollInterval);
+            if (qrStatus) {
+              qrStatus.className = 'qr-status approved';
+              qrStatus.innerHTML = '<div class="status-dot approved"></div><span>Mobile approval received!</span>';
+            }
+            if (pinInput) {
+              pinInput.disabled = false;
+              pinInput.focus();
+            }
+            updateApproveButton();
+          }
+        } catch (e) {}
+      }, 2000);
+    }
+  }
+
+  document.getElementById('approve').onclick = function() {
+    if (this.disabled) return;
+    window.electronAPI.mcpApprovalResponse('${requestId}', true);
+    window.close();
+  };
+  document.getElementById('deny').onclick = function() {
+    window.electronAPI.mcpApprovalResponse('${requestId}', false);
+    window.close();
+  };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault();
+      if (!isHighRisk || (mobileApproved && pinVerified)) {
+        window.electronAPI.mcpApprovalResponse('${requestId}', true);
+        window.close();
+      }
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      window.electronAPI.mcpApprovalResponse('${requestId}', false);
+      window.close();
+    }
+  });
+</script></body></html>`;
+
+      const preloadPath = path.join(__dirname, '..', '..', 'approval-preload.js');
+      const popup = new BrowserWindow({
+        width: isHighRisk ? 600 : 540, height: isHighRisk ? 780 : 480, alwaysOnTop: true,
+        skipTaskbar: false, resizable: false,
+        minimizable: false, maximizable: false,
+        show: false, title: `Aartiq — Approve: ${toolName}`,
+        webPreferences: {
+          preload: preloadPath,
+          contextIsolation: true,
+          nodeIntegration: false,
+        },
       });
 
-      const mainWindow = this.tabViews._mainWindow;
-      const winObj = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3003';
-      const popupUrl = `${backendUrl}/?panel=mcp-approval&requestId=${requestId}&tool=${encodeURIComponent(toolName)}&risk=${risk}&args=${encodeURIComponent(JSON.stringify(args))}`;
-
-      if (winObj) {
-        winObj.webContents.send('open-mcp-approval-popup', { requestId, tool: toolName, risk, args, url: popupUrl });
-      } else {
-        const { BrowserWindow, ipcMain } = require('electron');
-        const isDev = !app.isPackaged;
-        const preloadPath = path.join(__dirname, '..', '..', 'preload.js');
-
-        const popup = new BrowserWindow({
-          width: 520, height: 500, alwaysOnTop: true,
-          skipTaskbar: true, resizable: false,
-          minimizable: false, maximizable: false,
-          show: false, title: 'MCP Tool Approval',
-          webPreferences: {
-            preload: preloadPath,
-            contextIsolation: true,
-            nodeIntegration: false,
-          },
-        });
-
-        popup.once('ready-to-show', () => popup.show());
-        popup.on('closed', () => {
-          if (this._approvalResolvers.has(requestId)) {
-            this._approvalResolvers.get(requestId)({ allowed: false, reason: 'window closed' });
-            this._approvalResolvers.delete(requestId);
-          }
-        });
-
-        if (isDev) {
-          popup.loadURL(popupUrl);
-        } else {
-          popup.loadURL(`https://localhost:3003/?panel=mcp-approval&requestId=${requestId}&tool=${encodeURIComponent(toolName)}&risk=${risk}&args=${encodeURIComponent(JSON.stringify(args))}`);
+      popup.once('ready-to-show', () => popup.show());
+      popup.on('closed', () => {
+        if (this._approvalResolvers.has(requestId)) {
+          this._approvalResolvers.get(requestId)({ allowed: false, reason: 'window closed' });
+          this._approvalResolvers.delete(requestId);
         }
-      }
+      });
+
+      popup.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
     });
   }
 
@@ -131,7 +663,21 @@ class BrowserMcpServer {
   }
 
   async _checkPermission(toolName, args) {
-    const risk = TOOL_RISK_MAP[toolName] || 'low';
+    let risk = TOOL_RISK_MAP[toolName] || 'low';
+    
+    if (toolName === 'execute_shell_command' && args.command) {
+      risk = detectShellCommandRisk(args.command);
+    }
+    if (toolName === 'run_powershell' && args.script) {
+      risk = detectShellCommandRisk(args.script);
+    }
+    if (toolName === 'run_applescript' && args.script) {
+      const lower = (args.script || '').toLowerCase();
+      if (lower.includes('rm ') || lower.includes('delete') || lower.includes('remove')) {
+        risk = 'high';
+      }
+    }
+    
     const config = this._getAutoApprovalConfig();
 
     if (risk === 'low' && config.autoApproveLowRisk) {
@@ -1162,7 +1708,20 @@ class BrowserMcpServer {
     const toolDefinitions = this.getToolDefinitions();
 
     this.server = new Server(
-      { name: 'aartiq-browser', version: '1.0.0' },
+      {
+        name: 'aartiq-browser',
+        title: 'Aartiq Browser',
+        version: '1.0.0',
+        description: 'AI-native browser with autonomous agent capabilities, local LLM support, and cross-device sync.',
+        websiteUrl: 'https://aartiq.ponsrischool.in',
+        icons: [
+          {
+            src: 'https://aartiq.ponsrischool.in/logo-transparent.png',
+            mimeType: 'image/png',
+            sizes: ['any'],
+          },
+        ],
+      },
       { capabilities: { tools: {} } },
     );
 
