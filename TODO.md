@@ -135,8 +135,8 @@
 
 ## 13. Action Timeline
 
-- [ ] Timestamped vertical timeline instead of chat log
-- [ ] Example:
+- [x] Timestamped vertical timeline instead of chat log
+- [x] Example:
   ```
   9:41  Planning
   9:41  Searching

@@ -82,6 +82,16 @@ const formatDuration = (ms: number): string => {
     return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
 };
 
+const formatTimestamp = (ms: number): string => {
+    const date = new Date(ms);
+    const h = date.getHours();
+    const m = date.getMinutes().toString().padStart(2, '0');
+    const s = date.getSeconds().toString().padStart(2, '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${m}:${s} ${ampm}`;
+};
+
 const elapsedForCommand = (command: AICommand): string | null => {
     if (command.startTime && command.endTime) return formatDuration(command.endTime - command.startTime);
     if (command.startTime && command.status === 'executing') return formatDuration(Date.now() - command.startTime);
@@ -168,23 +178,47 @@ function StatusMark({ status }: { status: AICommand['status'] }) {
 
 function Timeline({ commands, currentCommandIndex }: { commands: AICommand[]; currentCommandIndex: number }) {
     return (
-        <div className="space-y-1.5" role="list" aria-label="Execution timeline">
+        <div className="relative ml-1" role="list" aria-label="Execution timeline">
             {commands.map((command, index) => {
                 const isActive = index === currentCommandIndex && ['executing', 'awaiting_permission'].includes(command.status);
+                const isLast = index === commands.length - 1;
+                const elapsed = elapsedForCommand(command);
+                const timestamp = command.startTime || command.timestamp;
                 return (
                     <motion.div
                         key={command.id}
                         layout
                         role="listitem"
-                        className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1"
+                        className="relative flex items-start gap-3 pb-3"
                     >
-                        <StatusMark status={command.status} />
-                        <span className={`min-w-0 flex-1 truncate text-[13px] ${isActive ? 'text-primary-text' : 'text-secondary-text'}`}>
-                            {commandLabel(command)}
-                        </span>
-                        {elapsedForCommand(command) && (
-                            <span className="shrink-0 text-[11px] text-secondary-text/70">{elapsedForCommand(command)}</span>
+                        {/* Connector line */}
+                        {!isLast && (
+                            <div className="absolute left-[7px] top-5 h-full w-px bg-[color-mix(in_srgb,var(--border-color)_50%,transparent)]" />
                         )}
+
+                        {/* Status dot */}
+                        <div className="relative z-10 mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+                            <StatusMark status={command.status} />
+                        </div>
+
+                        {/* Content */}
+                        <div className="min-w-0 flex-1">
+                            <div className="flex items-baseline gap-2">
+                                <span className={`truncate text-[13px] font-medium ${isActive ? 'text-primary-text' : command.status === 'completed' ? 'text-secondary-text' : 'text-primary-text'}`}>
+                                    {commandLabel(command)}
+                                </span>
+                                {elapsed && (
+                                    <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--primary-text)_6%,transparent)] px-1.5 py-0.5 text-[10px] font-medium text-secondary-text/80">
+                                        {elapsed}
+                                    </span>
+                                )}
+                            </div>
+                            {timestamp && (
+                                <div className="mt-0.5 text-[11px] text-secondary-text/60">
+                                    {formatTimestamp(timestamp)}
+                                </div>
+                            )}
+                        </div>
                     </motion.div>
                 );
             })}
