@@ -234,6 +234,15 @@ function CommandCard({ command, onToggle, isOpen }: { command: AICommand; onTogg
     const riskColor = risk === 'high' ? 'text-red-500 bg-red-500/10 border-red-500/20'
         : risk === 'medium' ? 'text-amber-500 bg-amber-500/10 border-amber-500/20'
         : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
+
+    const isFileOp = command.type.includes('FILE') || command.type === 'SHELL_COMMAND';
+    const isNetworkOp = command.type.includes('SEARCH') || command.type.includes('NAVIGATE') || command.type.includes('READ');
+    const dataAccessed = isFileOp ? 'Local filesystem' : isNetworkOp ? 'Web / network' : 'Browser state';
+    const undoable = command.type === 'NAVIGATE' || command.type === 'READ_PAGE_CONTENT' || command.type === 'OPEN_VIEW'
+        ? 'Yes (navigation only)'
+        : command.type === 'SHELL_COMMAND' ? 'Depends on command'
+        : 'No (review before approving)';
+
     return (
         <div className="rounded-lg border border-[color-mix(in_srgb,var(--border-color)_45%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_82%,transparent)]">
             <button
@@ -277,9 +286,11 @@ function CommandCard({ command, onToggle, isOpen }: { command: AICommand; onTogg
                                     <p className="text-[12px] leading-relaxed text-secondary-text">{command.reason}</p>
                                 </div>
                             )}
-                            <div className="flex items-center gap-3 text-[11px] text-secondary-text">
-                                <span>Risk: <span className={`font-medium ${risk === 'high' ? 'text-red-500' : risk === 'medium' ? 'text-amber-500' : 'text-emerald-500'}`}>{risk}</span></span>
-                                <span>Permission: <span className="font-medium text-primary-text">{permissionLabel}</span></span>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-secondary-text">
+                                <div><span className="font-medium text-secondary-text/70">Data: </span>{dataAccessed}</div>
+                                <div><span className="font-medium text-secondary-text/70">Undoable: </span>{undoable}</div>
+                                <div><span className="font-medium text-secondary-text/70">Risk: </span><span className={risk === 'high' ? 'text-red-500' : risk === 'medium' ? 'text-amber-500' : 'text-emerald-500'}>{risk}</span></div>
+                                <div><span className="font-medium text-secondary-text/70">Permission: </span>{permissionLabel}</div>
                             </div>
                         </div>
                     </motion.div>

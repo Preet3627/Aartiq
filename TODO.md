@@ -411,7 +411,7 @@
 
 ## 47. Trust & Explainability
 
-- [ ] Every autonomous action answers five questions:
+- [x] Every autonomous action answers five questions:
   1. **What** is about to happen?
   2. **Why** is it necessary?
   3. **What data** will be accessed?
