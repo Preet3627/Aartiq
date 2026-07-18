@@ -470,6 +470,7 @@ declare global {
             webSearchProviders: () => Promise<{ success: boolean; providers?: string[] }>;
             webSearchConfigure: (keys: Record<string, string>) => Promise<{ success: boolean }>;
             webSearchRag: (query: string) => Promise<Array<{ title: string; url: string; snippet: string; pageContent?: string }>>;
+            aiWebSearch: (query: string, engine?: string, count?: number) => Promise<{ results: Array<{ title: string; url: string; snippet: string; content: string }>; engine?: string; error?: string }>;
             webSearchYoutube: (query: string, count?: number) => Promise<{ success: boolean; results?: Array<{ title: string; url: string; snippet: string; videoId: string; channel: string; length: string; thumbnail: string }>; error?: string }>;
             fetchPageContent: (url: string, maxChars?: number) => Promise<{ success: boolean; content?: string; error?: string }>;
             domClickElement: (opts: { tabId?: string; selector?: string; text?: string; 'aria-label'?: string; retry?: number; verify?: boolean }) => Promise<{ success: boolean; error?: string; method?: string; tag?: string; text?: string; rect?: { x: number; y: number; w: number; h: number } }>;

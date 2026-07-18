@@ -146,6 +146,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveGoogleConfig: (config) => ipcRenderer.send('save-google-config', config),
   getGoogleConfig: () => ipcRenderer.invoke('get-google-config'),
   webSearchRag: (query) => ipcRenderer.invoke('web-search-rag', query),
+  aiWebSearch: (query, engine, count) => ipcRenderer.invoke('ai-web-search', query, engine, count),
   webSearch: (query, provider, count) => ipcRenderer.invoke('web-search', query, provider, count),
   webSearchContext: (query, provider) => ipcRenderer.invoke('web-search-context', query, provider),
   webSearchProviders: () => ipcRenderer.invoke('web-search-providers'),

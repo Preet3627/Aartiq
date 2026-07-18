@@ -6692,6 +6692,22 @@ if (isPackaged && process.platform === 'darwin') {
     }
   });
 
+  // AI Sidebar web search — uses MCP BrowserMcpServer._browserSearch() (offscreen, DuckDuckGo default)
+  ipcMain.handle('ai-web-search', async (_event, query, engine, count) => {
+    try {
+      if (!mcpServer) throw new Error('MCP server not initialized');
+      const result = await mcpServer._browserSearch(
+        query,
+        engine || 'duckduckgo',
+        Math.min(count || 3, 5)
+      );
+      return result;
+    } catch (e) {
+      console.error('[AI-WebSearch] Failed:', e.message);
+      return { results: [], engine: engine || 'duckduckgo', error: e.message };
+    }
+  });
+
   // YouTube search
   ipcMain.handle('web-search-youtube', async (_event, query, count) => {
     try {

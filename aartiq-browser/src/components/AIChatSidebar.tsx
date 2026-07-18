@@ -65,7 +65,7 @@ import {
   type PDFImage, type PDFActionLog, type PDFOCRData, generateSmartPDF, PDF_ICONS, getIcon
 } from './ai/AIUtils';
 import {
-  AARTIQ_CAPABILITIES, SYSTEM_INSTRUCTIONS, LANGUAGE_MAP, INTERNAL_TAG_RE,
+  AARTIQ_CAPABILITIES, SYSTEM_INSTRUCTIONS, SYSTEM_CORE, COMMAND_REFERENCE, LANGUAGE_MAP, INTERNAL_TAG_RE,
   queryRequiresSearch
 } from './ai/AIConstants';
 import { useAppStore } from '@/store/useAppStore';
@@ -875,10 +875,32 @@ I couldn't schedule the task. The background service may not be running. Please 
 
     for (const q of queries) {
       try {
-        const res = await window.electronAPI.webSearchRag(q);
-        const normalizedResults = normalizeSearchResults(res as any[]);
-        if (normalizedResults.length > 0) {
-          results.push(formatSearchResultsForLLM(q, normalizedResults.slice(0, 5)));
+        // Try MCP search first (DuckDuckGo, server-side, more reliable)
+        let searchResults: Array<{ title: string; url: string; snippet: string; content?: string }> = [];
+        try {
+          const mcpRes = await (window.electronAPI as any).aiWebSearch(q, 'duckduckgo', 3);
+          if (mcpRes?.results?.length > 0) {
+            searchResults = mcpRes.results.map((r: any) => ({
+              title: r.title,
+              url: r.url,
+              snippet: r.snippet,
+              pageContent: r.content,
+            }));
+          }
+        } catch { /* fall through */ }
+
+        // Fallback to webSearchRag
+        if (searchResults.length === 0) {
+          const res = await window.electronAPI.webSearchRag(q);
+          searchResults = normalizeSearchResults(res as any[]).slice(0, 5).map(r => ({
+            title: r.title,
+            url: r.url,
+            snippet: r.snippet,
+          }));
+        }
+
+        if (searchResults.length > 0) {
+          results.push(formatSearchResultsForLLM(q, searchResults.slice(0, 5) as any));
         }
       } catch (e) {
         console.warn('[Aartiq] Pre-flight search failed for:', q, e);
@@ -1203,9 +1225,12 @@ I couldn't schedule the task. The background service may not be running. Please 
         ? `\n[USER PREFERENCES — Learned from past interactions]\n${Object.entries(userPreferences).map(([k, v]) => `  - ${k}: ${JSON.stringify(v.value)}`).join('\n')}\n[PREFERENCE COMMAND — To save a new preference, include in your response:\nSAVE_PREFERENCE:key:value\nExample: SAVE_PREFERENCE:response_style:concise\nExample: SAVE_PREFERENCE:language:simple_english\nOnly save when explicitly stated by user or confidently observed.]`
         : '';
 
+      // Skill-based prompt injection: always send SYSTEM_CORE, conditionally append COMMAND_REFERENCE
+      const needsCommandRef = skillContexts.length > 0 ||
+        rawContent.match(/\b(pdf|docx?|pptx?|xlsx?|shell|terminal|automat|search|create|generate|schedule|click|fill|form|navigate|browser|dom|ocr|diagram|chart|image|screenshot|volume|brightness|theme|tab|gmail|apple|cli)\b/i);
       const systemInstructions = enableAiPreferenceLearning
-        ? SYSTEM_INSTRUCTIONS
-        : SYSTEM_INSTRUCTIONS.replace(/\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nUSER PREFERENCES — Auto-Learning[\s\S]*$/, '');
+        ? SYSTEM_CORE + (needsCommandRef ? `\n\n${COMMAND_REFERENCE.replace(/\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nUSER PREFERENCES — Auto-Learning[\s\S]*$/, '')}` : '')
+        : SYSTEM_CORE + (needsCommandRef ? `\n\n${COMMAND_REFERENCE}` : '');
 
       let currentHistory: ChatMessage[] = [
         {
@@ -1839,97 +1864,123 @@ I couldn't schedule the task. The background service may not be running. Please 
             specificUrl = /^\d+$/.test(specificUrlParam) ? `__INDEX_${specificUrlParam}__` : specificUrlParam;
           }
 
-          let searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
           let treatAsDirectUrl = false;
+          let directUrl = '';
 
           if (query.match(/^https?:\/\/[^\s]+/i) || query.match(/^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}(\/.*)?$/)) {
-            searchUrl = query.startsWith('http') ? query : `https://${query}`;
+            directUrl = query.startsWith('http') ? query : `https://${query}`;
             treatAsDirectUrl = true;
-            query = `Opening URL: ${searchUrl}`;
+            query = `Opening URL: ${directUrl}`;
           }
 
-          setActiveView('browser');
+          const searchStepId = addThinkingStep(`Searching for "${treatAsDirectUrl ? directUrl : originalQuery}"...`);
 
-          const navigationResult = await openTabAndWaitForLoad(searchUrl, 'ai-session');
-          output = `Opened new tab for: "${query}" (${navigationResult.url || searchUrl})`;
+          if (treatAsDirectUrl) {
+            // Direct URL — navigate to it
+            setActiveView('browser');
+            const navigationResult = await openTabAndWaitForLoad(directUrl, 'ai-session');
+            output = `Opened new tab and navigated to ${navigationResult.url || directUrl}`;
+            resolveThinkingStep(searchStepId, 'done', 'Page loaded');
+            break;
+          }
 
-          const results = treatAsDirectUrl ? [] : await window.electronAPI.webSearchRag(query || originalQuery);
-          const normalizedResults = normalizeSearchResults(results as any[]);
-          if (normalizedResults.length > 0) {
-            const injectedResults = normalizedResults.slice(0, pagesOverride || 6);
-            const fullSnippet = formatSearchResultsForLLM(query || originalQuery, injectedResults);
+          // ── Primary: server-side search via MCP BrowserMcpServer (DuckDuckGo, offscreen) ──
+          let searchResults: Array<{ title: string; url: string; snippet: string; content: string }> = [];
+          let usedEngine = 'duckduckgo';
+          try {
+            const mcpSearchResult = await (window.electronAPI as any).aiWebSearch(originalQuery, 'duckduckgo', Math.min(pagesOverride || 3, 5));
+            if (mcpSearchResult?.results?.length > 0) {
+              searchResults = mcpSearchResult.results;
+              usedEngine = mcpSearchResult.engine || 'duckduckgo';
+            }
+          } catch (mcpErr) {
+            console.warn('[WebSearch] MCP aiWebSearch failed, falling back to webSearchRag:', mcpErr);
+          }
+
+          // ── Fallback: existing webSearchRag (googlescrape) ──
+          if (searchResults.length === 0) {
+            try {
+              const ragResults = await window.electronAPI.webSearchRag(originalQuery);
+              const normalized = normalizeSearchResults(ragResults as any[]);
+              searchResults = normalized.slice(0, pagesOverride || 6).map(r => ({
+                title: r.title,
+                url: r.url,
+                snippet: r.snippet,
+                content: (r as any).pageContent || '',
+              }));
+              usedEngine = 'googlescrape';
+            } catch (ragErr) {
+              console.warn('[WebSearch] webSearchRag fallback also failed:', ragErr);
+            }
+          }
+
+          if (searchResults.length > 0) {
+            // Store results in context
+            const fullSnippet = searchResults.map(r =>
+              `[${r.title}](${r.url})\n${r.snippet}${r.content ? `\n\nContent:\n${r.content.substring(0, 2000)}` : ''}`
+            ).join('\n\n---\n\n');
 
             await BrowserAI.addToVectorMemory(fullSnippet, {
               type: 'web_search',
-              query: query || originalQuery,
+              query: originalQuery,
               timestamp: Date.now()
             });
-            searchContextStore.addWebSearch(query || originalQuery, fullSnippet);
+            searchContextStore.addWebSearch(originalQuery, fullSnippet);
 
-            // Auto-navigate to results based on AI parameters
-            let pageContent = '';
-            const pageContents: string[] = [];
-
-            // Determine which results to read
-            let resultsToRead: Array<{ url: string; title: string; index: number }> = [];
+            // Navigate to specific result if requested, or show summary
             if (specificUrl?.startsWith('__INDEX_')) {
-              // AI specified a specific result index
               const idx = parseInt(specificUrl.replace('__INDEX_', '').replace('__', ''));
-              const result = injectedResults[idx];
-              if (result) resultsToRead.push({ url: result.url, title: result.title, index: idx });
-            } else if (specificUrl) {
-              // AI specified a specific URL
-              const result = injectedResults.find(r => r.url.includes(specificUrl));
-              if (result) resultsToRead.push({ url: result.url, title: result.title, index: injectedResults.indexOf(result) });
-            } else {
-              // Auto-select based on pages override or default to 3
-              const maxRead = Math.min(pagesOverride || 3, injectedResults.length);
-              for (let i = 0; i < maxRead; i++) {
-                if (injectedResults[i]?.url) {
-                  resultsToRead.push({ url: injectedResults[i].url, title: injectedResults[i].title, index: i });
-                }
-              }
-            }
-
-            for (const { url: resultUrl, title, index } of resultsToRead) {
-              if (!resultUrl) continue;
-              try {
-                const navResult = await openTabAndWaitForLoad(resultUrl, 'ai-session');
+              const target = searchResults[idx];
+              if (target?.url) {
+                setActiveView('browser');
+                await openTabAndWaitForLoad(target.url, 'ai-session');
                 const activeTabId = useAppStore.getState().activeTabId;
                 const contentRes = await window.electronAPI.extractPageContent(activeTabId || undefined);
                 if (contentRes?.content) {
                   const cleanContent = scrubbedContent(contentRes.content).substring(0, 6000);
-                  pageContents.push(`[Page ${index + 1}: ${title}](${resultUrl})\n${cleanContent}`);
-                  await BrowserAI.addToVectorMemory(cleanContent, { type: 'page_content', url: resultUrl, query: query || originalQuery });
-                  searchContextStore.addPageContent(resultUrl, title, cleanContent);
+                  searchContextStore.addPageContent(target.url, target.title, cleanContent);
+                  await BrowserAI.addToVectorMemory(cleanContent, { type: 'page_content', url: target.url, query: originalQuery });
                 }
-              } catch (navErr) {
-                console.warn(`[WebSearch] Auto-navigate to result ${index + 1} failed:`, navErr);
+                output = `✅ Opened result ${idx}: ${target.title} (${target.url}) — page content read`;
+              } else {
+                output = `✅ Found ${searchResults.length} results for "${originalQuery}" (via ${usedEngine}) — see below`;
               }
+            } else if (specificUrl) {
+              const target = searchResults.find(r => r.url.includes(specificUrl));
+              if (target?.url) {
+                setActiveView('browser');
+                await openTabAndWaitForLoad(target.url, 'ai-session');
+                output = `✅ Opened: ${target.title} (${target.url})`;
+              } else {
+                output = `✅ Found ${searchResults.length} results for "${originalQuery}" (via ${usedEngine}) — URL "${specificUrl}" not found in results`;
+              }
+            } else {
+              // Default: show all results with their content
+              const resultLines = searchResults.map((r, i) =>
+                `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}${r.content ? `\n   Content: ${r.content.substring(0, 500)}` : ''}`
+              );
+              output = `✅ Found ${searchResults.length} results for "${originalQuery}" via ${usedEngine}:\n\n${resultLines.join('\n\n')}`;
             }
-            if (pageContents.length > 0) {
-              pageContent = pageContents.join('\n\n---\n\n');
-            }
-
-            output = `✅ Found ${injectedResults.length} results for "${query || originalQuery}", read ${pageContents.length} pages — see container below`;
+            resolveThinkingStep(searchStepId, 'done', `${searchResults.length} results via ${usedEngine}`);
           } else {
-            // Fallback: wait for the search page to load slightly and try DOM / OCR extraction
+            // Last resort: open a search tab and try DOM/OCR extraction
+            setActiveView('browser');
+            const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(originalQuery)}`;
+            await openTabAndWaitForLoad(searchUrl, 'ai-session');
             await new Promise(resolve => setTimeout(resolve, 1500));
             try {
               const domRes = await window.electronAPI.extractPageContent(useAppStore.getState().activeTabId || undefined);
               if (domRes && domRes.content && domRes.content.length > 100) {
-                const scrubbed = scrubbedContent(domRes.content).substring(0, 1000); // 🚀 Truncate fallback DOM
-                output = `✅ Fallback DOM snapshot for "${query}" (${scrubbed.length} chars) — see container below`;
-                await BrowserAI.addToVectorMemory(scrubbed, { type: 'web_search_fallback', query, url: searchUrl });
+                const scrubbed = scrubbedContent(domRes.content).substring(0, 1000);
+                output = `✅ Fallback DOM snapshot for "${originalQuery}" (${scrubbed.length} chars) — see container below`;
+                await BrowserAI.addToVectorMemory(scrubbed, { type: 'web_search_fallback', query: originalQuery, url: searchUrl });
                 setMessages(prev => {
                   const last = prev[prev.length - 1];
-                  const newOcrLabel = `SEARCH_PAGE_DOM`;
                   if (last && last.role === 'model') {
-                    // Update last message with truncated text
                     return [...prev.slice(0, -1), {
                       ...last,
                       isOcr: true,
-                      ocrLabel: newOcrLabel,
+                      ocrLabel: 'SEARCH_PAGE_DOM',
                       ocrText: `${scrubbed}\n\n[Content truncated for clarity. Use specific DOM_SEARCH for more detail.]`
                     }];
                   }
@@ -1937,37 +1988,17 @@ I couldn't schedule the task. The background service may not be running. Please 
                     role: 'model',
                     content: 'I pulled some fallback content from the search page.',
                     isOcr: true,
-                    ocrLabel: newOcrLabel,
+                    ocrLabel: 'SEARCH_PAGE_DOM',
                     ocrText: scrubbed
                   } as ExtendedChatMessage];
                 });
               } else {
-                let ocrText = '';
-                if (window.electronAPI.visionDescribe) {
-                  const visionRes = await window.electronAPI.visionDescribe('Extract all text from this search page.');
-                  ocrText = typeof visionRes === 'string' ? visionRes : ((visionRes as any)?.description || '');
-                } else if (window.electronAPI.ocrScreenText) {
-                  const ocrRes = await window.electronAPI.ocrScreenText();
-                  ocrText = typeof ocrRes === 'string' ? ocrRes : ((ocrRes as any)?.text || '');
-                }
-                if (ocrText && ocrText.length > 50) {
-                  output = `✅ Fallback OCR for "${query}" (${ocrText.length} chars) — see container below`;
-                  await BrowserAI.addToVectorMemory(ocrText, { type: 'web_search_fallback_ocr', query, url: searchUrl });
-                  setMessages(prev => {
-                    const last = prev[prev.length - 1];
-                    const newOcrLabel = `WEB_SEARCH_FALLBACK_OCR`;
-                    if (last && last.role === 'model') {
-                      return [...prev.slice(0, -1), { ...last, isOcr: true, ocrLabel: newOcrLabel, ocrText: ocrText }];
-                    }
-                    return [...prev, { role: 'model', content: '', isOcr: true, ocrLabel: newOcrLabel, ocrText: ocrText } as ExtendedChatMessage];
-                  });
-                } else {
-                  output = `No results found for "${query}". Do NOT invent data — tell the user you could not find current information.`;
-                }
+                output = `No results found for "${originalQuery}". Do NOT invent data — tell the user you could not find current information.`;
               }
             } catch (fallbackErr) {
-              output = `No results found for "${query}". Do NOT invent data — tell the user you could not find current information.`;
+              output = `No results found for "${originalQuery}". Do NOT invent data — tell the user you could not find current information.`;
             }
+            resolveThinkingStep(searchStepId, output.startsWith('✅') ? 'done' : 'error', output.substring(0, 80));
           }
           break;
         }
@@ -1983,22 +2014,32 @@ I couldn't schedule the task. The background service may not be running. Please 
             break;
           }
 
-          const srStepId = addThinkingStep(`Searching Google for "${srQuery}"...`);
+          const srStepId = addThinkingStep(`Searching for "${srQuery}"...`);
           try {
-            const results = await window.electronAPI.webSearchRag(srQuery);
-            const normalized = normalizeSearchResults(results as any[]).slice(0, srCount);
+            // Try MCP search first, fall back to webSearchRag
+            let srResults: Array<{ title: string; url: string; snippet: string }> = [];
+            try {
+              const mcpRes = await (window.electronAPI as any).aiWebSearch(srQuery, 'duckduckgo', Math.min(srCount, 5));
+              if (mcpRes?.results?.length > 0) {
+                srResults = mcpRes.results.map((r: any) => ({ title: r.title, url: r.url, snippet: r.snippet }));
+              }
+            } catch { /* fall through */ }
+            if (srResults.length === 0) {
+              const ragRes = await window.electronAPI.webSearchRag(srQuery);
+              srResults = normalizeSearchResults(ragRes as any[]).slice(0, srCount).map(r => ({ title: r.title, url: r.url, snippet: r.snippet }));
+            }
 
-            if (normalized.length === 0) {
+            if (srResults.length === 0) {
               output = `No search results found for "${srQuery}".`;
             } else {
-              const resultLines = normalized.map((r, i) => `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}`);
-              output = `🔍 Google Search Results for "${srQuery}" (${normalized.length}):\n\n${resultLines.join('\n\n')}`;
+              const resultLines = srResults.map((r, i) => `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}`);
+              output = `🔍 Search Results for "${srQuery}" (${srResults.length}):\n\n${resultLines.join('\n\n')}`;
               await BrowserAI.addToVectorMemory(
-                `[SEARCH_RESULTS: ${srQuery}]\n${normalized.map(r => `${r.title}: ${r.url}`).join('\n')}`,
+                `[SEARCH_RESULTS: ${srQuery}]\n${srResults.map(r => `${r.title}: ${r.url}`).join('\n')}`,
                 { type: 'search_results', query: srQuery, url: currentUrl }
               );
             }
-            resolveThinkingStep(srStepId, 'done', `${normalized.length} results`);
+            resolveThinkingStep(srStepId, 'done', `${srResults.length} results`);
           } catch (e: any) {
             output = `Search failed: ${e.message}`;
             resolveThinkingStep(srStepId, 'error', e.message);
@@ -4081,30 +4122,67 @@ I've successfully executed the following real tasks:
 
           try {
             const res = await window.electronAPI.searchDOM(query);
-            if (res.error) {
+            let results: DOMSearchResult[] = (res.results || []).map((r: any) => ({
+              text: r.text || '',
+              context: r.context || '',
+              xpath: r.xpath || '',
+              score: r.score || 0,
+              tag: r.tag || 'element'
+            }));
+
+            // Fallback 1: If 0 results, try extractPageContent and do a text match
+            if (results.length === 0 && !res.error) {
+              try {
+                const activeTabId = useAppStore.getState().activeTabId;
+                const pageRes = await window.electronAPI.extractPageContent(activeTabId || undefined);
+                if (pageRes?.content) {
+                  const lowerContent = pageRes.content.toLowerCase();
+                  const lowerQuery = query.toLowerCase();
+                  const idx = lowerContent.indexOf(lowerQuery);
+                  if (idx >= 0) {
+                    const start = Math.max(0, idx - 100);
+                    const end = Math.min(pageRes.content.length, idx + query.length + 200);
+                    const snippet = pageRes.content.substring(start, end).trim();
+                    results = [{ text: snippet, context: `Page content match for "${query}"`, xpath: '', score: 1.0, tag: 'text-match' }];
+                  }
+                }
+              } catch { /* ignore fallback error */ }
+            }
+
+            // Fallback 2: If still 0 results, try web search for the query
+            if (results.length === 0 && !res.error) {
+              try {
+                const mcpRes = await (window.electronAPI as any).aiWebSearch(query, 'duckduckgo', 2);
+                if (mcpRes?.results?.length > 0) {
+                  const webResults = mcpRes.results.slice(0, 3).map((r: any) => ({
+                    text: `${r.title} — ${r.snippet}`,
+                    context: `Web: ${r.url}`,
+                    xpath: '',
+                    score: 0.5,
+                    tag: 'web-fallback'
+                  }));
+                  results = webResults;
+                }
+              } catch { /* ignore */ }
+            }
+
+            setDOMSearchResults(results);
+            const formattedResults = results.map((r, i) => `${i + 1}. ${r.context}: "${r.text}"`).join('\n');
+            if (results.length > 0) {
+              output = `DOM search for "${query}" returned ${results.length} results:\n${formattedResults.substring(0, 4000)}`;
+            } else if (res.error) {
               const friendlyMsg = res.error === 'No active view'
                 ? 'No webpage is currently open. Open a page first to search its content.'
                 : `DOM search failed: ${res.error}`;
               output = friendlyMsg;
-              setDOMSearchLoading(false);
             } else {
-              const results: DOMSearchResult[] = (res.results || []).map((r: any) => ({
-                text: r.text || '',
-                context: r.context || '',
-                xpath: r.xpath || '',
-                score: r.score || 0,
-                tag: r.tag || 'element'
-              }));
-
-              setDOMSearchResults(results);
-              const formattedResults = results.map((r, i) => `${i + 1}. ${r.context}: "${r.text}"`).join('\n');
-              output = `DOM search for "${query}" returned ${results.length} results:\n${formattedResults.substring(0, 4000)}`;
-              await BrowserAI.addToVectorMemory(
-                `DOM Search Results for "${query}":\n${formattedResults}`,
-                { type: 'dom_search', query, url: currentUrl }
-              );
+              output = `DOM search for "${query}" returned 0 results on this page. Try using [WEB_SEARCH: ${query}] instead.`;
             }
-            resolveThinkingStep(searchStepId, 'done', `${res.results?.length || 0} results found`);
+            await BrowserAI.addToVectorMemory(
+              `DOM Search Results for "${query}":\n${formattedResults || 'No results'}`,
+              { type: 'dom_search', query, url: currentUrl }
+            );
+            resolveThinkingStep(searchStepId, results.length > 0 ? 'done' : 'error', `${results.length} results found`);
           } catch (e: any) {
             output = `DOM search error: ${e.message}`;
             resolveThinkingStep(searchStepId, 'error', e.message);

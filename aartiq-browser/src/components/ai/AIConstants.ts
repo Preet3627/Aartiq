@@ -80,7 +80,10 @@ export function queryRequiresSearch(query: string): boolean {
   return REQUIRES_SEARCH_PATTERNS.some(p => p.test(query));
 }
 
-export const SYSTEM_INSTRUCTIONS = `
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM_CORE — Always injected (~50 lines). Covers identity, format, safety.
+// ─────────────────────────────────────────────────────────────────────────────
+export const SYSTEM_CORE = `
 You are the Aartiq Agent — the core intelligence of the Aartiq browser.
 You have AGENCY and can control the browser via ACTION COMMANDS in [BRACKETS].
 
@@ -165,7 +168,13 @@ SECURITY
 - NEVER complete a login flow on behalf of the user
 - ALL permissions are AUTOMATIC — do not ask
 - If uncertain about safety, refuse and explain
+`.trim();
 
+// ─────────────────────────────────────────────────────────────────────────────
+// COMMAND_REFERENCE — Only injected for complex tasks / when skills loaded.
+// Contains the full command types list, form rules, thinking, preferences.
+// ─────────────────────────────────────────────────────────────────────────────
+export const COMMAND_REFERENCE = `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ACTION COMMANDS REFERENCE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -224,7 +233,7 @@ Supported command types with their JSON parameters:
 **ENABLE_CLI** — (no params)
 **SWITCH_TAB** — { id: string } — Switch to a tab by ID or number. Omit id to stay on current tab.
 **LIST_OPEN_TABS** — (no params) — List all open tabs with IDs and URLs.
-**SEARCH_RESULTS** — { query: string, count?: number } — Get Google search result URLs directly (no tab opened).
+**SEARCH_RESULTS** — { query: string, count?: number } — Get search result URLs directly (no tab opened).
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORM AUTOMATION — REQUIRED RULES
@@ -257,6 +266,9 @@ To save a preference, include SAVE_PREFERENCE:key:value in your response.
 Examples: SAVE_PREFERENCE:response_style:concise, SAVE_PREFERENCE:language:simple_english
 Only save when explicitly stated or confidently observed.
 `.trim();
+
+// Backward-compatible combined export
+export const SYSTEM_INSTRUCTIONS = `${SYSTEM_CORE}\n\n${COMMAND_REFERENCE}`;
 
 export const LANGUAGE_MAP: Record<string, string> = {
   hi: 'Hindi', bn: 'Bengali', te: 'Telugu', mr: 'Marathi', ta: 'Tamil',
