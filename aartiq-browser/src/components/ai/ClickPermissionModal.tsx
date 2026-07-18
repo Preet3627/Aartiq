@@ -1,10 +1,11 @@
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
   Check,
   ChevronDown,
   FileWarning,
+  Fingerprint,
   Lock,
   MousePointer2,
   Search,
@@ -31,14 +32,12 @@ interface ClickPermissionModalProps {
     risk: 'low' | 'medium' | 'high';
     actionType?: string;
     what?: string;
-    highRiskQr?: string | null;
     requiresDeviceUnlock?: boolean;
     affectedPaths?: string[];
     estimatedImpact?: string;
   };
   onAllow?: (alwaysAllow?: boolean) => void;
   onDeny: () => void;
-  highRiskApproved?: boolean;
   batchCommands?: BatchCommandInfo[];
   onAllowBatch?: (allowedIndices: number[]) => void;
 }
@@ -113,28 +112,12 @@ function SinglePermissionCard({
   context,
   onAllow,
   onDeny,
-  highRiskApproved,
 }: {
   context: NonNullable<ClickPermissionModalProps['context']>;
   onAllow: (alwaysAllow?: boolean) => void;
   onDeny: () => void;
-  highRiskApproved: boolean;
 }) {
   const [alwaysAllow, setAlwaysAllow] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const qrData = useMemo(() => {
-    if (!context.highRiskQr) return null;
-    try {
-      return JSON.parse(context.highRiskQr);
-    } catch {
-      return { qrImage: context.highRiskQr, pin: '' };
-    }
-  }, [context.highRiskQr]);
-  const expectedPin = typeof qrData?.pin === 'string' ? qrData.pin : '';
-  const normalizedPin = pinInput.replace(/\D/g, '');
-  const requiresHighRiskVerification = context.risk === 'high';
-  const pinReady = !expectedPin || normalizedPin === expectedPin;
-  const canAllow = requiresHighRiskVerification ? highRiskApproved && pinReady : true;
   const actionName = humanAction(context.action, context.actionType);
 
   return (
@@ -148,7 +131,7 @@ function SinglePermissionCard({
             <div className="text-[13px] text-secondary-text">Allow Aartiq to</div>
             <h2 className="mt-0.5 text-lg font-semibold leading-tight text-primary-text">{actionName}</h2>
             <div className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${riskTone[context.risk]}`}>
-              {context.risk === 'high' ? 'High risk' : context.risk === 'medium' ? 'Needs approval' : 'Low risk'}
+              {context.risk === 'high' ? 'High risk — biometric required' : context.risk === 'medium' ? 'Needs approval' : 'Low risk'}
             </div>
           </div>
           <button type="button" onClick={onDeny} className="rounded-md p-2 text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text" title="Deny">
@@ -190,6 +173,18 @@ function SinglePermissionCard({
 
           <DangerousActionNotice command={context.target} risk={context.risk} />
 
+          {context.risk === 'high' && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4">
+              <div className="flex items-center gap-2 text-[13px] font-medium text-red-500">
+                <Fingerprint size={15} />
+                Biometric verification required
+              </div>
+              <p className="mt-1 text-[12px] leading-relaxed text-secondary-text">
+                After clicking Allow, your device will prompt for Touch ID / fingerprint to confirm this high-risk action. No exceptions.
+              </p>
+            </div>
+          )}
+
           {context.requiresDeviceUnlock && context.risk !== 'high' && (
             <div className="rounded-lg border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] px-3 py-3">
               <div className="flex items-center gap-2 text-[13px] font-medium text-primary-text">
@@ -199,35 +194,6 @@ function SinglePermissionCard({
               <p className="mt-1 text-[12px] leading-relaxed text-secondary-text">
                 macOS, Windows, or Linux will ask you to verify before this runs.
               </p>
-            </div>
-          )}
-
-          {context.risk === 'high' && qrData?.qrImage && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-center">
-              <div className="mb-3 flex items-center justify-center gap-2 text-[13px] font-medium text-red-500">
-                <Shield size={15} />
-                Confirm on Aartiq Mobile
-              </div>
-              <div className="mx-auto w-fit rounded-lg bg-white p-3">
-                <img src={qrData.qrImage} alt="Authorize high-risk action" className="h-32 w-32" />
-              </div>
-              {qrData.pin && (
-                <div className="mt-4">
-                  <div className="mb-2 text-[12px] text-secondary-text">Enter matching PIN</div>
-                  <input
-                    value={pinInput}
-                    onChange={(event) => setPinInput(event.target.value.replace(/\D/g, '').slice(0, expectedPin.length || 6))}
-                    inputMode="numeric"
-                    maxLength={expectedPin.length || 6}
-                    disabled={!highRiskApproved}
-                    className="w-full rounded-lg border border-[color-mix(in_srgb,var(--border-color)_65%,transparent)] bg-[color-mix(in_srgb,var(--primary-text)_5%,transparent)] px-3 py-2 text-center font-mono text-lg tracking-[0.25em] text-primary-text outline-none focus:border-[var(--accent)] disabled:opacity-50"
-                  />
-                  {!highRiskApproved && <p className="mt-2 text-[12px] text-secondary-text">Waiting for mobile approval.</p>}
-                  {highRiskApproved && expectedPin && normalizedPin.length > 0 && normalizedPin !== expectedPin && (
-                    <p className="mt-2 text-[12px] text-red-500">PIN does not match.</p>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
@@ -242,7 +208,7 @@ function SinglePermissionCard({
               <div className="grid grid-cols-[90px_1fr] gap-2 text-[11px] text-secondary-text">
                 <span>Action type</span><span className="font-mono">{context.actionType || 'unknown'}</span>
                 <span>Risk</span><span>{context.risk}</span>
-                <span>Device unlock</span><span>{context.requiresDeviceUnlock ? 'required' : 'not required'}</span>
+                <span>Biometric</span><span>{context.risk === 'high' ? 'required' : context.requiresDeviceUnlock ? 'required' : 'not required'}</span>
               </div>
             </TechnicalDetails>
           )}
@@ -267,22 +233,12 @@ function SinglePermissionCard({
         >
           Deny
         </button>
-        {context.risk !== 'high' && (
-          <button
-            type="button"
-            onClick={() => onAllow(false)}
-            className="flex-1 rounded-lg bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-4 py-2.5 text-sm font-semibold text-primary-text hover:bg-[color-mix(in_srgb,var(--accent)_22%,transparent)]"
-          >
-            Allow Once
-          </button>
-        )}
         <button
           type="button"
-          onClick={() => canAllow && onAllow(context.risk === 'high' ? false : alwaysAllow)}
-          disabled={!canAllow}
-          className="flex-1 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => onAllow(context.risk === 'high' ? false : alwaysAllow)}
+          className="flex-1 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
         >
-          {context.risk === 'high' ? 'Allow' : 'Always Allow'}
+          {context.risk === 'high' ? 'Allow (Touch ID)' : alwaysAllow ? 'Always Allow' : 'Allow Once'}
         </button>
       </div>
     </PermissionShell>
@@ -407,7 +363,7 @@ function PermissionShell({ children, wide = false }: { children: React.ReactNode
 }
 
 const ClickPermissionModal = memo(function ClickPermissionModal(props: ClickPermissionModalProps) {
-  const { context, onAllow, onDeny, highRiskApproved, batchCommands, onAllowBatch } = props;
+  const { context, onAllow, onDeny, batchCommands, onAllowBatch } = props;
 
   React.useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -429,7 +385,7 @@ const ClickPermissionModal = memo(function ClickPermissionModal(props: ClickPerm
   }
 
   if (!context || !onAllow) return null;
-  return <SinglePermissionCard context={context} onAllow={onAllow} onDeny={onDeny} highRiskApproved={highRiskApproved || false} />;
+  return <SinglePermissionCard context={context} onAllow={onAllow} onDeny={onDeny} />;
 });
 
 export default ClickPermissionModal;

@@ -17,7 +17,6 @@ interface PermissionContext {
   what?: string;
   reason: string;
   risk: ActionRiskLevel;
-  highRiskQr?: string | null;
   requiresDeviceUnlock?: boolean;
   affectedPaths?: string[];
   estimatedImpact?: string;
@@ -34,7 +33,6 @@ interface BatchCommandInfo {
 
 interface PendingPermission {
   resolve: (allowed: boolean) => void;
-  mobileApproved: boolean;
   context: PermissionContext;
   batchCommands?: BatchCommandInfo[];
 }
@@ -115,15 +113,9 @@ export function useAIActionSecurityManager() {
 
     const requiresDeviceUnlock = settings?.requireDeviceUnlockForManualApproval !== false;
 
-    let highRiskQr: string | null = null;
-    if (risk === 'high' && window.electronAPI?.generateHighRiskQr) {
-      highRiskQr = await window.electronAPI.generateHighRiskQr(`${actionType}-${Date.now()}`);
-    }
-
     return new Promise((resolve) => {
       setPendingPermission({
         resolve,
-        mobileApproved: false,
         context: {
           actionType,
           action: input.action,
@@ -131,8 +123,7 @@ export function useAIActionSecurityManager() {
           what: input.what,
           reason: input.reason,
           risk,
-          highRiskQr,
-          requiresDeviceUnlock: requiresDeviceUnlock && risk !== 'low',
+          requiresDeviceUnlock: risk === 'high' ? true : requiresDeviceUnlock && risk !== 'low',
         },
       });
     });
@@ -216,7 +207,6 @@ export function useAIActionSecurityManager() {
             resolve(new Array<boolean>(inputs.length).fill(true));
           }
         },
-        mobileApproved: false,
         context: {
           actionType: 'BATCH',
           action: `Batch Shell Commands (${pending.length})`,
@@ -224,7 +214,6 @@ export function useAIActionSecurityManager() {
           what: pending.map((p) => p.what || p.target || '').join('\n'),
           reason: `The AI wants to execute ${pending.length} shell commands.`,
           risk: 'medium',
-          highRiskQr: null,
           requiresDeviceUnlock,
         },
         batchCommands: pending.map((p) => ({
@@ -268,7 +257,6 @@ export function useAIActionSecurityManager() {
 
           window.electronAPI?.submitShellApprovalResponse?.(payload.requestId, allowed);
         },
-        mobileApproved: false,
         context: {
           actionType: payload.actionType || 'SHELL_COMMAND',
           action: payload.action || 'Shell Command Approval',
@@ -276,36 +264,8 @@ export function useAIActionSecurityManager() {
           what: payload.command,
           reason: payload.reason || 'An automated task needs to execute this shell command.',
           risk: normalizeRiskLevel(payload.risk),
-          highRiskQr: payload.highRiskQr,
           requiresDeviceUnlock,
         },
-      });
-    });
-
-    return cleanup;
-  }, []);
-
-  useEffect(() => {
-    if (!window.electronAPI?.onMobileApproveHighRisk) {
-      return;
-    }
-
-    const cleanup = window.electronAPI.onMobileApproveHighRisk((data: { pin: string; id: string }) => {
-      setPendingPermission((currentPending) => {
-        if (!currentPending || currentPending.context.risk !== 'high') {
-          return currentPending;
-        }
-
-        try {
-          const qrData = JSON.parse(currentPending.context.highRiskQr || '{}');
-          if (qrData.pin === data.pin && qrData.token === data.id) {
-            return { ...currentPending, mobileApproved: true };
-          }
-        } catch (error) {
-          console.error('[AI Security] Failed to parse high-risk approval payload:', error);
-        }
-
-        return currentPending;
       });
     });
 
@@ -359,7 +319,6 @@ export function useAIActionSecurityManager() {
         {isBatch ? (
           <ClickPermissionModal
             context={pendingPermission.context}
-            highRiskApproved={pendingPermission.mobileApproved}
             batchCommands={pendingPermission.batchCommands}
             onAllowBatch={(allowedIndices) => {
               const commands = pendingPermission.batchCommands!;
@@ -382,11 +341,17 @@ export function useAIActionSecurityManager() {
         ) : (
           <ClickPermissionModal
             context={pendingPermission.context}
-            highRiskApproved={pendingPermission.mobileApproved}
             onAllow={async (alwaysAllow) => {
               const context = pendingPermission.context;
 
-              if (context.requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
+              if (context.risk === 'high' && window.electronAPI?.authenticateBiometric) {
+                const authResult = await window.electronAPI.authenticateBiometric(
+                  `Verify identity for high-risk action: ${context.action}`
+                );
+                if (!authResult?.success) {
+                  return;
+                }
+              } else if (context.requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
                 const authResult = await window.electronAPI.authenticateBiometric(
                   `Approve action: ${context.action}`
                 );

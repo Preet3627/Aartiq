@@ -5197,7 +5197,6 @@ I've successfully executed the following real tasks:
       command: permissionPending.context.target || permissionPending.context.what || '',
       reason: permissionPending.context.reason,
       risk: permissionPending.context.risk,
-      highRiskQr: permissionPending.context.highRiskQr || null,
       actionType: permissionPending.context.actionType,
       action: permissionPending.context.action,
       requiresDeviceUnlock: permissionPending.context.requiresDeviceUnlock,

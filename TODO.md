@@ -123,13 +123,13 @@
 
 ## 11. Medium Risk
 
-- [ ] Require approval for: clicks, forms, downloads, clipboard, launch apps
+- [x] Require approval for: clicks, forms, downloads, clipboard, launch apps
 
 ---
 
 ## 12. High Risk Always
 
-- [ ] Touch ID + manual approval for high-risk actions, no exceptions
+- [x] Touch ID + manual approval for high-risk actions, no exceptions
 
 ---
 
