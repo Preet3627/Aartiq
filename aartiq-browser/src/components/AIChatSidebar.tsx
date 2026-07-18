@@ -385,8 +385,10 @@ const sanitizeVisibleMessage = (content: string): string => {
 
 function ThinkingStatus({ state }: { state: AgentState }) {
   const label = state === 'planning' ? 'Planning actions' :
+    state === 'searching' ? 'Searching' :
     state === 'executing' ? 'Executing' :
     state === 'waiting' ? 'Waiting for approval' :
+    state === 'paused' ? 'Paused' :
     state === 'finished' ? 'Finishing' :
     'Thinking';
 
@@ -5763,16 +5765,20 @@ I've successfully executed the following real tasks:
                   agentState === 'executing' ? 'bg-sky-500 animate-pulse' :
                   agentState === 'thinking' ? 'bg-indigo-500 animate-pulse' :
                   agentState === 'planning' ? 'bg-amber-500 animate-pulse' :
+                  agentState === 'searching' ? 'bg-cyan-500 animate-pulse' :
                   agentState === 'waiting' ? 'bg-orange-500 animate-pulse' :
+                  agentState === 'paused' ? 'bg-yellow-500' :
                   agentState === 'finished' ? 'bg-green-500' :
                   isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'
                 }`} />
                 <span className="text-[8px] font-bold text-secondary-text uppercase tracking-widest">
-                  {agentState === 'idle' ? 'Autonomous' : 
+                  {agentState === 'idle' ? 'Autonomous' :
                    agentState === 'planning' ? 'Planning' :
                    agentState === 'thinking' ? 'Thinking' :
+                   agentState === 'searching' ? 'Searching' :
                    agentState === 'executing' ? 'Executing' :
                    agentState === 'waiting' ? 'Waiting' :
+                   agentState === 'paused' ? 'Paused' :
                    agentState === 'finished' ? 'Done' :
                    'Autonomous'}
                 </span>

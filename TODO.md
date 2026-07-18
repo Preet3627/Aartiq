@@ -173,8 +173,8 @@
 
 ## 17. Agent State
 
-- [ ] Always-visible tiny state indicator
-- [ ] States: Idle, Thinking, Searching, Waiting, Executing, Finished, Paused
+- [x] Always-visible tiny state indicator
+- [x] States: Idle, Thinking, Searching, Waiting, Executing, Finished, Paused
 
 ---
 
