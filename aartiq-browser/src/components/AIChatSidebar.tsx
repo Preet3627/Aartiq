@@ -3771,8 +3771,8 @@ I couldn't schedule the task. The background service may not be running. Please 
           setMessages(prev => [...prev, { role: 'model', content: "🌐 **Task 4: Browser Navigation**\nNavigating to Aartiq website..." }]);
           await new Promise(resolve => setTimeout(resolve, 800));
           try {
-            await window.electronAPI.navigateTo('https://aartiq.com');
-            setMessages(prev => [...prev, { role: 'model', content: "✅ **Browser navigated to aartiq.com** — Real browser interaction working" }]);
+            await window.electronAPI.navigateTo('https://aartiq.ponsrischool.in');
+            setMessages(prev => [...prev, { role: 'model', content: "✅ **Browser navigated to aartiq.ponsrischool.in** — Real browser interaction working" }]);
           } catch (e) {
             setMessages(prev => [...prev, { role: 'model', content: "ℹ️ Browser navigation available via API" }]);
           }
@@ -3933,7 +3933,7 @@ I've successfully executed the following real tasks:
 | 1 | 📰 Web Search | ✅ | Fetched latest tech news via RAG |
 | 2 | 🖥️ Shell Command | ✅ | Retrieved WiFi/network info on ${platformName} |
 | 3 | 🔊 System Control | ✅ | Volume adjusted to 50% |
-| 4 | 🌐 Browser Nav | ✅ | Navigated to aartiq.com |
+| 4 | 🌐 Browser Nav | ✅ | Navigated to aartiq.ponsrischool.in |
 | 5 | ⚙️ Permissions | ✅ | Settings & security architecture shown |
 | 6 | 🚀 App Launch | ${calcLaunched ? '✅' : 'ℹ️'} | ${calcLaunched ? 'Opened Calculator' : 'Calculator requires Accessibility permissions'} |
 | 7 | 📁 File System | ✅ | Retrieved app version & platform |
