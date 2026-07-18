@@ -346,11 +346,11 @@
 
 ## 38. Keyboard Shortcuts
 
-- [ ] `⌘K` — Command Center
-- [ ] `⌘L` — AI Prompt
-- [ ] `⌘⇧A` — Autonomous Mode
-- [ ] `Esc` — Abort
-- [ ] `⌘/` — Focus AI
+- [x] `⌘K` — Command Center
+- [x] `⌘L` — AI Prompt
+- [x] `⌘⇧A` — Autonomous Mode
+- [x] `Esc` — Abort
+- [x] `⌘/` — Focus AI
 
 ---
 

@@ -5408,6 +5408,33 @@ I've successfully executed the following real tasks:
     };
   }, [messages, commandQueue, conversations, activeConversationId, currentCommandIndex, inputMessage, isLoading, error, resolvedTheme]);
 
+  // Keyboard shortcut listeners (⌘K, ⌘L, ⌘⇧A, Esc, ⌘/)
+  useEffect(() => {
+    const handleFocusAI = () => {
+      const textarea = document.querySelector<HTMLTextAreaElement>('[data-ai-input]');
+      textarea?.focus();
+    };
+    const handleAbort = () => {
+      if (isLoading || commandQueue.length > 0) {
+        setCommandQueue([]);
+        setAgentState('idle');
+        setPlanningSteps([]);
+      }
+    };
+    const handleToggleAutonomous = () => {
+      window.dispatchEvent(new CustomEvent('aartiq:toggle-autonomous-mode'));
+    };
+
+    window.addEventListener('aartiq:focus-ai', handleFocusAI);
+    window.addEventListener('aartiq:abort-action', handleAbort);
+    window.addEventListener('aartiq:toggle-autonomous', handleToggleAutonomous);
+    return () => {
+      window.removeEventListener('aartiq:focus-ai', handleFocusAI);
+      window.removeEventListener('aartiq:abort-action', handleAbort);
+      window.removeEventListener('aartiq:toggle-autonomous', handleToggleAutonomous);
+    };
+  }, [isLoading, commandQueue.length]);
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
@@ -6348,6 +6375,7 @@ I've successfully executed the following real tasks:
           </AnimatePresence>
 
           <textarea
+            data-ai-input
             value={inputMessage}
             onChange={(e) => {
               markSidebarInteraction();

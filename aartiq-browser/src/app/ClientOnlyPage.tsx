@@ -1361,6 +1361,22 @@ export default function Home() {
             break;
           case 'toggle-ai-assist': store.setEnableAIAssist(!store.enableAIAssist); break;
           case 'toggle-ai-overview': store.setEnableAiOverview(!store.enableAiOverview); break;
+          case 'command-center':
+            window.dispatchEvent(new CustomEvent('aartiq:command-center'));
+            break;
+          case 'focus-ai-prompt':
+            window.dispatchEvent(new CustomEvent('aartiq:focus-ai'));
+            break;
+          case 'toggle-autonomous':
+            window.dispatchEvent(new CustomEvent('aartiq:toggle-autonomous'));
+            break;
+          case 'abort-action':
+            window.dispatchEvent(new CustomEvent('aartiq:abort-action'));
+            break;
+          case 'focus-ai':
+            useAppStore.setState({ sidebarOpen: true });
+            window.dispatchEvent(new CustomEvent('aartiq:focus-ai'));
+            break;
           case 'reload-tab': window.electronAPI.reload(); break;
         }
       });
