@@ -229,6 +229,11 @@ function Timeline({ commands, currentCommandIndex }: { commands: AICommand[]; cu
 function CommandCard({ command, onToggle, isOpen }: { command: AICommand; onToggle: () => void; isOpen: boolean }) {
     const group = commandGroup(command.type);
     const summary = outputSummary(command);
+    const risk = command.riskLevel || 'low';
+    const permissionLabel = risk === 'high' ? 'Touch ID + approval' : risk === 'medium' ? 'Approval required' : 'Automatic';
+    const riskColor = risk === 'high' ? 'text-red-500 bg-red-500/10 border-red-500/20'
+        : risk === 'medium' ? 'text-amber-500 bg-amber-500/10 border-amber-500/20'
+        : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
     return (
         <div className="rounded-lg border border-[color-mix(in_srgb,var(--border-color)_45%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_82%,transparent)]">
             <button
@@ -244,8 +249,11 @@ function CommandCard({ command, onToggle, isOpen }: { command: AICommand; onTogg
                     <span className="block text-[12px] font-medium text-secondary-text">{groupLabel[group]}</span>
                     <span className="block truncate text-[13px] text-primary-text">{commandLabel(command)}</span>
                 </span>
+                <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${riskColor}`}>
+                    {risk}
+                </span>
                 <span className="shrink-0"><StatusMark status={command.status} /></span>
-                {(command.output || command.error || isDeveloperMode) && (
+                {(command.output || command.error || command.reason || isDeveloperMode) && (
                     <ChevronDown size={15} className={`shrink-0 text-secondary-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                 )}
             </button>
@@ -264,8 +272,15 @@ function CommandCard({ command, onToggle, isOpen }: { command: AICommand; onTogg
                                 </div>
                             )}
                             {command.reason && (
-                                <p className="text-[12px] leading-relaxed text-secondary-text">{command.reason}</p>
+                                <div>
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-secondary-text/60 mb-0.5">Why</div>
+                                    <p className="text-[12px] leading-relaxed text-secondary-text">{command.reason}</p>
+                                </div>
                             )}
+                            <div className="flex items-center gap-3 text-[11px] text-secondary-text">
+                                <span>Risk: <span className={`font-medium ${risk === 'high' ? 'text-red-500' : risk === 'medium' ? 'text-amber-500' : 'text-emerald-500'}`}>{risk}</span></span>
+                                <span>Permission: <span className="font-medium text-primary-text">{permissionLabel}</span></span>
+                            </div>
                         </div>
                     </motion.div>
                 )}

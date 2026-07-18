@@ -196,8 +196,8 @@
 
 ## 20. Explain Every Action
 
-- [ ] Each action card answers: Why, Risk level, Permission requirement
-- [ ] Example:
+- [x] Each action card answers: Why, Risk level, Permission requirement
+- [x] Example:
   ```
   Opening Browser
   Reason: Need browser context
