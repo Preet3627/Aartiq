@@ -382,8 +382,8 @@
 
 ## 43. Command Palette
 
-- [ ] Searchable command palette (`⌘K`) for all actions and settings
-- [ ] Example: `> Generate PDF | Open Downloads | Toggle AI | Change Theme | Permission Settings`
+- [x] Searchable command palette (`⌘K`) for all actions and settings
+- [x] Example: `> Generate PDF | Open Downloads | Toggle AI | Change Theme | Permission Settings`
 
 ---
 

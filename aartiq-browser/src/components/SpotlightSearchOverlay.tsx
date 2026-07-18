@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, X, Calculator, Bell, Globe, Command, ArrowRight } from 'lucide-react';
+import { Search, X, Calculator, Globe, Command, ArrowRight, Settings, Download, Palette, Shield, FileText, Clipboard, Zap } from 'lucide-react';
 import { BrowserAI } from '@/lib/BrowserAI';
 import { safeEval } from '@/lib/safe-eval';
 import { useAppStore } from '@/store/useAppStore';
@@ -13,8 +13,32 @@ interface SpotlightSearchOverlayProps {
     onClose: () => void;
 }
 
+interface CommandItem {
+    id: string;
+    label: string;
+    category: string;
+    icon: React.ReactNode;
+    action: () => void;
+}
+
+function useCommandPalette(): CommandItem[] {
+    const store = useAppStore();
+    return React.useMemo(() => [
+        { id: 'settings', label: 'Open Settings', category: 'Settings', icon: <Settings size={18} />, action: () => { window.dispatchEvent(new CustomEvent('aartiq:open-settings')); } },
+        { id: 'permissions', label: 'Permission Settings', category: 'Settings', icon: <Shield size={18} />, action: () => { window.dispatchEvent(new CustomEvent('aartiq:open-settings')); } },
+        { id: 'downloads', label: 'Open Downloads', category: 'Panels', icon: <Download size={18} />, action: () => { window.dispatchEvent(new CustomEvent('aartiq:open-settings')); } },
+        { id: 'clipboard', label: 'Open Clipboard', category: 'Panels', icon: <Clipboard size={18} />, action: () => { window.dispatchEvent(new CustomEvent('aartiq:open-settings')); } },
+        { id: 'pdf', label: 'Generate PDF', category: 'Actions', icon: <FileText size={18} />, action: () => { document.querySelector<HTMLTextAreaElement>('[data-ai-input]')?.focus(); } },
+        { id: 'theme', label: 'Cycle Theme', category: 'Appearance', icon: <Palette size={18} />, action: () => { window.electronAPI?.invoke?.('popup-action', { action: 'cycle-theme' }); } },
+        { id: 'toggle-ai', label: 'Toggle AI Assist', category: 'AI', icon: <Zap size={18} />, action: () => { store.setEnableAIAssist(!store.enableAIAssist); } },
+        { id: 'autonomous', label: 'Toggle Autonomous Mode', category: 'AI', icon: <Zap size={18} />, action: () => { window.dispatchEvent(new CustomEvent('aartiq:toggle-autonomous')); } },
+        { id: 'sidebar', label: 'Toggle Sidebar', category: 'View', icon: <Command size={18} />, action: () => { store.toggleSidebar(); } },
+    ], [store]);
+}
+
 const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, onClose }) => {
     const store = useAppStore();
+    const commands = useCommandPalette();
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [calculationResult, setCalculationResult] = useState<string | null>(null);
@@ -29,9 +53,19 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
     // Categories of items in the list
     const getFlattenedResults = () => {
         const results: any[] = [];
+        const trimmed = searchTerm.trim().toLowerCase();
         
         if (calculationResult) {
             results.push({ type: 'calc', value: calculationResult });
+        }
+
+        // Command palette results
+        if (trimmed.length > 0) {
+            const matched = commands.filter(cmd =>
+                cmd.label.toLowerCase().includes(trimmed) ||
+                cmd.category.toLowerCase().includes(trimmed)
+            );
+            matched.forEach(cmd => results.push({ type: 'command', ...cmd }));
         }
         
         appSearchResults.forEach(app => {
@@ -133,7 +167,9 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
         if (!item) return;
 
         if (item.type === 'calc') {
-            // Maybe copy to clipboard?
+            onClose();
+        } else if (item.type === 'command') {
+            item.action();
             onClose();
         } else if (item.type === 'app') {
             if (window.electronAPI && item.path) {
@@ -239,6 +275,7 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
                                                     isSelected ? 'bg-sky-500 text-white' : 'bg-white/5 text-white/60'
                                                 }`}>
                                                     {item.type === 'calc' && <Calculator size={20} />}
+                                                    {item.type === 'command' && item.icon}
                                                     {item.type === 'app' && (
                                                         item.icon ? (
                                                             <img src={item.icon} alt={item.name} className="w-6 h-6 object-contain" />
@@ -253,8 +290,11 @@ const SpotlightSearchOverlay: React.FC<SpotlightSearchOverlayProps> = ({ show, o
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2">
                                                         <span className={`font-bold text-sm truncate ${isSelected ? 'text-white' : 'text-white/70'}`}>
-                                                            {item.type === 'calc' ? item.value : (item.type === 'web' ? `Search for "${item.query}"` : item.name)}
+                                                            {item.type === 'calc' ? item.value : item.type === 'command' ? item.label : (item.type === 'web' ? `Search for "${item.query}"` : item.name)}
                                                         </span>
+                                                        {item.type === 'command' && (
+                                                            <span className="px-1.5 py-0.5 rounded-md bg-sky-500/20 text-[9px] font-black uppercase tracking-wider text-sky-400">{item.category}</span>
+                                                        )}
                                                         {item.type === 'app' && (
                                                             <span className="px-1.5 py-0.5 rounded-md bg-white/5 text-[9px] font-black uppercase tracking-wider text-white/20">Application</span>
                                                         )}
