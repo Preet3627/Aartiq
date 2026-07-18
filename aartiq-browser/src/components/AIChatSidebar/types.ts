@@ -60,6 +60,7 @@ export type ExtendedChatMessage = ChatMessage & {
   thinkText?: string;
   actionLogs?: { type: string, output: string, success: boolean }[];
   mediaItems?: MediaItem[];
+  loadedSkills?: string[];
 };
 
 export type VisualStage = 'idle' | 'fetching' | 'capturing';
@@ -75,7 +76,7 @@ export interface PlanningStep {
 }
 
 export interface Attachment {
-  type: 'image' | 'pdf';
+  type: 'image' | 'pdf' | 'text' | 'markdown';
   data: string;
   ocrText?: string;
   filename: string;

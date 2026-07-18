@@ -12,9 +12,9 @@ import {
   Sparkles,
   Image as ImageIcon,
   Image,
-  Eye, EyeOff, Brain, Search, Loader2, MousePointerClick,
+  Eye, EyeOff, Search, Loader2, MousePointerClick,
   CheckCircle2, AlertCircle, Layers,
-  Share2, CopyIcon, Trash2, Printer, Cpu, Rocket, Camera, Terminal, MoreHorizontal, Play, History, Copy
+  Share2, CopyIcon, Trash2, Printer, Cpu, Rocket, Camera, Terminal, MoreHorizontal, Play, History, Copy, Mic, Database
 } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 import ReactMarkdown from 'react-markdown';
@@ -27,6 +27,7 @@ import dracula from 'react-syntax-highlighter/dist/cjs/styles/prism/dracula';
 // Imported modular components
 import ThinkingPanel, { type ThinkingStep } from './ai/ThinkingPanel';
 import CollapsibleOCRMessage from './ai/CollapsibleOCRMessage';
+import CollapsibleSkillMessage from './ai/CollapsibleSkillMessage';
 import MessageActions from './ai/MessageActions';
 import ConversationHistoryPanel, { type Conversation, type ChatMessage } from './ai/ConversationHistoryPanel';
 import { useAIActionSecurityManager } from './ai/useAIActionSecurityManager';
@@ -41,7 +42,6 @@ import {
 } from './ai/RobustParsers';
 import { useAppVersion } from '@/lib/useAppVersion';
 import AISetupGuide from './ai/AISetupGuide';
-import ThinkingIndicator, { type ThemePreset } from './ThinkingIndicator';
 import LLMProviderSettings from './LLMProviderSettings';
 import { AICommandQueue, type AICommand } from './AICommandQueue';
 import { type AgentState, type PlanningStep } from './AIChatSidebar/types';
@@ -55,7 +55,6 @@ import MermaidDiagram from './ai/MermaidDiagram';
 import FlowchartDiagram from './ai/FlowchartDiagram';
 import ChartDiagram from './ai/ChartDiagram';
 import YouTubePlayer from './ai/YouTubePlayer';
-import { useUIStore } from '@/stores/uiStore';
 import { getCmdParam, getCmdParamInt, cleanCmdValue, type ParsedCommand } from '@/lib/AICommandParser';
 
 // Logic & Utils
@@ -206,11 +205,66 @@ function FilePathLink({ filePath }: { filePath: string }) {
   );
 }
 
+function SourceLink({ href, children }: { href?: string; children: React.ReactNode }) {
+  const link = `${href || ''}`;
+  let hostname = '';
+  let favicon = '';
+  try {
+    const url = new URL(link);
+    hostname = url.hostname.replace(/^www\./, '');
+    favicon = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
+  } catch {
+  }
+
+  const openLink = useCallback((event: React.MouseEvent) => {
+    event.preventDefault();
+    if (!link) return;
+    try {
+      window.electronAPI?.createView?.({ tabId: `source-${Date.now()}`, url: link });
+      useAppStore.getState().addTab(link, 'ai-session');
+    } catch {
+      window.open(link, '_blank', 'noopener,noreferrer');
+    }
+  }, [link]);
+
+  if (!link || !hostname) {
+    return <span>{children}</span>;
+  }
+
+  return (
+    <span className="group/source relative inline-flex max-w-full align-baseline">
+      <button
+        type="button"
+        onClick={openLink}
+        className="inline-flex max-w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-[0.95em] text-primary-text underline decoration-[color-mix(in_srgb,var(--accent)_35%,transparent)] decoration-1 underline-offset-4 transition-colors hover:text-[var(--accent)]"
+        title="Visit website"
+      >
+        <img
+          src={favicon}
+          alt=""
+          className="h-3.5 w-3.5 shrink-0 rounded-sm"
+          onError={(event) => {
+            (event.currentTarget as HTMLImageElement).style.display = 'none';
+          }}
+        />
+        <span className="min-w-0 truncate">{children}</span>
+      </button>
+      <span className="pointer-events-none absolute left-0 top-full z-20 mt-1 max-w-[320px] translate-y-1 rounded-lg border border-border-color bg-primary-bg/95 px-2.5 py-1.5 text-[11px] text-secondary-text opacity-0 shadow-xl backdrop-blur-xl transition-all duration-200 group-hover/source:translate-y-0 group-hover/source:opacity-100">
+        <span className="block font-medium text-primary-text">{hostname}</span>
+        <span className="block truncate">{link}</span>
+      </span>
+    </span>
+  );
+}
+
 const renderMarkdownContent = (content: string) => (
   <ReactMarkdown
     remarkPlugins={[remarkGfm, remarkMath]}
     rehypePlugins={[rehypeKatex]}
     components={{
+      a({ href, children }) {
+        return <SourceLink href={href}>{children}</SourceLink>;
+      },
       code({ className, children, ...rest }) {
         const match = /language-(\w+)/.exec(className || '');
         const codeContent = String(children).replace(/\n$/, '');
@@ -279,6 +333,141 @@ const StreamingMarkdownMessage = memo(function StreamingMarkdownMessage({
   );
 });
 
+const collapseRawSearchDump = (content: string): string => {
+  if (!/(Search Results for|Web Search Results for|pages read|Content:|PAGE CONTENT)/i.test(content)) {
+    return content;
+  }
+
+  const lines = content.split('\n');
+  const kept: string[] = [];
+  let skippingContentBlock = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^(🔍\s*)?(Web\s+)?Search Results for/i.test(trimmed)) continue;
+    if (/^(Content|PAGE CONTENT|Full page content)\s*:/i.test(trimmed)) {
+      skippingContentBlock = true;
+      continue;
+    }
+    if (skippingContentBlock) {
+      if (/^(\d+\.|-|\*)\s+\[.+\]\(.+\)/.test(trimmed) || /^---+$/.test(trimmed) || trimmed === '') {
+        skippingContentBlock = false;
+      } else {
+        continue;
+      }
+    }
+    if (/^\s*Content:\s*/i.test(line)) continue;
+    if (trimmed.length > 800 && !/\]\(https?:\/\//.test(trimmed)) continue;
+    kept.push(line);
+  }
+
+  const cleaned = kept
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  if (!cleaned || cleaned.length < 30) {
+    return 'I found relevant web results. Review the source links below or ask me to summarize a specific result.';
+  }
+  return cleaned;
+};
+
+const sanitizeVisibleMessage = (content: string): string => {
+  if (!content) return '';
+  return collapseRawSearchDump(stripAllCommands(content)
+    .replace(INTERNAL_TAG_RE, '')
+    .replace(/ACTION_CHAIN_JSON\s*[:=]?\s*```[\s\S]*?```/gi, '')
+    .replace(/ACTION_CHAIN_JSON\s*[:=]?\s*\{[\s\S]*?\}\s*$/gi, '')
+    .replace(/```(?:json)?\s*\{[\s\S]*?"(?:type|actions|commands)"[\s\S]*?\}\s*```/gi, '')
+    .replace(/\[(?:SHELL_COMMAND|ACTION_CHAIN_JSON|WEB_SEARCH|READ_PAGE_CONTENT|CLICK_ELEMENT|CLICK_AT|FIND_AND_CLICK|FILL_FORM|DOM_SEARCH|OCR_SCREEN|SCREENSHOT_AND_ANALYZE)[^\]]*\]/gi, ''))
+    .trim();
+};
+
+function ThinkingStatus({ state }: { state: AgentState }) {
+  const label = state === 'planning' ? 'Planning actions' :
+    state === 'executing' ? 'Executing' :
+    state === 'waiting' ? 'Waiting for approval' :
+    state === 'finished' ? 'Finishing' :
+    'Thinking';
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 6 }}
+      className="mx-auto flex w-fit max-w-[650px] items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--card-bg)_88%,transparent)] px-3 py-2 text-[13px] text-secondary-text shadow-sm"
+      role="status"
+      aria-live="polite"
+    >
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-35" />
+        <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--accent)]" />
+      </span>
+      {label}
+    </motion.div>
+  );
+}
+
+type ComposerIconKey = 'attachments' | 'voice' | 'history' | 'automation' | 'neuralCache';
+
+interface SidebarWorkspacePreferences {
+  fontFamily: string;
+  fontSize: number;
+  soundsEnabled: boolean;
+  gradientEffectsEnabled: boolean;
+  visibleComposerIcons: Record<ComposerIconKey, boolean>;
+  modelNicknames: Record<string, string>;
+}
+
+const DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES: SidebarWorkspacePreferences = {
+  fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  fontSize: 15,
+  soundsEnabled: false,
+  gradientEffectsEnabled: false,
+  visibleComposerIcons: {
+    attachments: true,
+    voice: true,
+    history: true,
+    automation: true,
+    neuralCache: true,
+  },
+  modelNicknames: {},
+};
+
+const SIDEBAR_WORKSPACE_PREFS_KEY = 'aartiq_ai_sidebar_workspace_preferences';
+
+const loadSidebarWorkspacePreferences = (): SidebarWorkspacePreferences => {
+  if (typeof window === 'undefined') return DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES;
+  try {
+    const stored = window.localStorage.getItem(SIDEBAR_WORKSPACE_PREFS_KEY);
+    if (!stored) return DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES;
+    const parsed = JSON.parse(stored) as Partial<SidebarWorkspacePreferences>;
+    return {
+      ...DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES,
+      ...parsed,
+      visibleComposerIcons: {
+        ...DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES.visibleComposerIcons,
+        ...(parsed.visibleComposerIcons || {}),
+      },
+      modelNicknames: parsed.modelNicknames || {},
+    };
+  } catch {
+    return DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES;
+  }
+};
+
+const blobToBase64 = (blob: Blob): Promise<string> => (
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      resolve(result.includes(',') ? result.split(',')[1] : result);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  })
+);
+
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -311,7 +500,6 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   } = store;
   const appVersion = useAppVersion();
   const versionLabel = `v${appVersion}`;
-  const gradientPreset = useUIStore((state) => state.gradientPreset);
   const resolvedTheme = useMemo<'dark' | 'light' | 'vibrant' | 'custom' | 'minimal'>(() => {
     if (props.theme === 'system') {
       if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
@@ -350,16 +538,6 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     backdropFilter: 'blur(12px)',
     color: 'var(--primary-text)',
   } as React.CSSProperties;
-  const modelBubbleStyle = {
-    background: props.theme === 'custom' ? 'var(--model-bubble-bg, var(--card-bg))' : isLightTheme
-      ? 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--primary-bg)), color-mix(in srgb, var(--accent-light) 4%, var(--primary-bg)))'
-      : 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 15%, transparent), color-mix(in srgb, var(--accent-light) 10%, var(--card-bg)))',
-    borderColor: isLightTheme ? 'color-mix(in srgb, var(--accent) 20%, transparent)' : 'color-mix(in srgb, var(--accent) 30%, transparent)',
-    backdropFilter: 'blur(16px)',
-    boxShadow: isLightTheme ? '0 4px 25px color-mix(in srgb, var(--shadow-color) 40%, transparent)' : '0 4px 30px color-mix(in srgb, var(--accent) 15%, transparent)',
-    color: 'var(--primary-text)',
-  } as React.CSSProperties;
-
   // Core state
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -410,6 +588,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [showCapabilities, setShowCapabilities] = useState(false);
   const [showMcpSetupGuide, setShowMcpSetupGuide] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
+  const [showSidebarCustomize, setShowSidebarCustomize] = useState(false);
   const [showConversationHistory, setShowConversationHistory] = useState(false);
   const [isReadingPage, setIsReadingPage] = useState(false);
   const [isMermaidLoaded, setIsMermaidLoaded] = useState(false);
@@ -427,6 +606,41 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [pythonAvailable, setPythonAvailable] = useState<boolean>(false);
   const [demoHighlight, setDemoHighlight] = useState<{ title: string; description: string; align?: 'left' | 'center' | 'right' } | null>(null);
   const aiTabsAutoCloseRef = useRef(false);
+
+  const handleAttachmentChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    files.forEach((file) => {
+      const lowerName = file.name.toLowerCase();
+      const isMarkdown = lowerName.endsWith('.md') || lowerName.endsWith('.markdown') || file.type === 'text/markdown';
+      const isText = isMarkdown || lowerName.endsWith('.txt') || file.type.startsWith('text/');
+      const attachmentType: Attachment['type'] = file.type === 'application/pdf'
+        ? 'pdf'
+        : isMarkdown
+          ? 'markdown'
+          : isText
+            ? 'text'
+            : 'image';
+      const reader = new FileReader();
+      reader.onload = () => {
+        const data = typeof reader.result === 'string' ? reader.result : '';
+        if (!data) return;
+        setAttachments((previous) => [
+          ...previous,
+          {
+            type: attachmentType,
+            data,
+            filename: file.name,
+          },
+        ]);
+      };
+      if (isText) reader.readAsText(file);
+      else reader.readAsDataURL(file);
+    });
+
+    event.target.value = '';
+  }, []);
 
   const showDemoOverlay = useCallback(async (title: string, description: string, durationMs: number = 2500) => {
     return new Promise<void>(resolve => {
@@ -498,10 +712,14 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [shiftTabGlow, setShiftTabGlow] = useState(false);
+  const [workspacePrefs, setWorkspacePrefs] = useState<SidebarWorkspacePreferences>(() => loadSidebarWorkspacePreferences());
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [terminalLogs, setTerminalLogs] = useState<Array<{ id: string; command: string; output: string; success: boolean; timestamp: number }>>([]);
   const [showTerminal, setShowTerminal] = useState(false);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const terminalLogIdCounter = useRef(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
   const nativeMacSyncTimeoutRef = useRef<number | null>(null);
   const isDevMode = typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
   const {
@@ -678,6 +896,43 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
       timestamp: Date.now(),
     }]);
   }, [isDevMode]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_WORKSPACE_PREFS_KEY, JSON.stringify(workspacePrefs));
+      window.dispatchEvent(new CustomEvent('aartiq-click-sound-preference', { detail: { enabled: workspacePrefs.soundsEnabled } }));
+    } catch {
+    }
+  }, [workspacePrefs]);
+
+  const updateWorkspacePrefs = useCallback((partial: Partial<SidebarWorkspacePreferences>) => {
+    setWorkspacePrefs((previous) => ({
+      ...previous,
+      ...partial,
+      visibleComposerIcons: {
+        ...previous.visibleComposerIcons,
+        ...(partial.visibleComposerIcons || {}),
+      },
+      modelNicknames: {
+        ...previous.modelNicknames,
+        ...(partial.modelNicknames || {}),
+      },
+    }));
+  }, []);
+
+  const playClickSound = useCallback((variant: 'tap' | 'confirm' = 'tap') => {
+    if (!workspacePrefs.soundsEnabled || typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('aartiq-play-click-sound', { detail: { variant } }));
+  }, [workspacePrefs.soundsEnabled]);
+
+  const updateComposerIconVisibility = useCallback((key: ComposerIconKey, value: boolean) => {
+    updateWorkspacePrefs({
+      visibleComposerIcons: {
+        ...workspacePrefs.visibleComposerIcons,
+        [key]: value,
+      },
+    });
+  }, [updateWorkspacePrefs, workspacePrefs.visibleComposerIcons]);
 
   const updateVisualStage = useCallback((stage: VisualStage, message?: string) => {
     setPdfVisualStage(stage);
@@ -1142,12 +1397,19 @@ I couldn't schedule the task. The background service may not be running. Please 
     const skillResults = await Promise.all(loadedSkills);
     skillContexts = skillResults.filter(Boolean);
     const skillContext = skillContexts.join('\n\n');
+    const loadedSkillIds = [...skillsToLoad];
 
     const { content: protectedContent, wasProtected } = Security.fortress(rawContent);
     const userMessage: ExtendedChatMessage = {
       role: 'user',
-      content: protectedContent + (attachments.length > 0 ? `\n[Attached ${attachments.length} files]` : ''),
-      attachments: attachments.map(a => a.data)
+      content: protectedContent + (attachments.length > 0
+        ? `\n[Attached ${attachments.length} files]${attachments
+          .filter((attachment) => attachment.type === 'text' || attachment.type === 'markdown')
+          .map((attachment) => `\n\n[Attachment: ${attachment.filename}]\n${attachment.data.slice(0, 12000)}`)
+          .join('')}`
+        : ''),
+      attachments: attachments.map(a => a.data),
+      loadedSkills: loadedSkillIds.length > 0 ? loadedSkillIds : undefined,
     };
 
     if (rawContent.includes('[EXPLAIN_CAPABILITIES]')) {
@@ -3339,7 +3601,7 @@ I couldn't schedule the task. The background service may not be running. Please 
               const cleanHTML = generateSmartPDF(pdfContent, iconSource, jsonImageResults);
               const res = await window.electronAPI.generatePDF(pdfTitle, cleanHTML) as any;
               if (res.success) {
-                output = `✅ **PDF Generated Successfully!**\n\n**Title:** ${pdfTitle}\n**Engine:** Aartiq Neural Export\n**Template:** ${template}\n**File:** ${res.filePath}`;
+                output = `✅ **PDF Generated Successfully!**\n\n**Title:** ${pdfTitle}\n**Engine:** Aartiq Neural Export\n**File:** ${res.filePath}`;
               } else {
                 output = `❌ PDF generation failed: ${res.error}`;
               }
@@ -3619,11 +3881,26 @@ I couldn't schedule the task. The background service may not be running. Please 
           setStreamingPDFContent(`Generating PDF: ${pdfTitle}...`);
 
           // Replicate slide logic for the success message UI
-          const slides = pdfContent.split(/---\n?/).filter(s => s.trim().length > 10);
+          const slides = pdfContent.split(/---\n?/).filter((s: string) => s.trim().length > 10);
           const isSlideShow = slides.length > 2;
 
           setStreamingPDFContent(`Generating PDF: ${pdfTitle}...`);
-          const cleanHTML = generateSmartPDF(pdfContent, iconSource, pdfImages.length > 0 ? pdfImages : undefined);
+
+          // Collect sources from content and search context
+          const searchSources: string[] = [];
+          const urlMatches = pdfContent.matchAll(/https?:\/\/[^\s\)\]>"]+/gi);
+          for (const m of urlMatches) {
+            const url = m[0].replace(/[.,;:!?)]+$/, '');
+            if (!searchSources.some(s => s.includes(url))) searchSources.push(url);
+          }
+          const recentSearches = searchContextStore.getRecentContexts(5, 'web_search');
+          for (const ctx of recentSearches) {
+            const label = ctx.title || ctx.query || ctx.url || '';
+            if (label && !searchSources.some(s => s.includes(label))) searchSources.push(label);
+          }
+
+          const pdfMeta = { sources: searchSources.length > 0 ? searchSources : undefined, aiModel: selectedProviderModel };
+          const cleanHTML = generateSmartPDF(pdfContent, iconSource, pdfImages.length > 0 ? pdfImages : undefined, pdfMeta);
           const res = await window.electronAPI.generatePDF(pdfTitle, cleanHTML) as any;
 
           setIsGeneratingPDF(false);
@@ -5145,6 +5422,100 @@ I've successfully executed the following real tasks:
   }
 
   const currentActiveModel = selectedProviderModel;
+  const activeModelKey = `${normalizedProvider}:${currentActiveModel}`;
+  const activeModelDisplayName = workspacePrefs.modelNicknames[activeModelKey] || currentActiveModel;
+  const modelOptions = useMemo(() => {
+    const options = [
+      { provider: 'openai', label: 'OpenAI', model: openaiModel || 'gpt-5.1' },
+      { provider: 'google', label: 'Gemini Pro', model: geminiModel || 'gemini-2.5-pro' },
+      { provider: 'google-flash', label: 'Gemini Flash', model: geminiFlashModel || 'gemini-2.5-flash' },
+      { provider: 'anthropic', label: 'Anthropic', model: anthropicModel || 'claude-sonnet-4-20250514' },
+      { provider: 'groq', label: 'Groq', model: groqModel || 'llama-3.3-70b-versatile' },
+      { provider: 'xai', label: 'xAI', model: xaiModel || 'grok-4-fast-reasoning' },
+      { provider: 'ollama', label: 'Ollama', model: ollamaModel || 'llama3' },
+      ...ollamaModelsList.slice(0, 8).map((model) => ({ provider: 'ollama', label: 'Ollama', model: model.name })),
+    ];
+    const seen = new Set<string>();
+    return options.filter((option) => {
+      const key = `${option.provider}:${option.model}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [anthropicModel, geminiFlashModel, geminiModel, groqModel, ollamaModel, ollamaModelsList, openaiModel, xaiModel]);
+
+  const selectChatModel = useCallback((provider: string, model: string) => {
+    const state = useAppStore.getState();
+    state.setAIProvider(provider);
+    if (provider === 'openai') state.setOpenaiModel(model);
+    else if (provider === 'google') state.setGeminiModel(model);
+    else if (provider === 'google-flash') state.setGeminiFlashModel(model);
+    else if (provider === 'anthropic') state.setAnthropicModel(model);
+    else if (provider === 'groq') state.setGroqModel(model);
+    else if (provider === 'xai') state.setXaiModel(model);
+    else if (provider === 'ollama') state.setOllamaModel(model);
+    setShowModelPicker(false);
+    playClickSound('confirm');
+  }, [playClickSound]);
+
+  const updateActiveModelNickname = useCallback((nickname: string) => {
+    updateWorkspacePrefs({
+      modelNicknames: {
+        ...workspacePrefs.modelNicknames,
+        [activeModelKey]: nickname.trim(),
+      },
+    });
+  }, [activeModelKey, updateWorkspacePrefs, workspacePrefs.modelNicknames]);
+
+  const handleVoiceInput = useCallback(async () => {
+    playClickSound();
+    if (isRecordingVoice) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+
+    try {
+      const permission = await window.electronAPI?.voiceMicPermission?.();
+      if (permission && permission.success === false) {
+        setFeedback(permission.error || 'Microphone permission unavailable');
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      voiceChunksRef.current = [];
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) voiceChunksRef.current.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        setIsRecordingVoice(false);
+        stream.getTracks().forEach((track) => track.stop());
+        try {
+          const blob = new Blob(voiceChunksRef.current, { type: mimeType || 'audio/webm' });
+          const audioBase64 = await blobToBase64(blob);
+          const result = await window.electronAPI?.voiceTranscribe?.(audioBase64, 'webm');
+          if (result?.success && result.text) {
+            setInputMessage((previous) => `${previous}${previous ? ' ' : ''}${result.text}`.trim());
+            playClickSound('confirm');
+          } else {
+            setFeedback(result?.error || 'Voice transcription failed');
+          }
+        } catch (error: any) {
+          setFeedback(error.message || 'Voice transcription failed');
+        }
+      };
+
+      recorder.start();
+      setIsRecordingVoice(true);
+    } catch (error: any) {
+      setIsRecordingVoice(false);
+      setFeedback(error.message || 'Microphone unavailable');
+    }
+  }, [isRecordingVoice, playClickSound]);
 
   if (props.bridgeOnly) {
     return null;
@@ -5303,9 +5674,9 @@ I've successfully executed the following real tasks:
         )}
       </AnimatePresence>
 
-      {/* Terminal Panel */}
+      {/* Developer Terminal Panel */}
       <AnimatePresence>
-        {showTerminal && terminalLogs.length > 0 && (
+        {isDevMode && showTerminal && terminalLogs.length > 0 && (
           <motion.div
             key="terminal"
             initial={{ opacity: 0, y: 30, scale: 0.97 }}
@@ -5410,19 +5781,21 @@ I've successfully executed the following real tasks:
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowTerminal(v => !v)}
-              className={`p-2.5 rounded-xl transition-all relative ${showTerminal ? 'bg-green-500/20 text-green-400' : 'text-secondary-text hover:text-primary-text'}`}
-              style={!showTerminal ? softPanelStyle : undefined}
-              title="Toggle Terminal"
-            >
-              <Terminal size={18} />
-              {terminalLogs.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-green-500 text-[8px] font-bold text-black flex items-center justify-center">
-                  {terminalLogs.length > 9 ? '9+' : terminalLogs.length}
-                </span>
-              )}
-            </button>
+            {isDevMode && (
+              <button
+                onClick={() => setShowTerminal(v => !v)}
+                className={`p-2.5 rounded-xl transition-all relative ${showTerminal ? 'bg-green-500/20 text-green-400' : 'text-secondary-text hover:text-primary-text'}`}
+                style={!showTerminal ? softPanelStyle : undefined}
+                title="Developer terminal"
+              >
+                <Terminal size={18} />
+                {terminalLogs.length > 0 && (
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-green-500 text-[8px] font-bold text-black flex items-center justify-center">
+                    {terminalLogs.length > 9 ? '9+' : terminalLogs.length}
+                  </span>
+                )}
+              </button>
+            )}
             <button onClick={() => setShowCapabilities(!showCapabilities)} className={`p-2.5 rounded-xl transition-all ${showCapabilities ? 'bg-sky-500/20 text-sky-400' : 'text-secondary-text hover:text-primary-text'}`} style={!showCapabilities ? softPanelStyle : undefined} title="View AI Capabilities">
               <Sparkles size={18} />
             </button>
@@ -5483,25 +5856,25 @@ I've successfully executed the following real tasks:
       </header>
 
       {/* Chat Messages */}
-      <div className={`flex-1 overflow-y-auto modern-scrollbar transition-[padding] duration-500 backdrop-blur-sm p-5 space-y-8`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 92%, transparent), color-mix(in srgb, var(--primary-bg) 98%, transparent))' }}>
+      <div className={`flex-1 overflow-y-auto modern-scrollbar transition-[padding] duration-500 backdrop-blur-sm px-4 py-5 pb-36 space-y-5`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 95%, transparent), color-mix(in srgb, var(--primary-bg) 99%, transparent))' }}>
         <AnimatePresence mode="popLayout">
           {messages.length === 0 && (
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center py-16 text-center space-y-6">
-              <div className="w-16 h-16 rounded-[2rem] flex items-center justify-center border shadow-2xl" style={softPanelStyle}>
-                <Brain size={32} className="text-secondary-text" />
+            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="mx-auto flex max-w-[650px] flex-col items-center justify-center py-14 text-center">
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border shadow-sm overflow-hidden" style={softPanelStyle}>
+                <img src="/logo-transparent.png" alt="Aartiq" className="h-9 w-9 object-contain" />
               </div>
-              <div>
-                <h3 className="text-sm font-black text-secondary-text uppercase tracking-widest">How can I assist your workflow?</h3>
-                <p className="text-[10px] text-secondary-text uppercase tracking-tighter mt-1 font-bold">I can navigate, browse, and execute tasks across Aartiq.</p>
+              <div className="mb-6">
+                <h3 className="text-[16px] font-semibold text-primary-text">What should Aartiq handle?</h3>
+                <p className="mt-1 text-[13px] text-secondary-text">Navigate, read, organize, and automate from one calm workspace.</p>
               </div>
-              <div className="grid grid-cols-2 gap-2 max-w-xs">
+              <div className="grid w-full max-w-sm grid-cols-2 gap-2">
                 {[
-                  { label: 'Organize Downloads', icon: '📁', cmd: 'Organize my Downloads folder' },
-                  { label: 'Generate PDF', icon: '📄', cmd: 'Generate a PDF report' },
-                  { label: 'Research AI', icon: '🔍', cmd: 'Research latest AI news' },
-                  { label: 'Summarize Page', icon: '📖', cmd: 'Summarize the current page' },
-                  { label: 'Open VS Code', icon: '💻', cmd: 'Open VS Code' },
-                  { label: 'Find Duplicates', icon: '🔎', cmd: 'Find duplicate files in Downloads' },
+                  { label: 'Organize Downloads', icon: <FileText size={14} />, cmd: 'Organize my Downloads folder' },
+                  { label: 'Generate PDF', icon: <Download size={14} />, cmd: 'Generate a PDF report' },
+                  { label: 'Research AI', icon: <Search size={14} />, cmd: 'Research latest AI news' },
+                  { label: 'Summarize Page', icon: <FileText size={14} />, cmd: 'Summarize the current page' },
+                  { label: 'Open App', icon: <Rocket size={14} />, cmd: 'Open VS Code' },
+                  { label: 'Find Duplicates', icon: <ScanLine size={14} />, cmd: 'Find duplicate files in Downloads' },
                 ].map((suggestion, i) => (
                   <motion.button
                     key={i}
@@ -5509,10 +5882,10 @@ I've successfully executed the following real tasks:
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
                     onClick={() => { setInputMessage(suggestion.cmd); }}
-                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/5 hover:border-white/10 transition-all text-left group"
+                    className="flex items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--border-color)_45%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_70%,transparent)] px-3 py-2.5 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--card-bg)_92%,transparent)]"
                   >
-                    <span className="text-sm">{suggestion.icon}</span>
-                    <span className="text-[10px] font-bold text-secondary-text group-hover:text-primary-text transition-colors">{suggestion.label}</span>
+                    <span className="text-secondary-text">{suggestion.icon}</span>
+                    <span className="truncate text-[12px] font-medium text-secondary-text">{suggestion.label}</span>
                   </motion.button>
                 ))}
               </div>
@@ -5528,7 +5901,7 @@ I've successfully executed the following real tasks:
               displayContent = displayContent.replace(/<think>[\s\S]*?(?:<\/think>|$)/i, '').trim();
             }
 
-            displayContent = displayContent.replace(INTERNAL_TAG_RE, '').trim();
+            displayContent = sanitizeVisibleMessage(displayContent);
 
             const isLastMessage = i === messages.length - 1;
             const msgIsOcr = (msg as any).isOcr || (msg as any).ocrText;
@@ -5542,31 +5915,36 @@ I've successfully executed the following real tasks:
               <motion.div
                 key={msg.id || `${msg.role}-${i}`}
                 layout
-                initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                initial={{ opacity: 0, y: 12, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                transition={{ duration: 0.2 }}
+                className={`mx-auto flex w-full max-w-[650px] flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
               >
-                {msg.role === 'model' && (msg.thinkingSteps || displayThought) && (
-                  <div className="w-full max-w-[90%] mb-2">
+                {isDevMode && msg.role === 'model' && (msg.thinkingSteps || displayThought) && (
+                  <div className="mb-2 w-full">
                     <ThinkingPanel steps={msg.thinkingSteps} thinkText={displayThought} initialOpen={false} />
                   </div>
                 )}
 
                 <div
-                  className={`group relative max-w-[90%] p-5 rounded-[2.5rem] text-[13px] leading-relaxed transition-all duration-500 hover:shadow-2xl ${msg.role === 'user' ? 'rounded-tr-none shadow-xl' : 'rounded-tl-none'}`}
-                  style={msg.role === 'user' ? userBubbleStyle : modelBubbleStyle}
+                  className={`group relative leading-relaxed transition-all duration-300 ${msg.role === 'user' ? 'max-w-[78%] rounded-2xl rounded-tr-md px-3.5 py-2.5 text-[14px] shadow-sm' : 'w-full max-w-full px-0 py-1'}`}
+                  style={{
+                    ...(msg.role === 'user' ? userBubbleStyle : { color: 'var(--primary-text)' }),
+                    fontFamily: workspacePrefs.fontFamily,
+                    fontSize: msg.role === 'user' ? Math.max(12, workspacePrefs.fontSize - 2) : workspacePrefs.fontSize,
+                  }}
                 >
                   {msg.role === 'model' && (
-                    <div className="flex items-center justify-between gap-2 mb-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-sky-500/20 flex items-center justify-center text-sky-400 border border-sky-500/20">
-                          <Sparkles size={12} />
+                        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]">
+                          <img src="/logo-transparent.png" alt="Aartiq" className="h-4 w-4 object-contain" />
                         </div>
-                        <span className="text-[9px] font-black uppercase tracking-widest text-sky-400/60">Aartiq Response</span>
+                        <span className="text-[12px] font-medium text-secondary-text">Aartiq</span>
                       </div>
                       <button
                         onClick={() => { navigator.clipboard.writeText(displayContent); }}
-                        className="p-1.5 rounded-lg text-sky-400/40 hover:text-sky-400 hover:bg-sky-500/20 transition-all opacity-0 group-hover:opacity-100"
+                        className="rounded-md p-1.5 text-secondary-text opacity-0 transition-all hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text group-hover:opacity-100"
                         title="Copy response"
                       >
                         <Copy size={12} />
@@ -5581,6 +5959,9 @@ I've successfully executed the following real tasks:
                   )}
                   {msgIsOcr && (msg as any).ocrText && (
                     <CollapsibleOCRMessage label={(msg as any).ocrLabel || 'SCREENSHOT_ANALYSIS'} content={(msg as any).ocrText} />
+                  )}
+                  {msg.role === 'user' && (msg as ExtendedChatMessage).loadedSkills && (msg as ExtendedChatMessage).loadedSkills!.length > 0 && (
+                    <CollapsibleSkillMessage skills={(msg as ExtendedChatMessage).loadedSkills!} />
                   )}
 
                   {/* ── Inline Media: Images & Video Cards ─────────────────── */}
@@ -5740,7 +6121,7 @@ I've successfully executed the following real tasks:
                       })}
                     </div>
                   )}
-                  {msg.actionLogs && msg.actionLogs.length > 0 && (
+                  {isDevMode && msg.actionLogs && msg.actionLogs.length > 0 && (
                     <div className="mt-5 flex flex-wrap gap-2">
                       {msg.actionLogs.map((log, idx) => {
                         const isSearch = log.type.includes('SEARCH');
@@ -5769,7 +6150,7 @@ I've successfully executed the following real tasks:
                             {(isRead || isPdf) && <FileText size={12} />}
                             {isClick && <MousePointerClick size={12} />}
                             {isOcr && <Camera size={12} />}
-                            {isMeta && <Brain size={12} />}
+                            {isMeta && <Sparkles size={12} />}
                             {!isSearch && !isRead && !isClick && !isOcr && !isPdf && !isMeta && (log.success ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />)}
                             <span>{isPdf ? 'Open PDF' : log.type.replace(/_/g, ' ')}</span>
                           </div>
@@ -5809,51 +6190,36 @@ I've successfully executed the following real tasks:
               </motion.div>
             )
           })}
-          {isLoading && messages.length === 0 && <ThinkingIndicator theme={gradientPreset as ThemePreset} variant="full" />}
+          {isLoading && messages.length === 0 && <ThinkingStatus state={agentState} />}
           {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'model' && (
-            <div
-              className="flex items-center gap-3 px-4 py-3 rounded-2xl border"
-              style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(6,182,212,0.1))', borderColor: 'rgba(99,102,241,0.3)' }}
-            >
-              <div className="flex gap-1">
-                <span className="w-2 h-2 rounded-full bg-indigo-400/80 animate-pulse" />
-                <span className="w-2 h-2 rounded-full bg-indigo-400/60 animate-pulse" />
-                <span className="w-2 h-2 rounded-full bg-indigo-400/40 animate-pulse" />
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">
-                {agentState === 'planning' ? 'Planning your request...' :
-                 agentState === 'searching' ? 'Searching...' :
-                 agentState === 'thinking' ? 'Thinking...' :
-                 agentState === 'executing' ? 'Executing commands...' :
-                 agentState === 'waiting' ? 'Waiting for approval...' :
-                 agentState === 'finished' ? 'Task complete' :
-                 'Processing...'}
-              </span>
-            </div>
+            <ThinkingStatus state={agentState} />
           )}
         </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input Area */}
-      <footer className={`sticky bottom-0 transition-[padding] duration-500 p-6 pt-0`} style={{ background: 'linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary-bg) 75%, transparent) 28%, var(--primary-bg) 100%)', backdropFilter: 'blur(20px)' }}>
-        <div className={`p-4 rounded-[2.5rem] border transition-all shadow-2xl relative group ${shiftTabGlow
-          ? 'border-purple-500/80 shadow-[0_0_24px_4px_rgba(168,85,247,0.35)] focus-within:border-purple-500/80'
-          : 'border-white/10 focus-within:border-sky-500/30'
-          }`} style={softPanelStyle}>
-
-          <div className="absolute -top-10 left-4 flex items-center gap-2 px-3 py-1.5 backdrop-blur-md rounded-full border" style={popoverStyle}>
-            <div className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-            <span className="text-[8px] font-black uppercase tracking-widest text-secondary-text">{currentActiveModel}</span>
-          </div>
+      <footer className="sticky bottom-0 px-4 pb-4 pt-3" suppressHydrationWarning style={{ background: 'linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary-bg) 88%, transparent) 34%, var(--primary-bg) 100%)', backdropFilter: 'blur(18px)' }}>
+        <div className={`mx-auto max-w-[650px] rounded-2xl border p-2.5 transition-all ${workspacePrefs.gradientEffectsEnabled ? 'shadow-[0_14px_42px_rgba(124,58,237,0.14)]' : 'shadow-[0_14px_36px_rgba(0,0,0,0.18)]'} ${shiftTabGlow
+          ? 'border-purple-500/70 shadow-[0_0_22px_rgba(168,85,247,0.26)]'
+          : 'focus-within:border-[color-mix(in_srgb,var(--accent)_35%,var(--border-color))]'
+          }`} suppressHydrationWarning style={{
+            ...softPanelStyle,
+            ...(workspacePrefs.gradientEffectsEnabled
+              ? {
+                borderColor: 'color-mix(in srgb, var(--accent) 36%, var(--border-color))',
+                boxShadow: '0 12px 34px rgba(124,58,237,0.14), inset 0 0 0 1px rgba(255,255,255,0.04)',
+              }
+              : {}),
+          }}>
 
           {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div className="mb-2 flex flex-wrap gap-2">
               {attachments.map((a, i) => (
-                <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} key={i} className="flex items-center gap-2 px-3 py-2 bg-sky-500/10 rounded-2xl text-[10px] text-sky-400 border border-sky-500/20">
+                <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} key={i} className="flex max-w-full items-center gap-2 rounded-lg bg-[color-mix(in_srgb,var(--accent)_9%,transparent)] px-2.5 py-1.5 text-[12px] text-secondary-text">
                   {a.type === 'image' ? <ImageIcon size={12} /> : <FileText size={12} />}
-                  <span className="max-w-[100px] truncate font-bold uppercase tracking-tight">{a.filename}</span>
-                  <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="hover:text-red-400 transition-colors"><X size={12} /></button>
+                  <span className="max-w-[160px] truncate">{a.filename}</span>
+                  <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="rounded p-0.5 hover:text-red-500" title="Remove attachment"><X size={12} /></button>
                 </motion.div>
               ))}
             </div>
@@ -5865,14 +6231,113 @@ I've successfully executed the following real tasks:
                 initial={{ opacity: 0, y: 15, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 15, scale: 0.95 }}
-                className="absolute bottom-28 left-4 z-[60] w-52 backdrop-blur-3xl border rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden p-1.5"
+                className="absolute bottom-24 left-4 z-[60] w-52 overflow-hidden rounded-xl border p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.28)] backdrop-blur-3xl"
                 style={popoverStyle}
               >
-                <button onClick={clearChat} className="w-full flex items-center gap-3 px-4 py-3 text-[11px] font-black uppercase tracking-widest text-red-500/70 hover:text-red-400 hover:bg-red-400/10 rounded-2xl transition-all"><Trash2 size={14} /> Clear Thread</button>
+                <button onClick={clearChat} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-red-500/80 transition-colors hover:bg-red-500/10 hover:text-red-500"><Trash2 size={14} /> Clear thread</button>
                 <div className="h-px bg-white/5 my-1 mx-2" />
-                <button onClick={() => exportChat('text')} className="w-full flex items-center gap-3 px-4 py-3 text-[11px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:bg-white/5 rounded-2xl transition-all"><FileText size={14} /> Export text</button>
-                <button onClick={() => exportChat('pdf')} className="w-full flex items-center gap-3 px-4 py-3 text-[11px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:bg-white/5 rounded-2xl transition-all"><Download size={14} /> Export PDF</button>
-                <button onClick={copyChatToClipboard} className="w-full flex items-center gap-3 px-4 py-3 text-[11px] font-black uppercase tracking-widest text-white/40 hover:text-white hover:bg-white/5 rounded-2xl transition-all"><CopyIcon size={14} /> Copy Context</button>
+                <button onClick={() => exportChat('text')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><FileText size={14} /> Export text</button>
+                <button onClick={() => exportChat('pdf')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><Download size={14} /> Export PDF</button>
+                <button onClick={copyChatToClipboard} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><CopyIcon size={14} /> Copy context</button>
+                <button onClick={() => { setShowSidebarCustomize(true); setShowActionsMenu(false); playClickSound(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><Cpu size={14} /> Customize chat</button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showSidebarCustomize && (
+              <motion.div
+                initial={{ opacity: 0, y: 12, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 12, scale: 0.97 }}
+                className="absolute bottom-24 left-0 right-0 z-[70] mx-auto w-[min(560px,calc(100vw-32px))] rounded-2xl border p-4 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-3xl"
+                style={popoverStyle}
+              >
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[14px] font-semibold text-primary-text">Chat appearance</p>
+                    <p className="text-[12px] text-secondary-text">Fonts, controls, model labels, and sounds.</p>
+                  </div>
+                  <button onClick={() => setShowSidebarCustomize(false)} className="rounded-lg p-2 text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><X size={16} /></button>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-1.5">
+                    <span className="text-[12px] font-medium text-secondary-text">Font</span>
+                    <select
+                      value={workspacePrefs.fontFamily}
+                      onChange={(event) => updateWorkspacePrefs({ fontFamily: event.target.value })}
+                      className="w-full rounded-lg border border-border-color bg-primary-bg px-3 py-2 text-[13px] text-primary-text outline-none"
+                    >
+                      <option value={'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'}>System</option>
+                      <option value={'SF Pro Text, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'}>SF Pro</option>
+                      <option value={'Georgia, "Times New Roman", serif'}>Serif</option>
+                      <option value={'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace'}>Mono</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-[12px] font-medium text-secondary-text">Font size: {workspacePrefs.fontSize}px</span>
+                    <input
+                      type="range"
+                      min={13}
+                      max={20}
+                      value={workspacePrefs.fontSize}
+                      onChange={(event) => updateWorkspacePrefs({ fontSize: Number(event.target.value) })}
+                      className="w-full accent-[var(--accent)]"
+                    />
+                  </label>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <label className="flex items-center justify-between rounded-lg border border-border-color/70 px-3 py-2 text-[13px] text-secondary-text">
+                    Click sounds
+                    <input type="checkbox" checked={workspacePrefs.soundsEnabled} onChange={(event) => updateWorkspacePrefs({ soundsEnabled: event.target.checked })} />
+                  </label>
+                  <label className="flex items-center justify-between rounded-lg border border-border-color/70 px-3 py-2 text-[13px] text-secondary-text">
+                    Purple glow
+                    <input type="checkbox" checked={workspacePrefs.gradientEffectsEnabled} onChange={(event) => updateWorkspacePrefs({ gradientEffectsEnabled: event.target.checked })} />
+                  </label>
+                  {(['attachments', 'voice', 'neuralCache', 'history', 'automation'] as ComposerIconKey[]).map((key) => (
+                    <label key={key} className="flex items-center justify-between rounded-lg border border-border-color/70 px-3 py-2 text-[13px] text-secondary-text">
+                      {key === 'neuralCache' ? 'Neural cache' : key.charAt(0).toUpperCase() + key.slice(1)}
+                      <input type="checkbox" checked={workspacePrefs.visibleComposerIcons[key]} onChange={(event) => updateComposerIconVisibility(key, event.target.checked)} />
+                    </label>
+                  ))}
+                </div>
+                <label className="mt-4 block space-y-1.5">
+                  <span className="text-[12px] font-medium text-secondary-text">Nickname for this model</span>
+                  <input
+                    value={workspacePrefs.modelNicknames[activeModelKey] || ''}
+                    onChange={(event) => updateActiveModelNickname(event.target.value)}
+                    placeholder={currentActiveModel}
+                    className="w-full rounded-lg border border-border-color bg-primary-bg px-3 py-2 text-[13px] text-primary-text outline-none"
+                  />
+                </label>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showModelPicker && (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.97 }}
+                className="absolute bottom-20 right-2 z-[65] max-h-80 w-72 overflow-y-auto rounded-xl border p-2 shadow-[0_18px_50px_rgba(0,0,0,0.28)] backdrop-blur-3xl"
+                style={popoverStyle}
+              >
+                {modelOptions.map((option) => {
+                  const key = `${option.provider}:${option.model}`;
+                  const active = key === activeModelKey;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => selectChatModel(option.provider, option.model)}
+                      className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${active ? 'bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-primary-text' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'}`}
+                    >
+                      <span className="block text-[13px] font-medium">{workspacePrefs.modelNicknames[key] || option.model}</span>
+                      <span className="block text-[11px] opacity-70">{option.label}</span>
+                    </button>
+                  );
+                })}
               </motion.div>
             )}
           </AnimatePresence>
@@ -5885,40 +6350,62 @@ I've successfully executed the following real tasks:
             }}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
             onFocus={markSidebarInteraction}
-            placeholder="Command your workspace..."
-            className={`w-full bg-transparent text-sm text-primary-text placeholder:text-secondary-text outline-none resize-none modern-scrollbar font-medium transition-[height] duration-500 h-24 py-2`}
+            placeholder="Ask Aartiq to browse, reason, or automate..."
+            className="max-h-36 min-h-[48px] w-full resize-none bg-transparent px-2 py-2 text-[14px] text-primary-text outline-none placeholder:text-secondary-text modern-scrollbar"
           />
 
-          <div className="flex items-center justify-between mt-2 pt-3 border-t border-white/10">
+          <div className="mt-1 flex items-center justify-between">
             <div className="flex items-center gap-1">
-              <button onClick={() => fileInputRef.current?.click()} className="p-3 rounded-2xl hover:bg-accent/5 text-secondary-text hover:text-primary-text transition-all"><Paperclip size={20} /></button>
-              <button
-                onClick={() => setShowConversationHistory(true)}
-                title="Conversation history"
-                className="p-3 rounded-2xl hover:bg-accent/5 text-secondary-text hover:text-primary-text transition-all"
-              >
-                <History size={20} />
+              {workspacePrefs.visibleComposerIcons.attachments && (
+                <button onClick={() => { playClickSound(); fileInputRef.current?.click(); }} className="rounded-lg p-2 text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text" title="Attach file"><Paperclip size={18} /></button>
+              )}
+              {workspacePrefs.visibleComposerIcons.voice && (
+                <button onClick={handleVoiceInput} className={`rounded-lg p-2 transition-colors ${isRecordingVoice ? 'bg-red-500/10 text-red-500' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'}`} title={isRecordingVoice ? 'Stop recording' : 'Voice input'}><Mic size={18} /></button>
+              )}
+              {workspacePrefs.visibleComposerIcons.neuralCache && (
+                <button onClick={() => { playClickSound(); setShowRagPanel((value) => !value); }} className={`rounded-lg p-2 transition-colors ${showRagPanel ? 'bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-primary-text' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'} ${workspacePrefs.gradientEffectsEnabled ? 'shadow-[0_0_16px_rgba(124,58,237,0.18)]' : ''}`} title="Neural cache"><Database size={18} /></button>
+              )}
+              {workspacePrefs.visibleComposerIcons.history && (
+                <button
+                  onClick={() => { playClickSound(); setShowConversationHistory(true); }}
+                  title="Conversation history"
+                  className="rounded-lg p-2 text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"
+                >
+                  <History size={18} />
+                </button>
+              )}
+              {workspacePrefs.visibleComposerIcons.automation && (
+                <button onClick={() => { playClickSound(); setShowActionsMenu(!showActionsMenu); }} className={`rounded-lg p-2 transition-colors ${showActionsMenu ? 'bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-primary-text' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'}`} title="Automation menu"><MoreHorizontal size={18} /></button>
+              )}
+            </div>
+            <div className="hidden min-w-0 flex-1 justify-center px-3 text-[11px] text-secondary-text/80 sm:flex">
+              <button onClick={() => { playClickSound(); setShowModelPicker((value) => !value); }} className="truncate rounded-md px-2 py-1 hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text" title={currentActiveModel}>
+                {activeModelDisplayName}
               </button>
-              <button onClick={() => setShowActionsMenu(!showActionsMenu)} className={`p-3 rounded-2xl transition-all ${showActionsMenu ? 'bg-accent/10 text-primary-text' : 'hover:bg-accent/5 text-secondary-text hover:text-primary-text'}`}><MoreHorizontal size={20} /></button>
             </div>
             <button
-              onClick={() => handleSendMessage()}
+              onClick={() => { playClickSound('confirm'); handleSendMessage(); }}
               disabled={isLoading || (!inputMessage.trim() && attachments.length === 0)}
-              className={`group flex items-center justify-center w-12 h-12 rounded-[1.5rem] transition-all hover:scale-105 active:scale-95 disabled:opacity-10 disabled:grayscale`}
+              className="group flex h-9 w-9 items-center justify-center rounded-lg border border-purple-400/20 bg-transparent transition-all hover:scale-[1.03] active:scale-95 disabled:opacity-25 disabled:grayscale"
+              suppressHydrationWarning
               style={{
-                background: 'var(--accent)',
-                color: 'white',
-                boxShadow: '0 4px 12px var(--shadow-color)'
+                color: 'var(--primary-text)',
+                background: workspacePrefs.gradientEffectsEnabled
+                  ? 'radial-gradient(circle at 35% 25%, rgba(168,85,247,0.18), rgba(99,102,241,0.06) 54%, transparent 78%)'
+                  : 'transparent',
+                boxShadow: workspacePrefs.gradientEffectsEnabled
+                  ? '0 0 18px rgba(168,85,247,0.28)'
+                  : '0 4px 14px color-mix(in srgb, var(--shadow-color) 18%, transparent)'
               }}
             >
-              <Send size={20} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              <Send size={17} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </button>
           </div>
         </div>
-        <p className="text-[8px] text-center text-secondary-text mt-5 uppercase tracking-[0.5em] font-black opacity-60">Neural Engine Active • {versionLabel}</p>
+        <p className="mt-2 text-center text-[11px] text-secondary-text/70">Aartiq can make mistakes. Review sensitive actions.</p>
       </footer>
 
-      <input type="file" ref={fileInputRef} className="hidden" multiple onChange={(e) => { }} />
+      <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*,application/pdf,text/plain,text/markdown,.txt,.md,.markdown" onChange={handleAttachmentChange} />
       <LLMProviderSettings
         {...props}
         showSettings={showLLMProviderSettings}

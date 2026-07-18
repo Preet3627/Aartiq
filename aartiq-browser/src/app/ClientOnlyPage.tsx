@@ -181,6 +181,54 @@ export default function Home() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem('aartiq_ai_sidebar_workspace_preferences');
+      if (stored) clickSoundEnabledRef.current = !!JSON.parse(stored)?.soundsEnabled;
+    } catch {
+    }
+
+    const playClick = (variant: 'tap' | 'confirm' = 'tap') => {
+      if (!clickSoundEnabledRef.current) return;
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const context = clickAudioContextRef.current || new AudioContextCtor();
+      clickAudioContextRef.current = context;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = variant === 'confirm' ? 660 : 440;
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(variant === 'confirm' ? 0.045 : 0.025, context.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.08);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.09);
+    };
+
+    const handlePreference = (event: Event) => {
+      clickSoundEnabledRef.current = !!(event as CustomEvent<{ enabled?: boolean }>).detail?.enabled;
+    };
+    const handleManualSound = (event: Event) => {
+      playClick((event as CustomEvent<{ variant?: 'tap' | 'confirm' }>).detail?.variant || 'tap');
+    };
+    const handleDocumentClick = (event: MouseEvent) => {
+      if ((event.target as HTMLElement | null)?.closest('button,a,[role="button"],input,select,textarea')) {
+        playClick('tap');
+      }
+    };
+
+    window.addEventListener('aartiq-click-sound-preference', handlePreference);
+    window.addEventListener('aartiq-play-click-sound', handleManualSound);
+    document.addEventListener('click', handleDocumentClick, true);
+    return () => {
+      window.removeEventListener('aartiq-click-sound-preference', handlePreference);
+      window.removeEventListener('aartiq-play-click-sound', handleManualSound);
+      document.removeEventListener('click', handleDocumentClick, true);
+    };
+  }, []);
   const isMacOS = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
   const [showClipboard, setShowClipboard] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
@@ -278,6 +326,8 @@ export default function Home() {
   const [passwordSaveDialog, setPasswordSaveDialog] = useState<{ domain: string; url?: string; username: string; password: string; type: string } | null>(null);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isAmbientPlaying, setIsAmbientPlaying] = useState(false);
+  const clickSoundEnabledRef = useRef(false);
+  const clickAudioContextRef = useRef<AudioContext | null>(null);
   const [inputValue, setInputValue] = useState(store.currentUrl);
   const [showSpotlightSearch, setShowSpotlightSearch] = useState(false);
   const [isPopupWindow, setIsPopupWindow] = useState(false);

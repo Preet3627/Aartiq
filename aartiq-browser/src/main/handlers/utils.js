@@ -17,8 +17,14 @@ exports.getAppIconBase64 = async function() {
     const candidates = isPackaged ? [
       path.join(appPath, 'assets', 'icon-transparent.png'),
       path.join(appPath, 'assets', 'icon.png'),
+      path.join(appPath, 'app.asar.unpacked', 'assets', 'icon-transparent.png'),
+      path.join(appPath, 'app.asar.unpacked', 'assets', 'icon.png'),
       path.join(process.resourcesPath, 'app', 'assets', 'icon-transparent.png'),
       path.join(process.resourcesPath, 'app', 'assets', 'icon.png'),
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon-transparent.png'),
+      path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon.png'),
+      path.join(process.resourcesPath, 'assets', 'icon-transparent.png'),
+      path.join(process.resourcesPath, 'assets', 'icon.png'),
     ] : [
       path.join(__dirname, '../../assets/icon-transparent.png'),
       path.join(__dirname, '../../assets/icon.png'),

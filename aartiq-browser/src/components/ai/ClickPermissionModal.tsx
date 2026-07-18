@@ -1,6 +1,18 @@
-import React, { memo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, AlertTriangle, Info, Terminal, Shield, ChevronDown, Lock, Unlock, Clock, FileWarning } from 'lucide-react';
+import React, { memo, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  FileWarning,
+  Lock,
+  MousePointer2,
+  Search,
+  Shield,
+  Terminal,
+  X,
+  Zap,
+} from 'lucide-react';
 
 interface BatchCommandInfo {
   index: number;
@@ -31,596 +43,365 @@ interface ClickPermissionModalProps {
   onAllowBatch?: (allowedIndices: number[]) => void;
 }
 
-const RISK_CONFIG = {
-  low: { color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20', label: 'Low Risk', icon: '🟢', glow: 'shadow-[0_0_15px_rgba(34,197,94,0.15)]' },
-  medium: { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', label: 'Medium Risk', icon: '🟡', glow: 'shadow-[0_0_15px_rgba(245,158,11,0.15)]' },
-  high: { color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20', label: 'High Risk', icon: '🔴', glow: 'shadow-[0_0_20px_rgba(239,68,68,0.2)]' },
+const riskTone = {
+  low: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20',
+  medium: 'text-amber-600 bg-amber-500/10 border-amber-500/20',
+  high: 'text-red-600 bg-red-500/10 border-red-500/20',
 };
 
-const ACTION_ICONS: Record<string, string> = {
-  SHELL_COMMAND: 'terminal',
-  CLICK_ELEMENT: 'mouse',
-  FIND_AND_CLICK: 'search',
-  FILL_FORM: 'edit',
-  OPEN_APP: 'rocket',
-  READ_PAGE_CONTENT: 'book',
-  NAVIGATE: 'globe',
-  SET_VOLUME: 'volume',
-  SET_BRIGHTNESS: 'sun',
-  SCREENSHOT_AND_ANALYZE: 'camera',
-  OCR_SCREEN: 'scan',
-  GENERATE_PDF: 'download',
-  WEB_SEARCH: 'search',
-  DOM_SEARCH: 'database',
+const actionIcon = (actionType?: string) => {
+  if (actionType === 'SHELL_COMMAND') return <Terminal size={18} />;
+  if (actionType === 'FIND_AND_CLICK' || actionType === 'WEB_SEARCH') return <Search size={18} />;
+  if (actionType?.includes('CLICK') || actionType === 'FILL_FORM') return <MousePointer2 size={18} />;
+  return <Zap size={18} />;
 };
 
-function SingleMode({ context, onAllow, onDeny, highRiskApproved }: {
+const humanAction = (action?: string, actionType?: string) => {
+  if (action) return action;
+  if (!actionType) return 'Perform an action';
+  return actionType.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
+};
+
+function TechnicalDetails({ children, label = 'Show Technical Details' }: { children: React.ReactNode; label?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-[color-mix(in_srgb,var(--border-color)_55%,transparent)]">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center justify-between px-3 py-2 text-[12px] text-secondary-text hover:text-primary-text"
+        aria-expanded={open}
+      >
+        <span>{label}</span>
+        <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-2 px-3 pb-3">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function DangerousActionNotice({ command, risk }: { command?: string; risk: 'low' | 'medium' | 'high' }) {
+  const destructiveCommand = command && /^(rm\s+-rf|dd\s+|mkfs|format|fdisk)/i.test(command.trim());
+  const pipedCommand = command && /[|>]/.test(command);
+  if (risk !== 'high' && !destructiveCommand && !pipedCommand) return null;
+
+  return (
+    <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-3">
+      <div className="flex items-center gap-2 text-[13px] font-medium text-red-500">
+        <FileWarning size={15} />
+        {risk === 'high' || destructiveCommand ? 'This action can modify or delete data' : 'This command redirects or pipes output'}
+      </div>
+      <p className="mt-1 text-[12px] leading-relaxed text-secondary-text">
+        Review the details before allowing Aartiq to continue.
+      </p>
+    </div>
+  );
+}
+
+function SinglePermissionCard({
+  context,
+  onAllow,
+  onDeny,
+  highRiskApproved,
+}: {
   context: NonNullable<ClickPermissionModalProps['context']>;
   onAllow: (alwaysAllow?: boolean) => void;
   onDeny: () => void;
   highRiskApproved: boolean;
 }) {
-  const [alwaysAllow, setAlwaysAllow] = React.useState(false);
-  const [pinInput, setPinInput] = React.useState('');
-  const [showDetails, setShowDetails] = React.useState(false);
-  const riskKey = context.risk || 'medium';
-  const risk = RISK_CONFIG[riskKey] ?? RISK_CONFIG.medium;
-
-  let qrData = null;
-  if (context.highRiskQr) {
+  const [alwaysAllow, setAlwaysAllow] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const qrData = useMemo(() => {
+    if (!context.highRiskQr) return null;
     try {
-      qrData = JSON.parse(context.highRiskQr);
+      return JSON.parse(context.highRiskQr);
     } catch {
-      qrData = { qrImage: context.highRiskQr, pin: '' };
+      return { qrImage: context.highRiskQr, pin: '' };
     }
-  }
-
+  }, [context.highRiskQr]);
   const expectedPin = typeof qrData?.pin === 'string' ? qrData.pin : '';
   const normalizedPin = pinInput.replace(/\D/g, '');
   const requiresHighRiskVerification = context.risk === 'high';
-  const isPinReady = !expectedPin || (normalizedPin.length === expectedPin.length && normalizedPin === expectedPin);
-  const canAllow = requiresHighRiskVerification ? highRiskApproved && isPinReady : true;
+  const pinReady = !expectedPin || normalizedPin === expectedPin;
+  const canAllow = requiresHighRiskVerification ? highRiskApproved && pinReady : true;
+  const actionName = humanAction(context.action, context.actionType);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.92, y: 12 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.92, y: 12 }}
-      className={`w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0d1a] shadow-2xl overflow-y-auto backdrop-blur-2xl mx-auto max-h-[85vh] ${risk.glow}`}
-    >
-      {/* Header */}
-      <div className={`flex items-center gap-3 px-5 py-4 border-b border-white/5 ${risk.bg}`}>
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${risk.bg} border ${risk.border} ${risk.color}`}>
-          {context.actionType === 'SHELL_COMMAND' ? <Terminal size={18} /> :
-            context.actionType === 'CLICK_ELEMENT' ? '🖱️' :
-              context.actionType === 'FIND_AND_CLICK' ? '🔍' :
-                context.actionType === 'FILL_FORM' ? '✏️' :
-                  context.actionType === 'OPEN_APP' ? '🚀' :
-                    context.actionType === 'READ_PAGE_CONTENT' ? '📖' :
-                      context.actionType === 'NAVIGATE' ? '🌐' :
-                        context.actionType === 'WEB_SEARCH' ? '🔍' : '⚡'}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">AI wants to interact</div>
-          <div className="text-sm font-bold text-white truncate mt-0.5">{context.action}</div>
-        </div>
-        <div className={`px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider flex-shrink-0 ${risk.bg} ${risk.color} border ${risk.border}`}>
-          {risk.label}
-        </div>
-      </div>
-
-      <div className="px-5 py-4 space-y-4">
-        {/* Command Details */}
-        {context.actionType === 'SHELL_COMMAND' && (
-          <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-3 py-2.5">
-            <div className="flex items-center gap-2 mb-1.5">
-              <Terminal size={12} className="text-sky-400" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-sky-400">Command</span>
+    <PermissionShell>
+      <div className="p-5">
+        <div className="mb-5 flex items-start gap-4">
+          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${riskTone[context.risk]}`}>
+            {context.risk === 'high' ? <Shield size={19} /> : actionIcon(context.actionType)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] text-secondary-text">Allow Aartiq to</div>
+            <h2 className="mt-0.5 text-lg font-semibold leading-tight text-primary-text">{actionName}</h2>
+            <div className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${riskTone[context.risk]}`}>
+              {context.risk === 'high' ? 'High risk' : context.risk === 'medium' ? 'Needs approval' : 'Low risk'}
             </div>
-            <div className="text-xs text-white/70 font-mono break-all leading-relaxed">{context.target}</div>
           </div>
-        )}
-
-        {/* What */}
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-1.5">What</div>
-          <div className="text-sm text-white/80 leading-relaxed font-medium">
-            {context.what || context.action}
-          </div>
+          <button type="button" onClick={onDeny} className="rounded-md p-2 text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text" title="Deny">
+            <X size={16} />
+          </button>
         </div>
 
-        {/* Why */}
-        <div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-1.5">Why</div>
-          <div className="text-[11px] text-white/50 leading-relaxed italic">
-            {context.reason}
-          </div>
-        </div>
-
-        {/* Target */}
-        {context.target && context.actionType !== 'SHELL_COMMAND' && (
+        <div className="space-y-4">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-1.5">Target</div>
-            <div className="text-[10px] font-mono text-sky-300/70 bg-sky-500/5 border border-sky-500/10 rounded-lg px-3 py-2 break-all">
-              {context.target.length > 120 ? context.target.substring(0, 120) + '...' : context.target}
+            <div className="mb-1 text-[12px] font-medium text-secondary-text">Reason</div>
+            <p className="text-[14px] leading-relaxed text-primary-text">{context.reason}</p>
+          </div>
+
+          {context.what && context.what !== actionName && (
+            <div>
+              <div className="mb-1 text-[12px] font-medium text-secondary-text">Action</div>
+              <p className="text-[14px] leading-relaxed text-primary-text">{context.what}</p>
             </div>
-          </div>
-        )}
-
-        {/* Affected Paths */}
-        {context.affectedPaths && context.affectedPaths.length > 0 && (
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-1.5">Touches</div>
-            <div className="flex flex-wrap gap-1.5">
-              {context.affectedPaths.map((path, i) => (
-                <span key={i} className="px-2 py-0.5 rounded-md bg-white/5 border border-white/5 text-[9px] font-mono text-white/40">
-                  {path}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Estimated Impact */}
-        {context.estimatedImpact && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
-            <Clock size={10} className="text-white/30 mt-0.5 flex-shrink-0" />
-            <span className="text-[9px] text-white/40 leading-relaxed">{context.estimatedImpact}</span>
-          </div>
-        )}
-
-        {/* Expandable Details */}
-        <button
-          onClick={() => setShowDetails(!showDetails)}
-          className="flex items-center gap-1.5 text-[9px] text-white/30 hover:text-white/50 transition-colors"
-        >
-          <motion.div animate={{ rotate: showDetails ? 180 : 0 }}>
-            <ChevronDown size={10} />
-          </motion.div>
-          <span className="uppercase tracking-widest font-bold">More details</span>
-        </button>
-
-        <AnimatePresence>
-          {showDetails && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden space-y-3"
-            >
-              <div className="flex items-center justify-between text-[9px]">
-                <span className="text-white/30">Action Type</span>
-                <span className="text-white/50 font-mono">{context.actionType || 'Unknown'}</span>
-              </div>
-              <div className="flex items-center justify-between text-[9px]">
-                <span className="text-white/30">Risk Level</span>
-                <span className={`${risk.color} font-bold uppercase`}>{risk.label}</span>
-              </div>
-              <div className="flex items-center justify-between text-[9px]">
-                <span className="text-white/30">Device Unlock</span>
-                <span className="text-white/50">{context.requiresDeviceUnlock ? 'Required' : 'Not Required'}</span>
-              </div>
-              {context.actionType === 'SHELL_COMMAND' && (
-                <div className="flex items-center justify-between text-[9px]">
-                  <span className="text-white/30">Auto-Approve</span>
-                  <span className="text-red-400 font-bold">Never for shell</span>
-                </div>
-              )}
-            </motion.div>
           )}
-        </AnimatePresence>
 
-        {/* Irreversible Warning */}
-        <IrreversibleWarning command={context.target} risk={context.risk} />
-
-        {/* Device Unlock */}
-        {context.requiresDeviceUnlock && context.risk !== 'high' && (
-          <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-3">
-            <div className="flex items-center gap-2">
-              <Lock size={12} className="text-sky-300" />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-sky-300">
-                Device Unlock Required
-              </span>
-            </div>
-            <p className="mt-1 text-[10px] leading-relaxed text-white/50">
-              After approval, Aartiq will open the OS verification prompt before this runs.
-            </p>
-          </div>
-        )}
-
-        {/* High Risk QR */}
-        {context.risk === 'high' && qrData?.qrImage && (
-          <div className="pt-2 border-t border-red-500/10 flex flex-col items-center">
-            <div className="flex items-center gap-2 mb-3">
-              <Shield size={14} className="text-red-400 animate-pulse" />
-              <span className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em]">
-                High Risk: Scan to Authorize on Mobile
-              </span>
-            </div>
-            <div className="p-3 bg-white rounded-xl shadow-2xl">
-              <img src={qrData.qrImage} alt="Authorize" className="w-32 h-32" />
-            </div>
-            {qrData.pin && (
-              <div className="mt-4 flex flex-col items-center">
-                <span className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Match this PIN on mobile</span>
-                <span className="text-xl font-mono font-black tracking-[0.4em] text-white mt-1 bg-white/5 py-1 px-4 rounded-lg border border-white/10">{qrData.pin}</span>
+          {context.affectedPaths && context.affectedPaths.length > 0 && (
+            <div>
+              <div className="mb-2 text-[12px] font-medium text-secondary-text">Files</div>
+              <div className="flex flex-wrap gap-1.5">
+                {context.affectedPaths.map((path) => (
+                  <span key={path} className="max-w-full truncate rounded-md bg-[color-mix(in_srgb,var(--primary-text)_6%,transparent)] px-2 py-1 font-mono text-[11px] text-secondary-text">
+                    {path}
+                  </span>
+                ))}
               </div>
-            )}
-            <div className={`mt-4 w-full rounded-xl border px-3 py-3 ${highRiskApproved ? 'border-green-500/30 bg-green-500/10' : 'border-amber-500/20 bg-amber-500/10'}`}>
-              <div className={`text-[10px] font-black uppercase tracking-[0.2em] ${highRiskApproved ? 'text-green-300' : 'text-amber-300'}`}>
-                {highRiskApproved ? 'Mobile Approval Received' : 'Waiting For Mobile Approval'}
+            </div>
+          )}
+
+          {context.estimatedImpact && (
+            <div className="rounded-lg bg-[color-mix(in_srgb,var(--primary-text)_5%,transparent)] px-3 py-2 text-[12px] leading-relaxed text-secondary-text">
+              {context.estimatedImpact}
+            </div>
+          )}
+
+          <DangerousActionNotice command={context.target} risk={context.risk} />
+
+          {context.requiresDeviceUnlock && context.risk !== 'high' && (
+            <div className="rounded-lg border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] px-3 py-3">
+              <div className="flex items-center gap-2 text-[13px] font-medium text-primary-text">
+                <Lock size={15} />
+                Device unlock required
               </div>
-              <p className="mt-1 text-[10px] leading-relaxed text-white/50">
-                {highRiskApproved
-                  ? 'Enter the displayed PIN below to finish the approval on desktop.'
-                  : 'This action stays locked until Aartiq Mobile scans the QR code and confirms.'}
+              <p className="mt-1 text-[12px] leading-relaxed text-secondary-text">
+                macOS, Windows, or Linux will ask you to verify before this runs.
               </p>
             </div>
-            <div className="mt-4 w-full">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-2 block">
-                Confirm PIN To Unlock
-              </label>
-              <input
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, '').slice(0, expectedPin.length || 6))}
-                inputMode="numeric"
-                maxLength={expectedPin.length || 6}
-                placeholder="Enter PIN"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-center font-mono text-lg tracking-[0.4em] text-white outline-none transition-all focus:border-sky-400/50 focus:bg-white/10 disabled:opacity-50"
-                disabled={!highRiskApproved}
-              />
-              {highRiskApproved && expectedPin && normalizedPin.length > 0 && normalizedPin !== expectedPin && (
-                <p className="mt-2 text-[10px] text-red-300">PIN does not match the approval code.</p>
+          )}
+
+          {context.risk === 'high' && qrData?.qrImage && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-center">
+              <div className="mb-3 flex items-center justify-center gap-2 text-[13px] font-medium text-red-500">
+                <Shield size={15} />
+                Confirm on Aartiq Mobile
+              </div>
+              <div className="mx-auto w-fit rounded-lg bg-white p-3">
+                <img src={qrData.qrImage} alt="Authorize high-risk action" className="h-32 w-32" />
+              </div>
+              {qrData.pin && (
+                <div className="mt-4">
+                  <div className="mb-2 text-[12px] text-secondary-text">Enter matching PIN</div>
+                  <input
+                    value={pinInput}
+                    onChange={(event) => setPinInput(event.target.value.replace(/\D/g, '').slice(0, expectedPin.length || 6))}
+                    inputMode="numeric"
+                    maxLength={expectedPin.length || 6}
+                    disabled={!highRiskApproved}
+                    className="w-full rounded-lg border border-[color-mix(in_srgb,var(--border-color)_65%,transparent)] bg-[color-mix(in_srgb,var(--primary-text)_5%,transparent)] px-3 py-2 text-center font-mono text-lg tracking-[0.25em] text-primary-text outline-none focus:border-[var(--accent)] disabled:opacity-50"
+                  />
+                  {!highRiskApproved && <p className="mt-2 text-[12px] text-secondary-text">Waiting for mobile approval.</p>}
+                  {highRiskApproved && expectedPin && normalizedPin.length > 0 && normalizedPin !== expectedPin && (
+                    <p className="mt-2 text-[12px] text-red-500">PIN does not match.</p>
+                  )}
+                </div>
               )}
             </div>
-            <p className="text-[9px] text-white/30 text-center mt-3 leading-relaxed">
-              Scanning opens <strong>Aartiq Mobile</strong> to safely verify this action.
-            </p>
-          </div>
-        )}
+          )}
+
+          {context.target && (
+            <TechnicalDetails>
+              <div className="space-y-1">
+                <div className="text-[11px] text-secondary-text">Target</div>
+                <pre className="max-h-28 overflow-auto whitespace-pre-wrap break-words rounded-md bg-black/30 p-2 font-mono text-[11px] text-secondary-text">
+                  {context.target}
+                </pre>
+              </div>
+              <div className="grid grid-cols-[90px_1fr] gap-2 text-[11px] text-secondary-text">
+                <span>Action type</span><span className="font-mono">{context.actionType || 'unknown'}</span>
+                <span>Risk</span><span>{context.risk}</span>
+                <span>Device unlock</span><span>{context.requiresDeviceUnlock ? 'required' : 'not required'}</span>
+              </div>
+            </TechnicalDetails>
+          )}
+        </div>
       </div>
 
-      {/* Remember Choice */}
       {context.risk !== 'high' && (
-        <label className="px-5 py-2 flex items-center gap-3 cursor-pointer group">
-          <div
-            onClick={() => setAlwaysAllow(!alwaysAllow)}
-            className={`w-5 h-5 rounded-md border transition-all flex items-center justify-center ${alwaysAllow ? 'bg-sky-500 border-sky-500 text-white' : 'border-white/10 bg-white/5 group-hover:border-white/20'}`}
-          >
-            {alwaysAllow && <Zap size={12} fill="currentColor" />}
-          </div>
-          <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest group-hover:text-white/60 transition-colors">Remember my choice for this action</span>
-          <input type="checkbox" className="hidden" checked={alwaysAllow} onChange={(e) => setAlwaysAllow(e.target.checked)} />
+        <label className="flex cursor-pointer items-center gap-3 border-t border-[color-mix(in_srgb,var(--border-color)_50%,transparent)] px-5 py-3">
+          <span className={`flex h-5 w-5 items-center justify-center rounded-md border ${alwaysAllow ? 'border-[var(--accent)] bg-[var(--accent)] text-white' : 'border-[color-mix(in_srgb,var(--border-color)_80%,transparent)]'}`}>
+            {alwaysAllow && <Check size={13} />}
+          </span>
+          <span className="text-[13px] text-secondary-text">Always allow this action</span>
+          <input className="sr-only" type="checkbox" checked={alwaysAllow} onChange={(event) => setAlwaysAllow(event.target.checked)} />
         </label>
       )}
 
-      {/* Buttons */}
-      <div className="px-5 pb-5 flex gap-3">
+      <div className="flex gap-2 border-t border-[color-mix(in_srgb,var(--border-color)_50%,transparent)] p-5 pt-4">
         <button
+          type="button"
           onClick={onDeny}
-          className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-semibold text-white/60 hover:bg-white/10 hover:text-white transition-all"
+          className="flex-1 rounded-lg border border-[color-mix(in_srgb,var(--border-color)_65%,transparent)] px-4 py-2.5 text-sm font-medium text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_6%,transparent)] hover:text-primary-text"
         >
           Deny
         </button>
+        {context.risk !== 'high' && (
+          <button
+            type="button"
+            onClick={() => onAllow(false)}
+            className="flex-1 rounded-lg bg-[color-mix(in_srgb,var(--accent)_16%,transparent)] px-4 py-2.5 text-sm font-semibold text-primary-text hover:bg-[color-mix(in_srgb,var(--accent)_22%,transparent)]"
+          >
+            Allow Once
+          </button>
+        )}
         <button
-          onClick={() => canAllow && onAllow(alwaysAllow)}
+          type="button"
+          onClick={() => canAllow && onAllow(context.risk === 'high' ? false : alwaysAllow)}
           disabled={!canAllow}
-          className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg disabled:cursor-not-allowed disabled:opacity-50 ${context.risk === 'high' ? 'bg-red-500/80 hover:bg-red-500 text-white' :
-              context.risk === 'medium' ? 'bg-amber-500/80 hover:bg-amber-500 text-white' :
-                'bg-sky-500/80 hover:bg-sky-500 text-white'
-            }`}
+          className="flex-1 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {requiresHighRiskVerification
-            ? !highRiskApproved
-              ? 'Awaiting Mobile Approval'
-              : !isPinReady
-                ? 'Enter Matching PIN'
-                : 'Approve Action'
-            : 'Allow'}
+          {context.risk === 'high' ? 'Allow' : 'Always Allow'}
         </button>
       </div>
-
-      {/* Keyboard Shortcut */}
-      {context.risk !== 'high' && (
-        <div className="px-5 pb-4 flex items-center justify-center gap-2">
-          <kbd className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[9px] font-mono text-white/30">Shift</kbd>
-          <span className="text-[9px] text-white/20">+</span>
-          <kbd className="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[9px] font-mono text-white/30">Tab</kbd>
-          <span className="text-[9px] text-white/20 uppercase tracking-widest">
-            {context.requiresDeviceUnlock ? 'to approve, then unlock device' : 'to quick-allow'}
-          </span>
-        </div>
-      )}
-    </motion.div>
+    </PermissionShell>
   );
 }
 
-function IrreversibleWarning({ command, risk }: { command?: string; risk: string }) {
-  if (risk === 'high') {
-    return (
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="rounded-xl border-2 border-red-500/40 bg-red-500/10 px-4 py-4"
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
-            <AlertTriangle size={16} className="text-red-400" />
-          </div>
-          <div>
-            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-red-400">Dangerous Action</div>
-            <div className="text-[9px] text-red-300/60 mt-0.5">This cannot be undone</div>
-          </div>
-        </div>
-        <div className="space-y-1.5 mt-3">
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-            <span className="text-[10px] text-red-300/80">Permanently modifies or deletes system data</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-            <span className="text-[10px] text-red-300/80">No automatic rollback available</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-            <span className="text-[10px] text-red-300/80">Requires mobile authorization + PIN</span>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-
-  if (command && /^(rm\s+-rf|dd\s+|mkfs|format|fdisk)/i.test(command.trim())) {
-    return (
-      <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3">
-        <div className="flex items-center gap-2">
-          <FileWarning size={14} className="text-red-400 flex-shrink-0" />
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">Destructive Command</div>
-        </div>
-        <p className="mt-1 text-[10px] leading-relaxed text-red-300/80">
-          This command can permanently destroy data. Double-check before approving.
-        </p>
-      </div>
-    );
-  }
-
-  if (command && /[|>]/.test(command)) {
-    return (
-      <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-3">
-        <div className="flex items-center gap-2">
-          <AlertTriangle size={14} className="text-amber-400 flex-shrink-0" />
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400">Pipe / Redirect Detected</div>
-        </div>
-        <p className="mt-1 text-[10px] leading-relaxed text-amber-300/80">
-          This command uses pipes or output redirection which can modify files.
-        </p>
-      </div>
-    );
-  }
-
-  return null;
-}
-
-function BatchMode({ batchCommands, onAllowBatch, onDeny }: {
+function BatchPermissionCard({
+  batchCommands,
+  onAllowBatch,
+  onDeny,
+}: {
   batchCommands: BatchCommandInfo[];
   onAllowBatch: (indices: number[]) => void;
   onDeny: () => void;
 }) {
-  const [selected, setSelected] = React.useState<Set<number>>(new Set(batchCommands.map((_, i) => i)));
-  const [selectAll, setSelectAll] = React.useState(true);
-  const [expandedCmds, setExpandedCmds] = React.useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Set<number>>(new Set(batchCommands.map((_, index) => index)));
+  const selectedCount = selected.size;
+  const anyIrreversible = batchCommands.some((command) => command.irreversible);
 
-  const toggleIndex = (idx: number) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
-    setSelectAll(false);
-  };
-
-  const toggleAll = () => {
-    if (selectAll) {
-      setSelected(new Set());
-      setSelectAll(false);
-    } else {
-      setSelected(new Set(batchCommands.map((_, i) => i)));
-      setSelectAll(true);
-    }
-  };
-
-  const toggleExpand = (idx: number) => {
-    setExpandedCmds(prev => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
+  const toggleIndex = (index: number) => {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
       return next;
     });
   };
-
-  const anyIrreversible = batchCommands.some((c) => c.irreversible);
-  const selectedRiskCounts = { low: 0, medium: 0, high: 0 };
-  batchCommands.forEach((cmd, i) => {
-    if (selected.has(i)) selectedRiskCounts[cmd.risk]++;
-  });
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.92, y: 12 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.92, y: 12 }}
-      className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0d0d1a] shadow-2xl overflow-y-auto backdrop-blur-2xl mx-auto max-h-[85vh]"
-    >
-      {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-white/5 bg-amber-500/10">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/10 border border-amber-500/20">
-          <Terminal size={18} className="text-amber-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">AI wants to execute</div>
-          <div className="text-sm font-bold text-white truncate mt-0.5">{batchCommands.length} Shell Commands</div>
-        </div>
-        <div className="px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
-          Batch
-        </div>
-      </div>
-
-      {/* Risk Summary */}
-      <div className="px-5 pt-4 pb-2 flex items-center gap-3">
-        {selectedRiskCounts.low > 0 && (
-          <span className="px-2 py-0.5 rounded-full text-[8px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">
-            {selectedRiskCounts.low} Low
-          </span>
-        )}
-        {selectedRiskCounts.medium > 0 && (
-          <span className="px-2 py-0.5 rounded-full text-[8px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            {selectedRiskCounts.medium} Medium
-          </span>
-        )}
-        {selectedRiskCounts.high > 0 && (
-          <span className="px-2 py-0.5 rounded-full text-[8px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-            {selectedRiskCounts.high} High
-          </span>
-        )}
-      </div>
-
-      {/* Why */}
-      <div className="px-5 pb-2">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-1">Why</div>
-        <div className="text-[11px] text-white/50 leading-relaxed italic">
-          The AI needs to run multiple shell commands to complete the task.
-        </div>
-      </div>
-
-      {/* Irreversible Warning */}
-      {anyIrreversible && (
-        <div className="mx-5 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-3">
-          <div className="flex items-center gap-2">
-            <AlertTriangle size={14} className="text-red-400 flex-shrink-0" />
-            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-red-400">Irreversible Commands Detected</div>
+    <PermissionShell wide>
+      <div className="p-5">
+        <div className="mb-5 flex items-start gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-600">
+            <Terminal size={18} />
           </div>
-          <p className="mt-1 text-[10px] leading-relaxed text-red-300/80">
-            Some commands can permanently destroy data. Review carefully before approving.
-          </p>
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] text-secondary-text">Allow Aartiq to</div>
+            <h2 className="mt-0.5 text-lg font-semibold leading-tight text-primary-text">Run {batchCommands.length} commands</h2>
+            <p className="mt-2 text-[13px] leading-relaxed text-secondary-text">Needed to complete the automation.</p>
+          </div>
+          <button type="button" onClick={onDeny} className="rounded-md p-2 text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text" title="Deny">
+            <X size={16} />
+          </button>
         </div>
-      )}
 
-      {/* Select All / Deselect All */}
-      <div className="px-5 pt-3 pb-1 flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-white/30">
-          Commands ({selected.size}/{batchCommands.length} selected)
-        </span>
-        <button
-          onClick={toggleAll}
-          className="text-[10px] font-bold text-sky-400 hover:text-sky-300 transition-colors uppercase tracking-widest"
-        >
-          {selectAll ? 'Deselect All' : 'Select All'}
-        </button>
-      </div>
+        {anyIrreversible && (
+          <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-3">
+            <div className="flex items-center gap-2 text-[13px] font-medium text-red-500">
+              <AlertTriangle size={15} />
+              Some commands may be destructive
+            </div>
+          </div>
+        )}
 
-      {/* Command List */}
-      <div className="px-5 py-2 max-h-64 overflow-y-auto space-y-1.5">
-        {batchCommands.map((cmd, idx) => {
-          const isSelected = selected.has(idx);
-          const isExpanded = expandedCmds.has(idx);
-          const cmdRisk = RISK_CONFIG[cmd.risk] ?? RISK_CONFIG.medium;
-          return (
-            <div
-              key={idx}
-              className={`rounded-xl border transition-all overflow-hidden ${
-                isSelected
-                  ? 'border-sky-500/30 bg-sky-500/10'
-                  : 'border-white/5 bg-white/[0.02] hover:border-white/10'
-              }`}
-            >
-              <div 
-                className="px-3 py-2.5 cursor-pointer"
-                onClick={() => toggleIndex(idx)}
+        <div className="max-h-72 space-y-2 overflow-y-auto">
+          {batchCommands.map((command, index) => {
+            const isSelected = selected.has(index);
+            return (
+              <button
+                key={`${command.index}-${index}`}
+                type="button"
+                onClick={() => toggleIndex(index)}
+                className={`flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${isSelected ? 'border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]' : 'border-[color-mix(in_srgb,var(--border-color)_55%,transparent)] bg-transparent'}`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div
-                      className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                        isSelected ? 'bg-sky-500 border-sky-500' : 'border-white/20'
-                      }`}
-                    >
-                      {isSelected && (
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                          <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-mono text-white/80 truncate">{cmd.command.length > 50 ? cmd.command.substring(0, 50) + '...' : cmd.command}</div>
-                      <div className="text-[9px] text-white/35 mt-0.5">{cmd.description}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {cmd.irreversible && <AlertTriangle size={10} className="text-red-400" />}
-                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${cmdRisk.bg} ${cmdRisk.color} border ${cmdRisk.border}`}>
-                      {cmd.risk}
-                    </span>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); toggleExpand(idx); }}
-                      className="text-white/20 hover:text-white/40 transition-colors"
-                    >
-                      <motion.div animate={{ rotate: isExpanded ? 180 : 0 }}>
-                        <ChevronDown size={10} />
-                      </motion.div>
-                    </button>
-                  </div>
-                </div>
-              </div>
-              {/* Expanded reason */}
-              <AnimatePresence>
-                {isExpanded && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="px-3 pb-2 pt-0 ml-9">
-                      <div className="text-[9px] text-white/30 leading-relaxed italic">{cmd.reason}</div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Footer */}
-      <div className="px-5 pb-5 pt-4 flex gap-3 border-t border-white/5 mt-2">
-        <button
-          onClick={onDeny}
-          className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm font-semibold text-white/60 hover:bg-white/10 hover:text-white transition-all"
-        >
-          Deny All
-        </button>
-        <button
-          onClick={() => onAllowBatch(Array.from(selected))}
-          disabled={selected.size === 0}
-          className="flex-1 py-2.5 rounded-xl bg-amber-500/80 hover:bg-amber-500 text-white text-sm font-bold transition-all shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Allow {selected.size > 0 ? `(${selected.size})` : ''}
-        </button>
-      </div>
-
-      {selected.size < batchCommands.length && (
-        <div className="px-5 pb-4">
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-400">
-              Partial Approval
-            </div>
-            <p className="mt-0.5 text-[10px] text-amber-300/70">
-              {batchCommands.length - selected.size} command{selected.size !== 1 ? 's' : ''} will be skipped. The AI may not be able to complete the task.
-            </p>
-          </div>
+                <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${isSelected ? 'border-[var(--accent)] bg-[var(--accent)] text-white' : 'border-[color-mix(in_srgb,var(--border-color)_80%,transparent)]'}`}>
+                  {isSelected && <Check size={13} />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium text-primary-text">{command.description || 'Run command'}</span>
+                  <span className="mt-1 block text-[12px] leading-relaxed text-secondary-text">{command.reason}</span>
+                </span>
+                <span className={`rounded-full border px-2 py-0.5 text-[11px] ${riskTone[command.risk]}`}>{command.risk}</span>
+              </button>
+            );
+          })}
         </div>
-      )}
+
+        <TechnicalDetails label="Show Commands">
+          {batchCommands.map((command, index) => (
+            <pre key={`${command.index}-raw-${index}`} className="max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-md bg-black/30 p-2 font-mono text-[11px] text-secondary-text">
+              {command.command}
+            </pre>
+          ))}
+        </TechnicalDetails>
+      </div>
+
+      <div className="flex gap-2 border-t border-[color-mix(in_srgb,var(--border-color)_50%,transparent)] p-5 pt-4">
+        <button
+          type="button"
+          onClick={onDeny}
+          className="flex-1 rounded-lg border border-[color-mix(in_srgb,var(--border-color)_65%,transparent)] px-4 py-2.5 text-sm font-medium text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_6%,transparent)] hover:text-primary-text"
+        >
+          Deny
+        </button>
+        <button
+          type="button"
+          onClick={() => onAllowBatch(Array.from(selected))}
+          disabled={selectedCount === 0}
+          className="flex-1 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Allow {selectedCount > 0 ? selectedCount : ''}
+        </button>
+      </div>
+    </PermissionShell>
+  );
+}
+
+function PermissionShell({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97, y: 10 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.97, y: 10 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
+      className={`mx-auto max-h-[88vh] w-full ${wide ? 'max-w-lg' : 'max-w-md'} overflow-y-auto rounded-2xl border border-[color-mix(in_srgb,var(--border-color)_70%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_96%,transparent)] text-primary-text shadow-[0_24px_70px_rgba(0,0,0,0.28)] backdrop-blur-2xl`}
+      role="dialog"
+      aria-modal="true"
+    >
+      {children}
     </motion.div>
   );
 }
@@ -629,23 +410,26 @@ const ClickPermissionModal = memo(function ClickPermissionModal(props: ClickPerm
   const { context, onAllow, onDeny, highRiskApproved, batchCommands, onAllowBatch } = props;
 
   React.useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); onAllow?.(); }
-      if (e.key === 'Escape') { e.preventDefault(); onDeny(); }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onDeny();
+      }
+      if (event.key === 'Tab' && event.shiftKey && onAllow) {
+        event.preventDefault();
+        onAllow(false);
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [onAllow, onDeny]);
 
   if (batchCommands && batchCommands.length > 1 && onAllowBatch) {
-    return <BatchMode batchCommands={batchCommands} onAllowBatch={onAllowBatch} onDeny={onDeny} />;
+    return <BatchPermissionCard batchCommands={batchCommands} onAllowBatch={onAllowBatch} onDeny={onDeny} />;
   }
 
   if (!context || !onAllow) return null;
-
-  return (
-    <SingleMode context={context} onAllow={onAllow} onDeny={onDeny} highRiskApproved={highRiskApproved || false} />
-  );
+  return <SinglePermissionCard context={context} onAllow={onAllow} onDeny={onDeny} highRiskApproved={highRiskApproved || false} />;
 });
 
 export default ClickPermissionModal;

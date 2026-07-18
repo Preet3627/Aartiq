@@ -149,12 +149,6 @@ export interface PDFImage {
   caption?: string;
 }
 
-export interface PDFStyles {
-  background?: string; // CSS color or gradient
-  outlineColor?: string;
-  accentColor?: string;
-}
-
 export function buildBodyFromMarkdown(text: string): string {
   const looksLikeHTML = /<[a-z][\s\S]*?>/i.test(text);
   if (looksLikeHTML) {
@@ -277,22 +271,14 @@ export function buildBodyFromMarkdown(text: string): string {
 }
 
 export function buildCleanPDFContent(
-  rawContent: string, 
-  title: string, 
+  rawContent: string,
+  title: string,
   iconBase64: string | null,
   images?: PDFImage[],
-  styles?: PDFStyles
+  meta?: { sources?: string[]; aiModel?: string }
 ): string {
   let text = sanitizePDFContent(rawContent, title);
   text = text.replace(/\$\(READ_PAGE_CONTENT\)/g, '[Page Content Summary Included Below]');
-  
-  // Slide logic integration (Presenton style)
-  const slides = text.split(/---\n?/).filter(s => s.trim().length > 10);
-  const isSlideShow = slides.length > 2;
-
-  const bg = styles?.background || '#ffffff';
-  const outline = styles?.outlineColor || '#f1f5f9';
-  const accent = styles?.accentColor || '#0ea5e9';
 
   const bodyHTML = buildBodyFromMarkdown(text);
 
@@ -312,208 +298,102 @@ export function buildCleanPDFContent(
     imagesHTML += '</div>';
   }
 
-  const headerLogoHTML = iconBase64
-    ? `<img src="${iconBase64}" alt="Aartiq Logo" style="width:32px;height:32px;object-fit:contain;"/>`
-    : '🌠';
+  const logoHTML = iconBase64
+    ? `<img src="${iconBase64}" alt="Aartiq Logo" style="width:28px;height:28px;object-fit:contain;"/>`
+    : '';
 
-  const footerLogoHTML = iconBase64
-    ? `<img src="${iconBase64}" alt="Aartiq" style="width:16px;height:16px;object-fit:contain;vertical-align:middle;margin-right:6px;"/>`
-    : '🌠';
+  const sources = meta?.sources?.filter(Boolean) || [];
+  const aiModel = meta?.aiModel || 'Aartiq AI';
+  const genDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const sourcesHTML = sources.length > 0
+    ? `<div class="meta-section"><h3>Sources</h3><ul>${sources.map(s => {
+        const escaped = escapeHtml(s);
+        try {
+          const url = s.startsWith('http') ? new URL(s) : new URL(`https://${s}`);
+          const favicon = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
+          return `<li style="display:flex;align-items:center;gap:8px;padding:6px 0;"><img src="${favicon}" style="width:16px;height:16px;border-radius:3px;" onerror="this.style.display='none'" /><a href="${escaped}" style="color:#4f46e5;text-decoration:none;word-break:break-all;">${escaped}</a></li>`;
+        } catch {
+          return `<li style="padding:4px 0;">${escaped}</li>`;
+        }
+      }).join('')}</ul></div>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Inter:wght@400;600&display=swap');
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 14px; }
     body {
-      font-family: 'Inter', system-ui, sans-serif;
-      color: #1e293b;
-      background: ${bg};
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #1a1a1a;
+      background: #ffffff;
       padding: 0;
       line-height: 1.7;
-      min-height: 100vh;
     }
-    .page-break { page-break-before: always; height: 0; margin-top: 40px; border-top: 1px solid ${outline}; }
-    .slide {
-      min-height: 80vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 60px;
-      border: 2px solid ${outline};
-      border-radius: 40px;
-      margin-bottom: 60px;
-      background: white;
-      box-shadow: 0 40px 100px rgba(0,0,0,0.05);
-      position: relative;
-      overflow: hidden;
-      break-after: always;
-      page-break-after: always;
-    }
-    .slide-number {
-      position: absolute; top: 30px; right: 40px; font-size: 0.75rem; 
-      font-weight: 800; color: ${accent}; text-transform: uppercase;
-      letter-spacing: 0.1em; opacity: 0.5;
-    }
-    .slide-content { position: relative; z-index: 10; }
-    .slide-decoration {
-      position: absolute; bottom: -50px; left: -50px; width: 200px; height: 200px;
-      background: radial-gradient(circle, ${accent}10 0%, transparent 70%);
-      border-radius: 50%; z-index: 1;
-    }
-    .page-container {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 40px 60px 100px;
-      border: 1px solid ${outline};
-      background: #ffffff;
-      min-height: calc(100vh - 40px);
-      overflow: visible;
-    }
+    .page-container { max-width: 800px; margin: 0 auto; padding: 40px 50px 80px; }
+
     header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 40px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid #f1f5f9;
-    }
-    .brand {
-      display: flex;
-      align-items: center; gap: 12px;
-      font-family: 'Outfit', sans-serif; font-weight: 700; font-size: 1.25rem; color: #0f172a;
-    }
-    .brand span { color: ${accent}; }
-    h1 { 
-      font-family: 'Outfit', sans-serif; font-size: 2.25rem; font-weight: 700; 
-      margin-bottom: 12px; color: #0f172a; line-height: 1.2;
-    }
-    h2 { font-family: 'Outfit', sans-serif; font-size: 1.5rem; font-weight: 600; margin: 32px 0 12px; color: #1e293b; }
-    h3 { font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 600; margin: 24px 0 10px; color: ${accent}; }
-    
-    /* --- Table Fixes for Page Breaks --- */
-    table { 
-      border-collapse: collapse; 
-      width: 100%; 
-      margin: 24px 0; 
-      border: 1px solid #e2e8f0; 
-      table-layout: auto; 
-      word-wrap: break-word; 
-      break-inside: avoid;
-      page-break-inside: avoid; 
-    }
-    thead { display: table-header-group; break-after: avoid; }
-    tbody { display: table-row-group; }
-    tr { break-inside: avoid; page-break-inside: avoid; }
-    th { 
-      background: #f8fafc; color: #475569; padding: 12px 16px; 
-      text-align: left; font-size: 0.85rem; font-weight: 600; 
-      text-transform: uppercase; border-bottom: 2px solid #e2e8f0; 
-      break-after: avoid; 
-    }
-    td { padding: 10px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; word-break: break-word; }
-    
-    .table-wrapper { overflow-x: visible; margin: 24px 0; max-width: 100%; break-inside: avoid; display: block; }
-    code { font-family: monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 2px; color: ${accent}; }
-    pre { background: #0f172a; color: #f8fafc; padding: 16px; overflow-x: auto; margin: 24px 0; white-space: pre-wrap; word-break: break-all; break-inside: avoid; }
-    blockquote { border-left: 4px solid ${accent}; padding: 12px 24px; background: #f0f9ff; color: #1e40af; margin: 24px 0; break-inside: avoid; }
-    .footer {
-      position: fixed; bottom: 0; left: 0; right: 0;
       display: flex; align-items: center; justify-content: space-between;
-      padding: 15px 60px; background: #ffffff; border-top: 1px solid #f1f5f9;
-      font-size: 0.75rem; color: #94a3b8;
+      padding-bottom: 16px; margin-bottom: 32px;
+      border-bottom: 1px solid #eee;
     }
-    .footer-brand { display: flex; align-items: center; gap: 6px; font-weight: 600; color: ${accent}; }
-    .pdf-images { margin: 32px 0; clear: both; }
-    .pdf-images figure { margin: 24px 0; text-align: center; break-inside: avoid; page-break-inside: avoid; clear: both; display: block; }
-    .pdf-images img { max-width: 100%; width: auto; height: auto; max-height: 600px; border: 1px solid #e2e8f0; display: block; margin: 0 auto; }
-    .pdf-images figcaption { font-size: 0.85rem; color: #64748b; margin-top: 12px; font-style: italic; text-align: center; }
+    .brand { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 600; color: #333; }
+    .brand-date { font-size: 0.75rem; color: #999; }
+
+    h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 24px; color: #111; line-height: 1.3; }
+    h2 { font-size: 1.3rem; font-weight: 600; margin: 28px 0 10px; color: #222; }
+    h3 { font-size: 1rem; font-weight: 600; margin: 20px 0 8px; color: #444; }
+    p { margin-bottom: 14px; font-size: 0.95rem; }
+    ul, ol { margin: 10px 0 14px 24px; }
+    li { margin-bottom: 6px; font-size: 0.95rem; }
+
+    table { border-collapse: collapse; width: 100%; margin: 20px 0; font-size: 0.9rem; }
+    th { background: #f5f5f5; padding: 10px 14px; text-align: left; font-weight: 600; border-bottom: 2px solid #ddd; }
+    td { padding: 8px 14px; border-bottom: 1px solid #eee; }
+    tr:hover td { background: #fafafa; }
+
+    code { font-family: 'SF Mono', Menlo, monospace; background: #f4f4f4; padding: 2px 5px; border-radius: 3px; font-size: 0.88em; }
+    pre { background: #1a1a2e; color: #e0e0e0; padding: 16px; overflow-x: auto; margin: 20px 0; border-radius: 6px; font-size: 0.88rem; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+    pre code { background: none; padding: 0; color: inherit; }
+    blockquote { border-left: 3px solid #ccc; padding: 10px 18px; color: #555; margin: 16px 0; font-style: italic; }
+
+    .pdf-images { margin: 24px 0; clear: both; }
+    .pdf-images figure { margin: 20px 0; text-align: center; break-inside: avoid; }
+    .pdf-images img { max-width: 100%; max-height: 500px; display: block; margin: 0 auto; }
+    .pdf-images figcaption { font-size: 0.8rem; color: #888; margin-top: 8px; font-style: italic; }
+
+    .meta-section { margin-top: 32px; padding-top: 20px; border-top: 1px solid #eee; }
+    .meta-section h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #999; margin-bottom: 8px; }
+    .meta-section ul { list-style: none; padding: 0; margin: 0; }
+    .meta-section li { font-size: 0.85rem; color: #666; padding: 4px 0; }
+
+    footer {
+      margin-top: 40px; padding-top: 16px; border-top: 1px solid #eee;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.75rem; color: #aaa;
+    }
+    footer .left { display: flex; align-items: center; gap: 6px; }
   </style>
 </head>
 <body>
   <div class="page-container">
     <header>
-      <div class="brand">${headerLogoHTML} Aartiq<span>AI</span></div>
-      <div style="font-size: 0.75rem; font-weight: 600; color: #16a34a; background: #f0fdf4; padding: 4px 12px; border-radius: 999px;">✨ Real-time Verified</div>
+      <div class="brand">${logoHTML} Aartiq Browser</div>
+      <div class="brand-date">${genDate}</div>
     </header>
-    ${(() => {
-      // Auto-generate TOC from bodyHTML
-      const h2Matches = bodyHTML.matchAll(/<h2[^>]*>(.*?)<\/h2>/g);
-      const tocItems = Array.from(h2Matches);
-      if (tocItems.length > 2) {
-        return `
-          <div class="toc-container" style="margin-bottom: 40px; padding: 24px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; break-inside: avoid;">
-            <h2 style="margin-top: 0; font-size: 1.2rem; margin-bottom: 16px;">📑 Table of Contents</h2>
-            <ul style="list-style: none; padding: 0;">
-              ${tocItems.map((match, i) => {
-                const text = match[1].replace(/<[^>]*>?/gm, '');
-                const id = `toc-${i}`;
-                return `<li style="margin-bottom: 8px;"><a href="#${id}" style="color: ${accent}; text-decoration: none; display: flex; justify-content: space-between;"><span>${text}</span> <span style="border-bottom: 1px dotted #cbd5e1; flex-grow: 1; margin: 0 8px; margin-bottom: 4px;"></span></a></li>`;
-              }).join('')}
-            </ul>
-          </div>
-        `;
-      }
-      return '';
-    })()}
-    ${isSlideShow 
-      ? slides.map((s: string, i: number) => `
-        <div class="slide ${i > 0 ? 'page-break' : ''}">
-          <div class="slide-number">Step ${i + 1} of ${slides.length}</div>
-          <div class="slide-content">${buildBodyFromMarkdown(s)}</div>
-          <div class="slide-decoration"></div>
-        </div>`).join('\n')
-      : `<h1>${escapeHtml(title)}</h1>${(() => {
-          // Re-inject IDs into bodyHTML for TOC links
-          let indexedBody = bodyHTML;
-          let i = 0;
-          indexedBody = indexedBody.replace(/<h2/g, () => `<h2 id="toc-${i++}"`);
-          return indexedBody;
-        })()}`
-    }
+    <h1>${escapeHtml(title)}</h1>
+    ${bodyHTML}
     ${imagesHTML}
+    ${sourcesHTML}
+    <div class="meta-section"><h3>AI Model</h3><p style="margin:0;font-size:0.85rem;color:#666;">${escapeHtml(aiModel)}</p></div>
+    <footer>
+      <div class="left">${logoHTML ? `<img src="${iconBase64}" style="width:14px;height:14px;object-fit:contain;" />` : ''} Generated by Aartiq Browser</div>
+      <span>${escapeHtml(title)}</span>
+    </footer>
   </div>
-  <div class="footer">
-    <div class="footer-brand">${footerLogoHTML} Aartiq</div>
-    <span>${escapeHtml(title)} • ${new Date().getFullYear()}</span>
-  </div>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // Initialize mermaid
-      if (typeof mermaid !== 'undefined') {
-        mermaid.initialize({ startOnLoad: false, theme: 'default' });
-        document.querySelectorAll('.mermaid').forEach(function(el) {
-          mermaid.run({ nodes: [el] }).catch(function(e) { console.error('Mermaid error:', e); });
-        });
-      }
-      // Initialize KaTeX
-      if (typeof renderMathInElement !== 'undefined') {
-        renderMathInElement(document.body, {
-          delimiters: [
-            {left: '$$', right: '$$', display: true},
-            {left: '$', right: '$', display: false},
-            {left: '\\[', right: '\\]', display: true},
-            {left: '\\(', right: '\\)', display: false}
-          ],
-          throwOnError: false,
-          trust: true
-        });
-      }
-      document.querySelectorAll('.math-block').forEach(function(el) {
-        const text = el.textContent || '';
-        if (typeof katex !== 'undefined') {
-          try { katex.render(text, el, { throwOnError: false, displayMode: true }); } catch(e) {}
-        }
-      });
-    });
-  </script>
 </body>
 </html>`;
 }
@@ -955,25 +835,16 @@ export function generateSmartPDF(
   content: string,
   iconBase64: string | null,
   images?: PDFImage[],
-  actionLogs?: PDFActionLog[],
-  ocrData?: PDFOCRData[]
+  meta?: { sources?: string[]; aiModel?: string }
 ): string {
-  let template = 'professional';
   let title = 'Document';
   let sanitizedContent = content;
-
-  const templateMatch = sanitizedContent.match(/\[TEMPLATE:([^\]]+)\]/i);
-  if (templateMatch) {
-    template = templateMatch[1].trim().toLowerCase();
-    sanitizedContent = sanitizedContent.replace(/\[TEMPLATE:[^\]]+\]/gi, '');
-  }
 
   const jsonMatch = sanitizedContent.match(/\{[\s\S]*?\}/);
   if (jsonMatch) {
     const robustResult = robustJSONParse(jsonMatch[0]);
     if (robustResult.success) {
       const parsed = robustResult.data;
-      if (parsed.template) template = parsed.template.toLowerCase();
       if (parsed.title) title = parsed.title;
       if (parsed.content && typeof parsed.content === 'string' && parsed.content.length > 0) {
         sanitizedContent = parsed.content;
@@ -985,16 +856,7 @@ export function generateSmartPDF(
     sanitizedContent = title;
   }
 
-  const templateStyles: Record<string, PDFStyles> = {
-    professional: { accentColor: '#0ea5e9', outlineColor: '#cbd5f5', background: '#ffffff' },
-    executive: { accentColor: '#8b5cf6', outlineColor: '#e0d7ff', background: '#f8f5ff' },
-    minimalist: { accentColor: '#475569', outlineColor: '#e2e8f0', background: '#ffffff' },
-    academic: { accentColor: '#0f172a', outlineColor: '#cbd5f5', background: '#f8fafc' },
-    dark: { accentColor: '#facc15', outlineColor: '#374151', background: '#030712' },
-  };
-
-  const styles = templateStyles[template] || templateStyles.professional;
-  return buildCleanPDFContent(sanitizedContent, title, iconBase64, images, styles);
+  return buildCleanPDFContent(sanitizedContent, title, iconBase64, images, meta);
 }
 
 export function buildCapabilityReportPDF(

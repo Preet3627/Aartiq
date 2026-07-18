@@ -1,14 +1,24 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  CheckCircle2, Circle, Loader2, AlertCircle, ChevronRight, ChevronDown, ChevronUp, Zap, Target, Search, Globe, 
-  FileText, Camera, ScanLine, MousePointer2, Volume2, Sun, Terminal, Rocket, Languages, 
-  Hourglass, Shield, Brain, Download, Code2, Database, Mail, Settings, Monitor,
-  Clock, AlertTriangle, Info
+import React, { useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+    AlertCircle,
+    CheckCircle2,
+    ChevronDown,
+    Code2,
+    FileText,
+    Globe,
+    Loader2,
+    MousePointer2,
+    PauseCircle,
+    Shield,
+    Sparkles,
+    Square,
+    Terminal,
+    X,
+    Zap,
 } from 'lucide-react';
-import { useAppVersion } from '@/lib/useAppVersion';
 
 export interface AICommand {
     id: string;
@@ -35,609 +45,375 @@ interface AICommandQueueProps {
     cancelImmediately?: () => void;
 }
 
-const getCategoryIcon = (type: string): React.ReactNode => {
-    const categoryIcons: Record<string, React.ReactNode> = {
-        navigation: <Globe size={14} />,
-        browser: <Monitor size={14} />,
-        system: <Settings size={14} />,
-        media: <Camera size={14} />,
-        automation: <MousePointer2 size={14} />,
-        utility: <Zap size={14} />,
-        gmail: <Mail size={14} />,
-        meta: <Brain size={14} />,
-        pdf: <Download size={14} />,
-        shell: <Terminal size={14} />,
-    };
-    return categoryIcons[type] || <Zap size={14} />;
+type CommandGroup = 'filesystem' | 'browser' | 'automation' | 'system' | 'document' | 'intelligence';
+
+const isDeveloperMode = process.env.NODE_ENV !== 'production';
+
+const commandGroup = (type: string): CommandGroup => {
+    if (type === 'SHELL_COMMAND' || type.includes('FILE') || type.includes('PDF')) return 'filesystem';
+    if (type.includes('SEARCH') || type.includes('NAVIGATE') || type.includes('READ') || type.includes('DOM')) return 'browser';
+    if (type.includes('CLICK') || type.includes('FORM') || type.includes('SCROLL')) return 'automation';
+    if (type.includes('VOLUME') || type.includes('BRIGHTNESS') || type.includes('APP') || type.includes('THEME')) return 'system';
+    if (type.includes('PDF') || type.includes('DIAGRAM') || type.includes('OCR') || type.includes('SCREENSHOT')) return 'document';
+    return 'intelligence';
 };
 
-const getCategoryColor = (type: string): string => {
-    const colors: Record<string, string> = {
-        navigation: 'text-blue-400',
-        browser: 'text-cyan-400',
-        system: 'text-purple-400',
-        media: 'text-violet-400',
-        automation: 'text-amber-400',
-        utility: 'text-green-400',
-        gmail: 'text-red-400',
-        meta: 'text-indigo-400',
-        pdf: 'text-orange-400',
-        shell: 'text-red-400',
-    };
-    return colors[type] || 'text-white/60';
+const groupLabel: Record<CommandGroup, string> = {
+    filesystem: 'Filesystem',
+    browser: 'Browser',
+    automation: 'Automation',
+    system: 'System',
+    document: 'Document',
+    intelligence: 'Intelligence',
 };
 
-const getCategoryBg = (type: string): string => {
-    const colors: Record<string, string> = {
-        navigation: 'bg-blue-500/20 border-blue-500/30',
-        browser: 'bg-cyan-500/20 border-cyan-500/30',
-        system: 'bg-purple-500/20 border-purple-500/30',
-        media: 'bg-violet-500/20 border-violet-500/30',
-        automation: 'bg-amber-500/20 border-amber-500/30',
-        utility: 'bg-green-500/20 border-green-500/30',
-        gmail: 'bg-red-500/20 border-red-500/30',
-        meta: 'bg-indigo-500/20 border-indigo-500/30',
-        pdf: 'bg-orange-500/20 border-orange-500/30',
-        shell: 'bg-red-500/20 border-red-500/30',
-    };
-    return colors[type] || 'bg-white/5 border-white/10';
+const groupIcon: Record<CommandGroup, React.ReactNode> = {
+    filesystem: <FileText size={14} />,
+    browser: <Globe size={14} />,
+    automation: <MousePointer2 size={14} />,
+    system: <Zap size={14} />,
+    document: <Code2 size={14} />,
+    intelligence: <Sparkles size={14} />,
 };
 
-const getRiskBadge = (risk?: string) => {
-    if (!risk || risk === 'low') return null;
-    const badges: Record<string, { color: string; label: string }> = {
-        medium: { color: 'bg-yellow-500/30 text-yellow-300 border-yellow-500/20', label: 'MEDIUM' },
-        high: { color: 'bg-orange-500/30 text-orange-300 border-orange-500/20', label: 'HIGH' },
-        critical: { color: 'bg-red-500/30 text-red-300 border-red-500/20', label: 'CRITICAL' },
-    };
-    const badge = badges[risk];
-    if (!badge) return null;
-    return (
-        <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border ${badge.color}`}>
-            {badge.label}
-        </span>
-    );
-};
-
-const getCommandIcon = (type: string) => {
-    switch (type) {
-        case 'NAVIGATE': return <Globe size={14} />;
-        case 'SEARCH': return <Search size={14} />;
-        case 'READ_PAGE_CONTENT': return <FileText size={14} />;
-        case 'SCREENSHOT_AND_ANALYZE': return <Camera size={14} />;
-        case 'OCR_SCREEN':
-        case 'OCR_COORDINATES': return <ScanLine size={14} />;
-        case 'FIND_AND_CLICK':
-        case 'CLICK_ELEMENT':
-        case 'CLICK_AT': return <MousePointer2 size={14} />;
-        case 'SET_VOLUME': return <Volume2 size={14} />;
-        case 'SET_BRIGHTNESS': return <Sun size={14} />;
-        case 'SHELL_COMMAND': return <Terminal size={14} />;
-        case 'OPEN_APP': return <Rocket size={14} />;
-        case 'TRANSLATE': return <Languages size={14} />;
-        case 'WEB_SEARCH': return <Globe size={14} />;
-        case 'EXPLAIN_CAPABILITIES': return <Zap size={14} />;
-        case 'WAIT': return <Hourglass size={14} />;
-        case 'THINK': return <Brain size={14} />;
-        case 'PLAN': return <Target size={14} />;
-        case 'GENERATE_PDF': return <Download size={14} />;
-        case 'DOM_SEARCH':
-        case 'DOM_READ_FILTERED': return <Database size={14} />;
-        case 'GMAIL_*':
-        case 'GMAIL_AUTHORIZE':
-        case 'GMAIL_LIST_MESSAGES':
-        case 'GMAIL_GET_MESSAGE':
-        case 'GMAIL_SEND_MESSAGE': return <Mail size={14} />;
-        case 'GENERATE_DIAGRAM': return <Code2 size={14} />;
-        default: return <Zap size={14} />;
-    }
-};
-
-const getCommandCategory = (type: string): string => {
-    const categories: Record<string, string> = {
-        NAVIGATE: 'navigation',
-        OPEN_VIEW: 'navigation',
-        GO_BACK: 'navigation',
-        GO_FORWARD: 'navigation',
-        RELOAD: 'browser',
-        SEARCH: 'browser',
-        WEB_SEARCH: 'browser',
-        READ_PAGE_CONTENT: 'browser',
-        LIST_OPEN_TABS: 'browser',
-        DOM_SEARCH: 'browser',
-        DOM_READ_FILTERED: 'browser',
-        EXTRACT_DATA: 'browser',
-        CLICK_ELEMENT: 'automation',
-        CLICK_AT: 'automation',
-        FIND_AND_CLICK: 'automation',
-        FILL_FORM: 'automation',
-        SCROLL_TO: 'automation',
-        SCREENSHOT_AND_ANALYZE: 'media',
-        OCR_SCREEN: 'media',
-        OCR_COORDINATES: 'media',
-        SHOW_IMAGE: 'media',
-        SHOW_VIDEO: 'media',
-        SHELL_COMMAND: 'shell',
-        SET_VOLUME: 'system',
-        SET_BRIGHTNESS: 'system',
-        SET_THEME: 'system',
-        OPEN_APP: 'system',
-        GENERATE_PDF: 'pdf',
-        OPEN_PDF: 'pdf',
-        GENERATE_DIAGRAM: 'utility',
-        WAIT: 'utility',
-        OPEN_MCP_SETTINGS: 'utility',
-        THINK: 'meta',
-        PLAN: 'meta',
-        EXPLAIN_CAPABILITIES: 'meta',
-        GMAIL_AUTHORIZE: 'gmail',
-        GMAIL_LIST_MESSAGES: 'gmail',
-        GMAIL_GET_MESSAGE: 'gmail',
-        GMAIL_SEND_MESSAGE: 'gmail',
-        GMAIL_ADD_LABEL: 'gmail',
-    };
-    return categories[type] || 'utility';
-};
-
-const getShellCommandLabel = (cmd: string): string => {
-    const lower = cmd.toLowerCase().trim();
-    if (/^\s*ls\b/.test(lower)) return 'Listing files';
-    if (/^\s*pwd\b/.test(lower)) return 'Getting current directory';
-    if (/^\s*find\b/.test(lower) && /-name/.test(lower)) return 'Searching for files';
-    if (/^\s*find\b/.test(lower) && /-size/.test(lower)) return 'Finding files by size';
-    if (/^\s*find\b/.test(lower) && /-type/.test(lower) && /md5|sha|hash/.test(lower)) return 'Computing file hashes';
-    if (/^\s*find\b/.test(lower)) return 'Scanning files';
-    if (/^\s*grep\b/.test(lower)) return 'Searching file contents';
-    if (/^\s*cat\b/.test(lower)) return 'Reading file';
-    if (/^\s*head\b/.test(lower) || /^\s*tail\b/.test(lower)) return 'Reading file contents';
-    if (/^\s*mkdir\b/.test(lower)) return 'Creating directory';
-    if (/^\s*mv\b/.test(lower)) return 'Moving files';
-    if (/^\s*cp\b/.test(lower)) return 'Copying files';
-    if (/^\s*rm\b/.test(lower)) return 'Deleting files';
-    if (/^\s*rmdir\b/.test(lower)) return 'Removing directory';
-    if (/^\s*chmod\b/.test(lower)) return 'Changing permissions';
-    if (/^\s*chown\b/.test(lower)) return 'Changing ownership';
-    if (/^\s*touch\b/.test(lower)) return 'Creating file';
-    if (/^\s*zip\b/.test(lower)) return 'Compressing files';
-    if (/^\s*unzip\b/.test(lower)) return 'Extracting archive';
-    if (/^\s*tar\b/.test(lower)) return 'Processing archive';
-    if (/^\s*curl\b/.test(lower) || /^\s*wget\b/.test(lower)) return 'Fetching URL';
-    if (/^\s*open\b/.test(lower)) return 'Opening file or URL';
-    if (/^\s*md5sum\b/.test(lower) || /^\s*shasum\b/.test(lower) || /\bmd5\b/.test(lower) || /\bsha256\b/.test(lower)) return 'Computing checksums';
-    if (/^\s*du\b/.test(lower)) return 'Checking disk usage';
-    if (/^\s*df\b/.test(lower)) return 'Checking disk space';
-    if (/^\s*ps\b/.test(lower)) return 'Listing processes';
-    if (/^\s*kill\b/.test(lower)) return 'Stopping process';
-    if (/^\s*git\b/.test(lower)) return 'Running git command';
-    if (/^\s*python\b/.test(lower) || /^\s*node\b/.test(lower)) return 'Running script';
-    if (/^\s*echo\b/.test(lower)) return 'Printing text';
-    if (/^\s*date\b/.test(lower)) return 'Getting date';
-    if (/^\s*whoami\b/.test(lower)) return 'Getting user info';
-    if (lower.includes('awk') || lower.includes('sed')) return 'Processing text';
-    if (lower.includes('sort')) return 'Sorting data';
-    if (lower.includes('wc')) return 'Counting lines';
-    if (lower.includes('xargs')) return 'Processing file list';
-    if (lower.includes('du') || lower.includes('sort') && lower.includes('-rn')) return 'Analyzing disk usage';
-    if (cmd.length > 40) return `Running command (${cmd.length} chars)`;
-    return 'Running command';
-};
-
-const getCommandLabel = (type: string, value: string) => {
-    const labels: Record<string, (v: string) => string> = {
-        NAVIGATE: (v) => `Navigate to ${v.startsWith('http') ? new URL(v).hostname : v}`,
-        SEARCH: (v) => `Search "${v}"`,
-        WEB_SEARCH: (v) => `Web Search: "${v}"`,
-        READ_PAGE_CONTENT: () => 'Read page content',
-        SCREENSHOT_AND_ANALYZE: () => 'Capture & analyze',
-        OCR_SCREEN: (v) => v ? `OCR region: ${v}` : 'OCR screen',
-        OCR_COORDINATES: (v) => `OCR: ${v}`,
-        FIND_AND_CLICK: (v) => `Find & click "${v.split('|')[0]}"`,
-        CLICK_ELEMENT: (v) => `Click: ${v.split('|')[0]}`,
-        CLICK_AT: (v) => `Click at: ${v}`,
-        SET_VOLUME: (v) => `Volume: ${v}%`,
-        SET_BRIGHTNESS: (v) => `Brightness: ${v}%`,
-        SHELL_COMMAND: (v) => getShellCommandLabel(v),
-        OPEN_APP: (v) => `Open: ${v}`,
-        TRANSLATE: (v) => `Translate: ${v}`,
-        GENERATE_PDF: (v) => `PDF: ${v.split('|')[0] || 'Document'}`,
-        EXPLAIN_CAPABILITIES: () => 'Capabilities',
-        WAIT: (v) => `Wait ${parseInt(v) / 1000}s`,
-        THINK: (v) => `Analyze: ${v.substring(0, 40)}...`,
-        PLAN: (v) => `Plan: ${v.substring(0, 40)}...`,
-        DOM_SEARCH: (v) => `DOM Search: ${v}`,
-        DOM_READ_FILTERED: (v) => v ? `DOM Read: ${v}` : 'DOM Read (full)',
-        RELOAD: () => 'Reload',
-        GO_BACK: () => 'Go back',
-        GO_FORWARD: () => 'Go forward',
-        FILL_FORM: (v) => `Fill: ${v.split('|')[0]}`,
-        SCROLL_TO: (v) => `Scroll: ${v}`,
-        SET_THEME: (v) => `Theme: ${v}`,
-        GENERATE_DIAGRAM: () => 'Diagram',
-        SHOW_IMAGE: (v) => `Image: ${v}`,
-        SHOW_VIDEO: (v) => `Video: ${v}`,
-        OPEN_PDF: (v) => `Open PDF: ${v}`,
-        OPEN_MCP_SETTINGS: () => 'MCP Settings',
-        OPEN_VIEW: (v) => `View: ${v}`,
-        LIST_OPEN_TABS: () => 'List tabs',
-        EXTRACT_DATA: (v) => `Extract: ${v}`,
-        GMAIL_AUTHORIZE: () => 'Gmail Auth',
-        GMAIL_LIST_MESSAGES: (v) => `Emails: ${v}`,
-        GMAIL_GET_MESSAGE: (v) => `Email: ${v.substring(0, 20)}...`,
-        GMAIL_SEND_MESSAGE: (v) => `Send: ${v.split('|')[0]}`,
-        GMAIL_ADD_LABEL: () => 'Label',
-    };
-    try {
-        return labels[type] ? labels[type](value) : `${type.replace(/_/g, ' ').toLowerCase()}`;
-    } catch {
-        return `${type.replace(/_/g, ' ').toLowerCase()}`;
-    }
-};
-
-function formatDuration(ms: number): string {
+const formatDuration = (ms: number): string => {
     if (ms < 1000) return `${ms}ms`;
     if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
     return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+};
+
+const elapsedForCommand = (command: AICommand): string | null => {
+    if (command.startTime && command.endTime) return formatDuration(command.endTime - command.startTime);
+    if (command.startTime && command.status === 'executing') return formatDuration(Date.now() - command.startTime);
+    return null;
+};
+
+const shellSummary = (command: string): string => {
+    const lower = command.toLowerCase().trim();
+    if (/find\b/.test(lower) && /(md5|sha|hash)/.test(lower)) return 'Calculating file hashes';
+    if (/find\b/.test(lower) && /(duplicate|uniq|sort)/.test(lower)) return 'Finding duplicate files';
+    if (/find\b/.test(lower)) return 'Scanning files';
+    if (/ls\b/.test(lower)) return 'Reading folder contents';
+    if (/du\b/.test(lower)) return 'Measuring disk usage';
+    if (/grep|rg\b/.test(lower)) return 'Searching file contents';
+    if (/mkdir\b/.test(lower)) return 'Creating folder';
+    if (/mv\b/.test(lower)) return 'Moving files';
+    if (/cp\b/.test(lower)) return 'Copying files';
+    if (/rm\b/.test(lower)) return 'Removing files';
+    if (/curl|wget/.test(lower)) return 'Fetching network data';
+    if (/python|node|osascript|powershell/.test(lower)) return 'Running script';
+    return 'Running command';
+};
+
+const commandLabel = (command: AICommand): string => {
+    const value = command.value || '';
+    switch (command.type) {
+        case 'SHELL_COMMAND':
+            return shellSummary(value);
+        case 'WEB_SEARCH':
+        case 'SEARCH':
+            return `Searching ${value.replace(/^["']|["']$/g, '').slice(0, 80)}`;
+        case 'NAVIGATE':
+            return `Opening ${value.slice(0, 80)}`;
+        case 'READ_PAGE_CONTENT':
+            return 'Reading current page';
+        case 'CLICK_ELEMENT':
+            return 'Clicking page element';
+        case 'CLICK_AT':
+            return 'Clicking screen point';
+        case 'FIND_AND_CLICK':
+            return `Finding ${value.split('|')[0].slice(0, 80)}`;
+        case 'FILL_FORM':
+            return 'Filling form field';
+        case 'SCROLL_TO':
+            return 'Scrolling page';
+        case 'OCR_SCREEN':
+        case 'OCR_COORDINATES':
+            return 'Reading screen text';
+        case 'SCREENSHOT_AND_ANALYZE':
+            return 'Analyzing screenshot';
+        case 'GENERATE_PDF':
+            return 'Creating PDF';
+        case 'WAIT':
+            return 'Waiting';
+        case 'THINK':
+        case 'PLAN':
+            return 'Planning actions';
+        default:
+            return command.type.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
+    }
+};
+
+const outputSummary = (command: AICommand): string | null => {
+    if (command.error) return command.error;
+    if (!command.output) return null;
+    const output = command.output.trim();
+    if (!output || output === 'completed') return 'Completed successfully';
+    if (command.type === 'SHELL_COMMAND') {
+        if (/no such file|not found|permission denied/i.test(output)) return output.split('\n')[0];
+        if (output.length === 0) return 'Completed with no output';
+        const lineCount = output.split('\n').filter(Boolean).length;
+        if (lineCount > 1) return `${lineCount} result lines`;
+    }
+    return output.length > 120 ? `${output.slice(0, 120)}...` : output;
+};
+
+function StatusMark({ status }: { status: AICommand['status'] }) {
+    if (status === 'completed') return <CheckCircle2 size={15} className="text-emerald-500" />;
+    if (status === 'failed') return <AlertCircle size={15} className="text-red-500" />;
+    if (status === 'awaiting_permission') return <Shield size={15} className="text-amber-500" />;
+    if (status === 'executing') return <Loader2 size={15} className="animate-spin text-[var(--accent)]" />;
+    return <span className="h-2 w-2 rounded-full bg-current text-secondary-text/40" />;
 }
 
-function CommandStepItem({ 
-    command, 
-    index, 
-    isActive, 
-    isPast, 
-    isExpanded, 
-    onToggleExpand 
-}: { 
-    command: AICommand; 
-    index: number; 
-    isActive: boolean; 
-    isPast: boolean; 
-    isExpanded: boolean; 
-    onToggleExpand: () => void;
-}) {
-    const category = command.category || getCommandCategory(command.type);
-    const categoryBg = getCategoryBg(category);
-    const categoryColor = getCategoryColor(category);
-    const duration = command.startTime && command.endTime 
-        ? command.endTime - command.startTime 
-        : command.startTime && command.status === 'executing' 
-            ? Date.now() - command.startTime 
-            : null;
-
+function Timeline({ commands, currentCommandIndex }: { commands: AICommand[]; currentCommandIndex: number }) {
     return (
-        <motion.div
-            layout
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className={`group rounded-2xl mb-1 transition-all duration-300 border overflow-hidden ${
-                isActive 
-                    ? categoryBg
-                    : isPast 
-                        ? 'bg-transparent border-transparent opacity-50' 
-                        : 'bg-transparent border-transparent opacity-70'
-            }`}
-        >
-            <div 
-                className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/[0.02] transition-colors"
-                onClick={onToggleExpand}
-            >
-                {/* Status Icon */}
-                <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-500 ${
-                    command.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                    command.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                    command.status === 'awaiting_permission' ? 'bg-amber-500/20 text-amber-400' :
-                    isActive ? 'bg-sky-500/20 text-sky-400' :
-                    'bg-white/5 text-white/30'
-                }`}>
-                    {command.status === 'completed' ? <CheckCircle2 size={13} /> :
-                     command.status === 'failed' ? <AlertCircle size={13} /> :
-                     command.status === 'awaiting_permission' ? <Shield size={13} /> :
-                     isActive ? <Loader2 size={13} className="animate-spin" /> :
-                     <Circle size={13} />}
-                </div>
-
-                {/* Category Icon */}
-                <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-500 ${categoryBg} ${categoryColor}`}>
-                    {getCategoryIcon(category)}
-                </div>
-
-                {/* Info Column */}
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                        <span className={`text-[11px] font-bold leading-tight truncate transition-colors ${isActive ? 'text-white' : isPast ? 'text-white/40' : 'text-white/60'}`}>
-                            {getCommandLabel(command.type, command.value)}
-                        </span>
-                        {getRiskBadge(command.riskLevel)}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                        {duration !== null && (
-                            <span className={`text-[8px] font-mono flex items-center gap-1 ${isActive ? 'text-white/40' : 'text-white/20'}`}>
-                                <Clock size={8} />
-                                {formatDuration(duration)}
-                            </span>
-                        )}
-                        {command.status === 'completed' && duration !== null && (
-                            <span className="text-[8px] font-mono text-green-400/60">
-                                ✓
-                            </span>
-                        )}
-                        {command.status === 'failed' && (
-                            <span className="text-[8px] font-mono text-red-400/60">
-                                ✗
-                            </span>
-                        )}
-                        {command.status === 'awaiting_permission' && (
-                            <span className="text-[8px] font-bold text-amber-400 uppercase tracking-wider">waiting for approval</span>
-                        )}
-                    </div>
-                </div>
-
-                {/* Expand/Collapse */}
-                {(command.output || command.error) && (
+        <div className="space-y-1.5" role="list" aria-label="Execution timeline">
+            {commands.map((command, index) => {
+                const isActive = index === currentCommandIndex && ['executing', 'awaiting_permission'].includes(command.status);
+                return (
                     <motion.div
-                        animate={{ rotate: isExpanded ? 180 : 0 }}
-                        className="flex-shrink-0 text-white/20"
+                        key={command.id}
+                        layout
+                        role="listitem"
+                        className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1"
                     >
-                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        <StatusMark status={command.status} />
+                        <span className={`min-w-0 flex-1 truncate text-[13px] ${isActive ? 'text-primary-text' : 'text-secondary-text'}`}>
+                            {commandLabel(command)}
+                        </span>
+                        {elapsedForCommand(command) && (
+                            <span className="shrink-0 text-[11px] text-secondary-text/70">{elapsedForCommand(command)}</span>
+                        )}
                     </motion.div>
-                )}
-            </div>
+                );
+            })}
+        </div>
+    );
+}
 
-            {/* Expandable Details */}
-            <AnimatePresence>
-                {isExpanded && (
+function CommandCard({ command, onToggle, isOpen }: { command: AICommand; onToggle: () => void; isOpen: boolean }) {
+    const group = commandGroup(command.type);
+    const summary = outputSummary(command);
+    return (
+        <div className="rounded-lg border border-[color-mix(in_srgb,var(--border-color)_45%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_82%,transparent)]">
+            <button
+                type="button"
+                onClick={onToggle}
+                className="flex w-full items-center gap-3 px-3 py-2 text-left"
+                aria-expanded={isOpen}
+            >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] text-secondary-text">
+                    {groupIcon[group]}
+                </span>
+                <span className="min-w-0 flex-1">
+                    <span className="block text-[12px] font-medium text-secondary-text">{groupLabel[group]}</span>
+                    <span className="block truncate text-[13px] text-primary-text">{commandLabel(command)}</span>
+                </span>
+                <span className="shrink-0"><StatusMark status={command.status} /></span>
+                {(command.output || command.error || isDeveloperMode) && (
+                    <ChevronDown size={15} className={`shrink-0 text-secondary-text transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                )}
+            </button>
+            <AnimatePresence initial={false}>
+                {isOpen && (
                     <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                     >
-                        <div className="px-4 pb-3 space-y-2">
-                            {/* Reason */}
+                        <div className="space-y-2 px-3 pb-3">
+                            {summary && (
+                                <div className="rounded-md bg-[color-mix(in_srgb,var(--primary-text)_5%,transparent)] px-3 py-2 text-[12px] leading-relaxed text-secondary-text">
+                                    {summary}
+                                </div>
+                            )}
                             {command.reason && (
-                                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
-                                    <Info size={10} className="text-sky-400 mt-0.5 flex-shrink-0" />
-                                    <span className="text-[9px] text-white/40 leading-relaxed">{command.reason}</span>
-                                </div>
-                            )}
-
-                            {/* Command Output */}
-                            {command.output && (
-                                <div className={`p-2.5 rounded-lg border font-mono text-[9px] leading-relaxed overflow-hidden ${
-                                    command.status === 'completed' 
-                                        ? 'bg-green-500/5 border-green-500/10 text-green-300/70' 
-                                        : 'bg-sky-500/5 border-sky-500/10 text-sky-300/70'
-                                }`}>
-                                    <div className="flex items-center gap-2 mb-1.5">
-                                        <span className="text-[8px] font-bold uppercase tracking-wider text-white/30">
-                                            {command.type === 'SHELL_COMMAND' ? 'Execution Details' : 'Output'}
-                                        </span>
-                                        <span className="text-[8px] text-white/15">
-                                            {command.output.length > 500 ? `${Math.round(command.output.length / 1000)}KB` : ''}
-                                        </span>
-                                    </div>
-                                    <pre className="whitespace-pre-wrap break-all max-h-24 overflow-y-auto modern-scrollbar">
-                                        {command.type === 'SHELL_COMMAND' 
-                                            ? (command.output.length > 200 
-                                                ? `${command.output.substring(0, 200)}\n...` 
-                                                : command.output)
-                                            : (command.output.length > 500 
-                                                ? `${command.output.substring(0, 500)}...` 
-                                                : command.output)}
-                                    </pre>
-                                </div>
-                            )}
-
-                            {/* Error */}
-                            {command.error && (
-                                <div className="p-2.5 rounded-lg bg-red-500/5 border border-red-500/10 flex items-start gap-2">
-                                    <AlertTriangle size={10} className="text-red-400 mt-0.5 flex-shrink-0" />
-                                    <span className="text-[9px] text-red-300/80 font-mono leading-relaxed">{command.error}</span>
-                                </div>
-                            )}
-
-                            {/* Active Progress Bar */}
-                            {isActive && command.status === 'executing' && (
-                                <div className="flex items-center gap-2">
-                                    <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
-                                        <motion.div 
-                                            className="h-full bg-sky-400"
-                                            initial={{ width: '0%' }}
-                                            animate={{ width: '100%' }}
-                                            transition={{ duration: 2, repeat: Infinity }}
-                                        />
-                                    </div>
-                                </div>
+                                <p className="text-[12px] leading-relaxed text-secondary-text">{command.reason}</p>
                             )}
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
-        </motion.div>
+        </div>
     );
 }
 
-export const AICommandQueue: React.FC<AICommandQueueProps> = ({
-    commands,
-    currentCommandIndex,
-    onCancel,
-    onStopCurrent,
-    cancelImmediately
-}) => {
-    const version = useAppVersion();
-    const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
-    const [viewMode, setViewMode] = useState<'visual' | 'json' | 'terminal'>('visual');
+function ExpandableTechnicalDetails({ commands }: { commands: AICommand[] }) {
+    const [open, setOpen] = useState(false);
+    if (!isDeveloperMode) return null;
 
-    if (commands.length === 0) return null;
+    return (
+        <div className="border-t border-[color-mix(in_srgb,var(--border-color)_45%,transparent)]">
+            <button
+                type="button"
+                onClick={() => setOpen((value) => !value)}
+                className="flex w-full items-center justify-between px-4 py-3 text-[12px] text-secondary-text hover:text-primary-text"
+                aria-expanded={open}
+            >
+                <span className="flex items-center gap-2"><Terminal size={13} /> Developer details</span>
+                <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            <AnimatePresence initial={false}>
+                {open && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="overflow-hidden"
+                    >
+                        <div className="max-h-72 space-y-3 overflow-y-auto px-4 pb-4 font-mono text-[11px] text-secondary-text">
+                            {commands.map((command) => (
+                                <div key={command.id} className="rounded-md bg-black/30 p-3">
+                                    <div className="mb-2 grid grid-cols-[80px_1fr] gap-2">
+                                        <span>Type</span><span>{command.type}</span>
+                                        <span>Status</span><span>{command.status}</span>
+                                        <span>Duration</span><span>{elapsedForCommand(command) || 'n/a'}</span>
+                                        <span>Command</span><span className="break-all">{command.value || 'n/a'}</span>
+                                    </div>
+                                    {(command.output || command.error) && (
+                                        <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-2">
+                                            {command.error || command.output}
+                                        </pre>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}
 
-    const completedCount = commands.filter(c => c.status === 'completed').length;
-    const failedCount = commands.filter(c => c.status === 'failed').length;
-    const totalCount = commands.length;
+function ResultCard({ commands }: { commands: AICommand[] }) {
+    const completed = commands.filter((command) => command.status === 'completed').length;
+    const failed = commands.filter((command) => command.status === 'failed').length;
+    if (completed === 0 && failed === 0) return null;
 
-    const toggleExpand = (idx: number) => {
-        setExpandedSteps(prev => {
-            const next = new Set(prev);
-            if (next.has(idx)) next.delete(idx);
-            else next.add(idx);
+    return (
+        <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-md bg-[color-mix(in_srgb,var(--primary-text)_5%,transparent)] px-3 py-2">
+                <div className="text-[11px] text-secondary-text">Completed</div>
+                <div className="text-sm font-semibold text-primary-text">{completed}</div>
+            </div>
+            <div className="rounded-md bg-[color-mix(in_srgb,var(--primary-text)_5%,transparent)] px-3 py-2">
+                <div className="text-[11px] text-secondary-text">Failed</div>
+                <div className="text-sm font-semibold text-primary-text">{failed}</div>
+            </div>
+            <div className="rounded-md bg-[color-mix(in_srgb,var(--primary-text)_5%,transparent)] px-3 py-2">
+                <div className="text-[11px] text-secondary-text">Total</div>
+                <div className="text-sm font-semibold text-primary-text">{commands.length}</div>
+            </div>
+        </div>
+    );
+}
+
+function ExecutionCard({ commands, currentCommandIndex, onStopCurrent, cancelImmediately, onCancel }: AICommandQueueProps) {
+    const [expandedCommands, setExpandedCommands] = useState<Set<string>>(new Set());
+    const completedCount = commands.filter((command) => command.status === 'completed').length;
+    const failedCount = commands.filter((command) => command.status === 'failed').length;
+    const awaitingPermission = commands.some((command) => command.status === 'awaiting_permission');
+    const running = commands.some((command) => command.status === 'executing' || command.status === 'awaiting_permission');
+    const progress = commands.length ? ((completedCount + failedCount) / commands.length) * 100 : 0;
+    const title = useMemo(() => {
+        const active = commands[currentCommandIndex] || commands[0];
+        if (!active) return 'Working';
+        return commandLabel(active);
+    }, [commands, currentCommandIndex]);
+
+    const toggleCommand = (id: string) => {
+        setExpandedCommands((previous) => {
+            const next = new Set(previous);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
             return next;
         });
     };
 
     return (
         <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.9 }}
+            initial={{ opacity: 0, y: 18, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.9 }}
-            className="absolute bottom-6 left-4 right-4 z-[100] bg-[#0a0a0f]/95 backdrop-blur-3xl border border-white/10 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden"
+            exit={{ opacity: 0, y: 18, scale: 0.98 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            className="absolute bottom-24 left-4 right-4 z-[100] overflow-hidden rounded-xl border border-[color-mix(in_srgb,var(--border-color)_55%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_94%,transparent)] shadow-[0_18px_50px_rgba(0,0,0,0.24)] backdrop-blur-2xl"
+            role="status"
+            aria-live="polite"
         >
-            {/* Header with Progress */}
-            <div className="px-5 py-4 bg-gradient-to-r from-sky-500/10 to-transparent border-b border-white/5">
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                        <div className="relative">
-                            <div className="w-2.5 h-2.5 bg-sky-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(56,189,248,0.8)]" />
-                            <motion.div 
-                                className="absolute inset-0 bg-sky-400/50 rounded-full"
-                                animate={{ scale: [1, 2], opacity: [0.5, 0] }}
-                                transition={{ duration: 1.5, repeat: Infinity }}
-                            />
+            <div className="p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="mb-1 flex items-center gap-2 text-[12px] text-secondary-text">
+                            {running ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                            <span>{awaitingPermission ? 'Waiting for approval' : running ? 'Executing' : 'Completed'}</span>
                         </div>
-                        <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-white">Action Chain</h3>
-                        <span className="text-[9px] text-white/30 font-mono">v{version}</span>
+                        <h3 className="truncate text-[14px] font-semibold text-primary-text">{title}</h3>
                     </div>
-                    <div className="flex items-center gap-2">
-                        {/* View Mode Tabs */}
-                        <div className="flex items-center bg-white/5 rounded-lg p-0.5 border border-white/5">
-                            {(['visual', 'json', 'terminal'] as const).map(mode => (
-                                <button
-                                    key={mode}
-                                    onClick={() => setViewMode(mode)}
-                                    className={`px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded transition-all ${
-                                        viewMode === mode ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white/50'
-                                    }`}
-                                >
-                                    {mode}
-                                </button>
-                            ))}
-                        </div>
-                        <div className="px-2 py-0.5 bg-white/5 rounded-full text-[9px] text-white/40 font-mono border border-white/5">
-                            {currentCommandIndex + 1} OF {totalCount}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="flex items-center gap-3">
-                    <div className="flex-1 h-1 bg-white/5 rounded-full overflow-hidden">
-                        <motion.div 
-                            className="h-full bg-gradient-to-r from-sky-500 to-cyan-400"
-                            animate={{ width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }}
-                            transition={{ duration: 0.5 }}
-                        />
-                    </div>
-                    <span className="text-[9px] font-mono text-white/30">
-                        {completedCount}/{totalCount}
-                        {failedCount > 0 && <span className="text-red-400 ml-1">{failedCount} failed</span>}
-                    </span>
-                </div>
-            </div>
-
-            {/* Content Area */}
-            <div className="max-h-72 overflow-y-auto modern-scrollbar p-1">
-                {viewMode === 'visual' && (
-                    <AnimatePresence mode="popLayout">
-                        {commands.map((command, index) => (
-                            <CommandStepItem
-                                key={command.id}
-                                command={command}
-                                index={index}
-                                isActive={index === currentCommandIndex}
-                                isPast={index < currentCommandIndex}
-                                isExpanded={expandedSteps.has(index)}
-                                onToggleExpand={() => toggleExpand(index)}
-                            />
-                        ))}
-                    </AnimatePresence>
-                )}
-
-                {viewMode === 'json' && (
-                    <div className="p-3">
-                        <pre className="text-[8px] text-white/50 font-mono overflow-x-auto max-h-64 overflow-y-auto modern-scrollbar bg-black/40 rounded-xl p-3 border border-white/5">
-                            {JSON.stringify(commands.map(cmd => ({
-                                type: cmd.type,
-                                value: cmd.value,
-                                status: cmd.status,
-                                category: cmd.category || getCommandCategory(cmd.type),
-                                riskLevel: cmd.riskLevel,
-                                reason: cmd.reason,
-                                duration: cmd.startTime && cmd.endTime ? `${cmd.endTime - cmd.startTime}ms` : null,
-                                output: cmd.output ? `${cmd.output.substring(0, 100)}...` : null,
-                            })), null, 2)}
-                        </pre>
-                    </div>
-                )}
-
-                {viewMode === 'terminal' && (
-                    <div className="p-3 space-y-1">
-                        {commands.filter(c => c.output || c.error).map((cmd, idx) => (
-                            <div key={idx} className="rounded-lg overflow-hidden border border-white/5">
-                                <div className="px-3 py-1.5 bg-white/[0.03] flex items-center gap-2">
-                                    <span className="text-[9px] font-mono text-white/40">$</span>
-                                    <span className="text-[9px] font-mono text-white/60 truncate">{cmd.value.length > 50 ? cmd.value.substring(0, 50) + '...' : cmd.value}</span>
-                                    {cmd.status === 'completed' && <CheckCircle2 size={10} className="text-green-400 ml-auto" />}
-                                    {cmd.status === 'failed' && <AlertCircle size={10} className="text-red-400 ml-auto" />}
-                                </div>
-                                {(cmd.output || cmd.error) && (
-                                    <div className="px-3 py-2 bg-black/40 text-[8px] font-mono text-white/40 max-h-16 overflow-y-auto modern-scrollbar">
-                                        {cmd.error || (cmd.output && cmd.output.length > 200 ? cmd.output.substring(0, 200) + '...' : cmd.output)}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                        {commands.filter(c => c.output || c.error).length === 0 && (
-                            <div className="text-center py-6 text-[10px] text-white/20">No output yet</div>
+                    <div className="flex shrink-0 items-center gap-1">
+                        {onStopCurrent && running && (
+                            <button
+                                type="button"
+                                onClick={onStopCurrent}
+                                className="rounded-md p-2 text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text"
+                                title="Stop after current step"
+                            >
+                                <PauseCircle size={15} />
+                            </button>
+                        )}
+                        {cancelImmediately && running && (
+                            <button
+                                type="button"
+                                onClick={cancelImmediately}
+                                className="rounded-md p-2 text-red-500 hover:bg-red-500/10"
+                                title="Cancel now"
+                            >
+                                <Square size={14} />
+                            </button>
+                        )}
+                        {onCancel && !onStopCurrent && (
+                            <button
+                                type="button"
+                                onClick={onCancel}
+                                className="rounded-md p-2 text-red-500 hover:bg-red-500/10"
+                                title="Cancel automation"
+                            >
+                                <X size={15} />
+                            </button>
                         )}
                     </div>
-                )}
-            </div>
+                </div>
 
-            {/* Footer */}
-            <div className="px-4 py-3 bg-gradient-to-t from-white/5 to-transparent border-t border-white/5 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    {completedCount > 0 && (
-                        <span className="text-[9px] font-bold text-green-400 flex items-center gap-1">
-                            <CheckCircle2 size={10} /> {completedCount} completed
-                        </span>
-                    )}
+                <div className="mb-4 h-1 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)]">
+                    <motion.div
+                        className="h-full rounded-full bg-[var(--accent)]"
+                        animate={{ width: `${Math.max(progress, running ? 8 : 0)}%` }}
+                        transition={{ duration: 0.35, ease: 'easeOut' }}
+                    />
                 </div>
-                <div className="flex items-center gap-2">
-                    {onStopCurrent && (
-                        <button
-                            onClick={onStopCurrent}
-                            className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all border border-amber-500/20 active:scale-95"
-                        >
-                            Stop After Current
-                        </button>
-                    )}
-                    {cancelImmediately && (
-                        <button
-                            onClick={cancelImmediately}
-                            className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all border border-red-500/20 active:scale-95"
-                        >
-                            Cancel Now
-                        </button>
-                    )}
-                    {onCancel && !onStopCurrent && (
-                        <button
-                            onClick={onCancel}
-                            className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all border border-red-500/20 active:scale-95"
-                        >
-                            Abort
-                        </button>
-                    )}
+
+                <div className="space-y-4">
+                    <Timeline commands={commands} currentCommandIndex={currentCommandIndex} />
+                    <ResultCard commands={commands} />
+                    <div className="space-y-2">
+                        {commands.map((command) => (
+                            <CommandCard
+                                key={command.id}
+                                command={command}
+                                isOpen={expandedCommands.has(command.id)}
+                                onToggle={() => toggleCommand(command.id)}
+                            />
+                        ))}
+                    </div>
                 </div>
             </div>
+            <ExpandableTechnicalDetails commands={commands} />
         </motion.div>
     );
+}
+
+export const AICommandQueue: React.FC<AICommandQueueProps> = (props) => {
+    if (props.commands.length === 0) return null;
+    return <ExecutionCard {...props} />;
 };

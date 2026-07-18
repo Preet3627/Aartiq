@@ -738,6 +738,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ragIngest: (text, source) => ipcRenderer.invoke('rag-ingest', { text, source }),
   ragRetrieve: (query, k) => ipcRenderer.invoke('rag-retrieve', { query, k }),
   ragContext: (query, k) => ipcRenderer.invoke('rag-context', { query, k }),
+  voiceTranscribe: (audioBase64, format) => ipcRenderer.invoke('voice-transcribe', { audioBase64, format }),
+  voiceMicPermission: () => ipcRenderer.invoke('voice-mic-permission'),
 
   // AI User Preferences (auto-learned)
   saveUserPreference: (key, value) => ipcRenderer.invoke('user-preference:save', { key, value }),
