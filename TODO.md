@@ -28,7 +28,7 @@
 
 - [x] Show execution plan before AI starts
 - [x] Display: estimated browser actions, shell commands, permission requests, time
-- [ ] Increases trust immediately
+- [x] Increases trust immediately
 
 ---
 
@@ -189,8 +189,8 @@
 
 ## 19. Better JSON View
 
-- [ ] Add tabs: Visual / JSON / Terminal
-- [ ] Developer-oriented output options
+- [x] Add tabs: Visual / JSON / Terminal
+- [x] Developer-oriented output options
 
 ---
 
@@ -234,8 +234,8 @@
 
 ## 23. Better Empty State
 
-- [ ] Show suggested actions instead of blank chat
-- [ ] Examples: Organize Downloads, Generate PDF, Research AI, Summarize page, Open VS Code, Find duplicates
+- [x] Show suggested actions instead of blank chat
+- [x] Examples: Organize Downloads, Generate PDF, Research AI, Summarize page, Open VS Code, Find duplicates
 
 ---
 
