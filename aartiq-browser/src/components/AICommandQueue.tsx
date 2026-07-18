@@ -179,6 +179,49 @@ const getCommandCategory = (type: string): string => {
     return categories[type] || 'utility';
 };
 
+const getShellCommandLabel = (cmd: string): string => {
+    const lower = cmd.toLowerCase().trim();
+    if (/^\s*ls\b/.test(lower)) return 'Listing files';
+    if (/^\s*pwd\b/.test(lower)) return 'Getting current directory';
+    if (/^\s*find\b/.test(lower) && /-name/.test(lower)) return 'Searching for files';
+    if (/^\s*find\b/.test(lower) && /-size/.test(lower)) return 'Finding files by size';
+    if (/^\s*find\b/.test(lower) && /-type/.test(lower) && /md5|sha|hash/.test(lower)) return 'Computing file hashes';
+    if (/^\s*find\b/.test(lower)) return 'Scanning files';
+    if (/^\s*grep\b/.test(lower)) return 'Searching file contents';
+    if (/^\s*cat\b/.test(lower)) return 'Reading file';
+    if (/^\s*head\b/.test(lower) || /^\s*tail\b/.test(lower)) return 'Reading file contents';
+    if (/^\s*mkdir\b/.test(lower)) return 'Creating directory';
+    if (/^\s*mv\b/.test(lower)) return 'Moving files';
+    if (/^\s*cp\b/.test(lower)) return 'Copying files';
+    if (/^\s*rm\b/.test(lower)) return 'Deleting files';
+    if (/^\s*rmdir\b/.test(lower)) return 'Removing directory';
+    if (/^\s*chmod\b/.test(lower)) return 'Changing permissions';
+    if (/^\s*chown\b/.test(lower)) return 'Changing ownership';
+    if (/^\s*touch\b/.test(lower)) return 'Creating file';
+    if (/^\s*zip\b/.test(lower)) return 'Compressing files';
+    if (/^\s*unzip\b/.test(lower)) return 'Extracting archive';
+    if (/^\s*tar\b/.test(lower)) return 'Processing archive';
+    if (/^\s*curl\b/.test(lower) || /^\s*wget\b/.test(lower)) return 'Fetching URL';
+    if (/^\s*open\b/.test(lower)) return 'Opening file or URL';
+    if (/^\s*md5sum\b/.test(lower) || /^\s*shasum\b/.test(lower) || /\bmd5\b/.test(lower) || /\bsha256\b/.test(lower)) return 'Computing checksums';
+    if (/^\s*du\b/.test(lower)) return 'Checking disk usage';
+    if (/^\s*df\b/.test(lower)) return 'Checking disk space';
+    if (/^\s*ps\b/.test(lower)) return 'Listing processes';
+    if (/^\s*kill\b/.test(lower)) return 'Stopping process';
+    if (/^\s*git\b/.test(lower)) return 'Running git command';
+    if (/^\s*python\b/.test(lower) || /^\s*node\b/.test(lower)) return 'Running script';
+    if (/^\s*echo\b/.test(lower)) return 'Printing text';
+    if (/^\s*date\b/.test(lower)) return 'Getting date';
+    if (/^\s*whoami\b/.test(lower)) return 'Getting user info';
+    if (lower.includes('awk') || lower.includes('sed')) return 'Processing text';
+    if (lower.includes('sort')) return 'Sorting data';
+    if (lower.includes('wc')) return 'Counting lines';
+    if (lower.includes('xargs')) return 'Processing file list';
+    if (lower.includes('du') || lower.includes('sort') && lower.includes('-rn')) return 'Analyzing disk usage';
+    if (cmd.length > 40) return `Running command (${cmd.length} chars)`;
+    return 'Running command';
+};
+
 const getCommandLabel = (type: string, value: string) => {
     const labels: Record<string, (v: string) => string> = {
         NAVIGATE: (v) => `Navigate to ${v.startsWith('http') ? new URL(v).hostname : v}`,
@@ -193,13 +236,13 @@ const getCommandLabel = (type: string, value: string) => {
         CLICK_AT: (v) => `Click at: ${v}`,
         SET_VOLUME: (v) => `Volume: ${v}%`,
         SET_BRIGHTNESS: (v) => `Brightness: ${v}%`,
-        SHELL_COMMAND: (v) => `Terminal: ${v.substring(0, 30)}${v.length > 30 ? '...' : ''}`,
+        SHELL_COMMAND: (v) => getShellCommandLabel(v),
         OPEN_APP: (v) => `Open: ${v}`,
         TRANSLATE: (v) => `Translate: ${v}`,
         GENERATE_PDF: (v) => `PDF: ${v.split('|')[0] || 'Document'}`,
         EXPLAIN_CAPABILITIES: () => 'Capabilities',
         WAIT: (v) => `Wait ${parseInt(v) / 1000}s`,
-        THINK: (v) => `Think: ${v.substring(0, 40)}...`,
+        THINK: (v) => `Analyze: ${v.substring(0, 40)}...`,
         PLAN: (v) => `Plan: ${v.substring(0, 40)}...`,
         DOM_SEARCH: (v) => `DOM Search: ${v}`,
         DOM_READ_FILTERED: (v) => v ? `DOM Read: ${v}` : 'DOM Read (full)',
@@ -224,9 +267,9 @@ const getCommandLabel = (type: string, value: string) => {
         GMAIL_ADD_LABEL: () => 'Label',
     };
     try {
-        return labels[type] ? labels[type](value) : `${type}: ${value}`;
+        return labels[type] ? labels[type](value) : `${type.replace(/_/g, ' ').toLowerCase()}`;
     } catch {
-        return `${type}: ${value}`;
+        return `${type.replace(/_/g, ' ').toLowerCase()}`;
     }
 };
 
@@ -307,13 +350,20 @@ function CommandStepItem({
                         {getRiskBadge(command.riskLevel)}
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${isActive ? 'bg-white/10 text-white/50' : 'bg-white/5 text-white/25'}`}>
-                            {command.type}
-                        </span>
                         {duration !== null && (
-                            <span className="text-[8px] font-mono text-white/30 flex items-center gap-1">
+                            <span className={`text-[8px] font-mono flex items-center gap-1 ${isActive ? 'text-white/40' : 'text-white/20'}`}>
                                 <Clock size={8} />
                                 {formatDuration(duration)}
+                            </span>
+                        )}
+                        {command.status === 'completed' && duration !== null && (
+                            <span className="text-[8px] font-mono text-green-400/60">
+                                ✓
+                            </span>
+                        )}
+                        {command.status === 'failed' && (
+                            <span className="text-[8px] font-mono text-red-400/60">
+                                ✗
                             </span>
                         )}
                         {command.status === 'awaiting_permission' && (
@@ -328,7 +378,7 @@ function CommandStepItem({
                         animate={{ rotate: isExpanded ? 180 : 0 }}
                         className="flex-shrink-0 text-white/20"
                     >
-                        <ChevronDown size={14} />
+                        {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                     </motion.div>
                 )}
             </div>
@@ -359,10 +409,22 @@ function CommandStepItem({
                                         ? 'bg-green-500/5 border-green-500/10 text-green-300/70' 
                                         : 'bg-sky-500/5 border-sky-500/10 text-sky-300/70'
                                 }`}>
+                                    <div className="flex items-center gap-2 mb-1.5">
+                                        <span className="text-[8px] font-bold uppercase tracking-wider text-white/30">
+                                            {command.type === 'SHELL_COMMAND' ? 'Execution Details' : 'Output'}
+                                        </span>
+                                        <span className="text-[8px] text-white/15">
+                                            {command.output.length > 500 ? `${Math.round(command.output.length / 1000)}KB` : ''}
+                                        </span>
+                                    </div>
                                     <pre className="whitespace-pre-wrap break-all max-h-24 overflow-y-auto modern-scrollbar">
-                                        {command.output.length > 500 
-                                            ? `${command.output.substring(0, 500)}...` 
-                                            : command.output}
+                                        {command.type === 'SHELL_COMMAND' 
+                                            ? (command.output.length > 200 
+                                                ? `${command.output.substring(0, 200)}\n...` 
+                                                : command.output)
+                                            : (command.output.length > 500 
+                                                ? `${command.output.substring(0, 500)}...` 
+                                                : command.output)}
                                     </pre>
                                 </div>
                             )}
@@ -522,19 +584,19 @@ export const AICommandQueue: React.FC<AICommandQueueProps> = ({
                             <div key={idx} className="rounded-lg overflow-hidden border border-white/5">
                                 <div className="px-3 py-1.5 bg-white/[0.03] flex items-center gap-2">
                                     <span className="text-[9px] font-mono text-white/40">$</span>
-                                    <span className="text-[9px] font-mono text-white/60 truncate">{cmd.value}</span>
+                                    <span className="text-[9px] font-mono text-white/60 truncate">{cmd.value.length > 50 ? cmd.value.substring(0, 50) + '...' : cmd.value}</span>
                                     {cmd.status === 'completed' && <CheckCircle2 size={10} className="text-green-400 ml-auto" />}
                                     {cmd.status === 'failed' && <AlertCircle size={10} className="text-red-400 ml-auto" />}
                                 </div>
                                 {(cmd.output || cmd.error) && (
                                     <div className="px-3 py-2 bg-black/40 text-[8px] font-mono text-white/40 max-h-16 overflow-y-auto modern-scrollbar">
-                                        {cmd.error || cmd.output}
+                                        {cmd.error || (cmd.output && cmd.output.length > 200 ? cmd.output.substring(0, 200) + '...' : cmd.output)}
                                     </div>
                                 )}
                             </div>
                         ))}
                         {commands.filter(c => c.output || c.error).length === 0 && (
-                            <div className="text-center py-6 text-[10px] text-white/20">No command output yet</div>
+                            <div className="text-center py-6 text-[10px] text-white/20">No output yet</div>
                         )}
                     </div>
                 )}

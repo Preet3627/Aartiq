@@ -3368,6 +3368,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           const pdfTemplate = cmdParams.template || 'auto';
           const shouldScreenshot = /yes|true/i.test(cmdParams.screenshot || '');
           const shouldIncludeAttachments = (cmdParams.attachments || '').toLowerCase() !== 'no';
+          let contentParts: string[] = [];
 
           // ── Pipe-delimited fallback path (legacy text commands) ──────────
           if (!pdfTitle && !pdfContent) {
@@ -3382,7 +3383,6 @@ I couldn't schedule the task. The background service may not be running. Please 
             // Parse extended options from pipe-separated fields
             const allParts = rawValue.split('|').map((p: string) => p.trim()).filter(p => p.length > 0);
             const options: Record<string, string> = {};
-            const contentParts: string[] = [];
 
             for (const part of allParts) {
               if (!part || part === ']:' || part === ':') continue;
@@ -5335,14 +5335,14 @@ I've successfully executed the following real tasks:
                     <span className={log.success ? 'text-green-400/70' : 'text-red-400/70'}>
                       {log.success ? '✓' : '✗'}
                     </span>
-                    <span className="text-sky-300/80">{log.command}</span>
+                    <span className="text-white/60">{log.command.length > 40 ? log.command.substring(0, 40) + '...' : log.command}</span>
                     <span className={`ml-auto text-[9px] font-bold uppercase tracking-wider ${log.success ? 'text-green-400/50' : 'text-red-400/50'}`}>
-                      {log.success ? 'Success' : 'Failed'}
+                      {log.success ? 'Done' : 'Failed'}
                     </span>
                   </div>
-                  {log.output && (
-                    <pre className={`ml-5 whitespace-pre-wrap break-all leading-relaxed text-[10px] ${log.success ? 'text-white/40' : 'text-red-400/60'}`}>
-                      {log.output.length > 200 ? log.output.substring(0, 200) + '...' : log.output}
+                  {log.output && log.output !== '⏳ Running...' && (
+                    <pre className={`ml-5 whitespace-pre-wrap break-all leading-relaxed text-[9px] ${log.success ? 'text-white/30' : 'text-red-400/50'}`}>
+                      {log.output.length > 100 ? log.output.substring(0, 100) + '...' : log.output}
                     </pre>
                   )}
                 </div>
