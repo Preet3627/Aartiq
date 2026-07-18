@@ -233,7 +233,7 @@ Supported command types with their JSON parameters:
 **ENABLE_CLI** — (no params)
 **SWITCH_TAB** — { id: string } — Switch to a tab by ID or number. Omit id to stay on current tab.
 **LIST_OPEN_TABS** — (no params) — List all open tabs with IDs and URLs.
-**SEARCH_RESULTS** — { query: string, count?: number } — Get search result URLs directly (no tab opened).
+**SEARCH_RESULTS** — { query: string, count?: number } — Search, auto-navigate to top results, read full page content, and return everything.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORM AUTOMATION — REQUIRED RULES

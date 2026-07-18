@@ -1423,12 +1423,21 @@ I couldn't schedule the task. The background service may not be running. Please 
           value: c.value,
           context: responseText,
           status: 'pending',
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          startTime: undefined,
+          endTime: undefined,
         }));
         console.log('[AI] Command queue:', aiCommands.map(c => c.type));
         commandQueueRef.current = aiCommands;
         setCommandQueue(aiCommands);
         setCurrentCommandIndex(0);
+        setAgentState('executing');
+        setPlanningSteps(commands.map((c, i) => ({
+          id: `plan-${i}`,
+          label: c.type.replace(/_/g, ' ').toLowerCase(),
+          icon: '⚡',
+          risk: (c.risk as 'low' | 'medium' | 'high') || 'low',
+        })));
 
         const finalCommandResult = await waitForCommandQueueCompletion(120000);
 
@@ -1550,7 +1559,7 @@ I couldn't schedule the task. The background service may not be running. Please 
     const command = commandQueue[currentCommandIndex];
     const COMMAND_TIMEOUT = 10000;
 
-    setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing' } : cmd));
+    setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing', startTime: Date.now() } : cmd));
 
     let commandResult: { output: string; error?: string } = { output: '' };
 
@@ -1992,43 +2001,62 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
-        // ✅ SEARCH_RESULTS — returns structured search result URLs directly, no tab opened
+        // ✅ SEARCH_RESULTS — search + auto-navigate + read pages, return full content to LLM
         // JSON: {"type": "SEARCH_RESULTS", "query": "latest AI news", "count": 5}
         case 'SEARCH_RESULTS': {
           const srQuery = getCmdParam(command as any, 'query') || cleanCmdValue(command as any) || command.value.trim();
-          const srCount = getCmdParamInt(command as any, 'count') || 8;
+          const srCount = getCmdParamInt(command as any, 'count') || 5;
 
           if (!srQuery) {
             output = 'SEARCH_RESULTS requires a query parameter.';
             break;
           }
 
-          const srStepId = addThinkingStep(`Searching for "${srQuery}"...`);
+          const srStepId = addThinkingStep(`Searching & reading pages for "${srQuery}"...`);
           try {
-            // Try MCP search first, fall back to webSearchRag
-            let srResults: Array<{ title: string; url: string; snippet: string }> = [];
+            // MCP search already navigates to pages and reads full content
+            let srResults: Array<{ title: string; url: string; snippet: string; content: string }> = [];
             try {
               const mcpRes = await (window.electronAPI as any).aiWebSearch(srQuery, 'duckduckgo', Math.min(srCount, 5));
               if (mcpRes?.results?.length > 0) {
-                srResults = mcpRes.results.map((r: any) => ({ title: r.title, url: r.url, snippet: r.snippet }));
+                srResults = mcpRes.results.map((r: any) => ({
+                  title: r.title,
+                  url: r.url,
+                  snippet: r.snippet,
+                  content: r.content || '',
+                }));
               }
             } catch { /* fall through */ }
+
+            // Fallback to webSearchRag
             if (srResults.length === 0) {
               const ragRes = await window.electronAPI.webSearchRag(srQuery);
-              srResults = normalizeSearchResults(ragRes as any[]).slice(0, srCount).map(r => ({ title: r.title, url: r.url, snippet: r.snippet }));
+              srResults = normalizeSearchResults(ragRes as any[]).slice(0, srCount).map(r => ({
+                title: r.title,
+                url: r.url,
+                snippet: r.snippet,
+                content: (r as any).pageContent || '',
+              }));
             }
 
             if (srResults.length === 0) {
               output = `No search results found for "${srQuery}".`;
             } else {
-              const resultLines = srResults.map((r, i) => `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}`);
-              output = `🔍 Search Results for "${srQuery}" (${srResults.length}):\n\n${resultLines.join('\n\n')}`;
+              // Build full content output for the LLM
+              const fullContent = srResults.map((r, i) =>
+                `--- Result ${i + 1}: ${r.title} ---\nURL: ${r.url}\nSnippet: ${r.snippet}\n\nFull Content:\n${r.content || '(no content read)'}`
+              ).join('\n\n');
+
+              output = `🔍 Search Results for "${srQuery}" (${srResults.length} pages read):\n\n${fullContent}`;
+
+              // Store in context
               await BrowserAI.addToVectorMemory(
-                `[SEARCH_RESULTS: ${srQuery}]\n${srResults.map(r => `${r.title}: ${r.url}`).join('\n')}`,
+                `[SEARCH_RESULTS: ${srQuery}]\n${srResults.map(r => `${r.title}: ${r.url}\n${r.content.substring(0, 1000)}`).join('\n\n')}`,
                 { type: 'search_results', query: srQuery, url: currentUrl }
               );
+              searchContextStore.addWebSearch(srQuery, fullContent);
             }
-            resolveThinkingStep(srStepId, 'done', `${srResults.length} results`);
+            resolveThinkingStep(srStepId, 'done', `${srResults.length} results with page content`);
           } catch (e: any) {
             output = `Search failed: ${e.message}`;
             resolveThinkingStep(srStepId, 'error', e.message);
@@ -2637,9 +2665,9 @@ I couldn't schedule the task. The background service may not be running. Please 
               ));
 
               if (res2.success) {
-                setCommandQueue(prev => prev.map((c, i) => i === cmdIdx ? { ...c, status: 'completed', output: cmdOutput2 } : c));
+                setCommandQueue(prev => prev.map((c, i) => i === cmdIdx ? { ...c, status: 'completed', output: cmdOutput2, endTime: Date.now() } : c));
               } else {
-                setCommandQueue(prev => prev.map((c, i) => i === cmdIdx ? { ...c, status: 'failed', error: cmdOutput2 } : c));
+                setCommandQueue(prev => prev.map((c, i) => i === cmdIdx ? { ...c, status: 'failed', error: cmdOutput2, endTime: Date.now() } : c));
               }
 
               outputs.push(res2.success
@@ -4356,9 +4384,9 @@ I've successfully executed the following real tasks:
       if (!processingBatchRef.current) {
         if (commandResult.error) {
           output = commandResult.error;
-          setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'failed', error: output } : cmd));
+          setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'failed', error: output, endTime: Date.now() } : cmd));
         } else {
-          setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'completed', output } : cmd));
+          setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'completed', output, endTime: Date.now() } : cmd));
         }
       }
       processingBatchRef.current = false;
@@ -4378,7 +4406,7 @@ I've successfully executed the following real tasks:
       });
     } catch (err: any) {
       const errorOutput = err.message;
-      setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'failed', error: err.message } : cmd));
+      setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'failed', error: err.message, endTime: Date.now() } : cmd));
     } finally {
       processingQueueRef.current = false;
       const skip = skipBatchRef.current;
@@ -5232,10 +5260,19 @@ I've successfully executed the following real tasks:
               {terminalLogs.map(log => (
                 <div key={log.id} className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-green-400/70">❯</span>
+                    <span className={log.success ? 'text-green-400/70' : 'text-red-400/70'}>
+                      {log.success ? '✓' : '✗'}
+                    </span>
                     <span className="text-sky-300/80">{log.command}</span>
+                    <span className={`ml-auto text-[9px] font-bold uppercase tracking-wider ${log.success ? 'text-green-400/50' : 'text-red-400/50'}`}>
+                      {log.success ? 'Success' : 'Failed'}
+                    </span>
                   </div>
-                  <pre className={`ml-4 whitespace-pre-wrap break-all leading-relaxed ${log.success ? 'text-white/60' : 'text-red-400/80'}`}>{log.output}</pre>
+                  {log.output && (
+                    <pre className={`ml-5 whitespace-pre-wrap break-all leading-relaxed text-[10px] ${log.success ? 'text-white/40' : 'text-red-400/60'}`}>
+                      {log.output.length > 200 ? log.output.substring(0, 200) + '...' : log.output}
+                    </pre>
+                  )}
                 </div>
               ))}
               <div ref={terminalEndRef} />
@@ -5362,13 +5399,35 @@ I've successfully executed the following real tasks:
       <div className={`flex-1 overflow-y-auto modern-scrollbar transition-[padding] duration-500 backdrop-blur-sm p-5 space-y-8`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 92%, transparent), color-mix(in srgb, var(--primary-bg) 98%, transparent))' }}>
         <AnimatePresence mode="popLayout">
           {messages.length === 0 && (
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center py-16 text-center space-y-6">
               <div className="w-16 h-16 rounded-[2rem] flex items-center justify-center border shadow-2xl" style={softPanelStyle}>
                 <Brain size={32} className="text-secondary-text" />
               </div>
               <div>
                 <h3 className="text-sm font-black text-secondary-text uppercase tracking-widest">How can I assist your workflow?</h3>
                 <p className="text-[10px] text-secondary-text uppercase tracking-tighter mt-1 font-bold">I can navigate, browse, and execute tasks across Aartiq.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 max-w-xs">
+                {[
+                  { label: 'Organize Downloads', icon: '📁', cmd: 'Organize my Downloads folder' },
+                  { label: 'Generate PDF', icon: '📄', cmd: 'Generate a PDF report' },
+                  { label: 'Research AI', icon: '🔍', cmd: 'Research latest AI news' },
+                  { label: 'Summarize Page', icon: '📖', cmd: 'Summarize the current page' },
+                  { label: 'Open VS Code', icon: '💻', cmd: 'Open VS Code' },
+                  { label: 'Find Duplicates', icon: '🔎', cmd: 'Find duplicate files in Downloads' },
+                ].map((suggestion, i) => (
+                  <motion.button
+                    key={i}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => { setInputMessage(suggestion.cmd); }}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/5 hover:border-white/10 transition-all text-left group"
+                  >
+                    <span className="text-sm">{suggestion.icon}</span>
+                    <span className="text-[10px] font-bold text-secondary-text group-hover:text-primary-text transition-colors">{suggestion.label}</span>
+                  </motion.button>
+                ))}
               </div>
             </motion.div>
           )}
@@ -5674,7 +5733,15 @@ I've successfully executed the following real tasks:
                 <span className="w-2 h-2 rounded-full bg-indigo-400/60 animate-pulse" />
                 <span className="w-2 h-2 rounded-full bg-indigo-400/40 animate-pulse" />
               </div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">Aartiq is thinking</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300">
+                {agentState === 'planning' ? 'Planning your request...' :
+                 agentState === 'searching' ? 'Searching...' :
+                 agentState === 'thinking' ? 'Thinking...' :
+                 agentState === 'executing' ? 'Executing commands...' :
+                 agentState === 'waiting' ? 'Waiting for approval...' :
+                 agentState === 'finished' ? 'Task complete' :
+                 'Processing...'}
+              </span>
             </div>
           )}
         </AnimatePresence>
