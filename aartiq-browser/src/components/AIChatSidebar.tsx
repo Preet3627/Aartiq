@@ -44,6 +44,7 @@ import AISetupGuide from './ai/AISetupGuide';
 import ThinkingIndicator, { type ThemePreset } from './ThinkingIndicator';
 import LLMProviderSettings from './LLMProviderSettings';
 import { AICommandQueue, type AICommand } from './AICommandQueue';
+import { type AgentState, type PlanningStep } from './AIChatSidebar/types';
 import CapabilitiesPanel from './CapabilitiesPanel';
 import DOMSearchDisplay, { DOMMetaDisplay } from './ai/DOMSearchDisplay';
 import { secureDOMReader, type DOMSearchResult, type FilteredDOMResult, type DOMElement } from './ai/SecureDOMReader';
@@ -65,8 +66,7 @@ import {
   type PDFImage, type PDFActionLog, type PDFOCRData, generateSmartPDF, PDF_ICONS, getIcon
 } from './ai/AIUtils';
 import {
-  AARTIQ_CAPABILITIES, SYSTEM_INSTRUCTIONS, SYSTEM_CORE, COMMAND_REFERENCE, LANGUAGE_MAP, INTERNAL_TAG_RE,
-  queryRequiresSearch
+  AARTIQ_CAPABILITIES, SYSTEM_INSTRUCTIONS, SYSTEM_CORE, COMMAND_REFERENCE, LANGUAGE_MAP, INTERNAL_TAG_RE
 } from './ai/AIConstants';
 import { useAppStore } from '@/store/useAppStore';
 import { BrowserAI } from '@/lib/BrowserAI';
@@ -388,6 +388,10 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
   const [thinkingText, setThinkingText] = useState<string>('');
   const [isThinking, setIsThinking] = useState(false);
+
+  // Agent State
+  const [agentState, setAgentState] = useState<AgentState>('idle');
+  const [planningSteps, setPlanningSteps] = useState<PlanningStep[]>([]);
   const [lastSidebarInteractionAt, setLastSidebarInteractionAt] = useState<number>(Date.now());
   const thinkingIdCounter = useRef(0);
 
@@ -1054,6 +1058,7 @@ I couldn't schedule the task. The background service may not be running. Please 
     setThinkingSteps([]);
     setThinkingText('');
     setError(null);
+    setAgentState('thinking');
 
     // Security Checks
     const threatCheck = checkThreat(rawContent);
@@ -1158,26 +1163,16 @@ I couldn't schedule the task. The background service may not be running. Please 
     try {
       if (!window.electronAPI) throw new Error('AI Engine disconnected.');
 
-      // ✅ PARALLEL: Run RAG, Live Search, and Browser State in parallel for speed
-      const [ragId, preflightId, browserId] = [
+      // ✅ PARALLEL: Run RAG and Browser State — NO auto web search.
+      // The AI decides when to search by emitting [WEB_SEARCH: query] commands.
+      const [ragId, browserId] = [
         addThinkingStep('Neural Retrieval...'),
-        addThinkingStep('🔍 Fetching live data...'),
         addThinkingStep('📊 Getting browser state...')
       ];
 
-      // Run all in parallel
-      const [contextItems, liveSearchResult, browserStateResult] = await Promise.all([
+      // Run in parallel
+      const [contextItems, browserStateResult] = await Promise.all([
         BrowserAI.retrieveContext(protectedContent).catch(() => []),
-        queryRequiresSearch(protectedContent) ? (async () => {
-          try {
-            const topic = protectedContent
-              .replace(/\b(create|make|generate|write|give me|show me|tell me|what are|what is|latest|find|search|get)\b/gi, '')
-              .replace(/\b(pdf|report|document|page|today|news|please|can you|could you)\b/gi, '')
-              .trim()
-              .slice(0, 80) || 'technology news';
-            return await fetchRealSearchContext(topic);
-          } catch { return ''; }
-        })() : Promise.resolve(''),
         (async () => {
           try {
             const tabs: any[] = await window.electronAPI.getOpenTabs();
@@ -1190,15 +1185,12 @@ I couldn't schedule the task. The background service may not be running. Please 
         })()
       ]);
 
-      const liveSearchContext = liveSearchResult;
       const browserStateContext = browserStateResult;
 
       // Update thinking steps
       setRagContextItems(contextItems);
       if (contextItems.length > 0) setShowRagPanel(true);
       resolveThinkingStep(ragId, 'done', `${contextItems.length} memories recovered`);
-      if (liveSearchContext) resolveThinkingStep(preflightId, 'done', `Live data fetched (${liveSearchContext.length} chars)`);
-      else resolveThinkingStep(preflightId, 'skipped', 'No live search needed');
       if (browserStateContext) resolveThinkingStep(browserId, 'done', `${browserStateContext.split('\n').length} lines`);
       else resolveThinkingStep(browserId, 'skipped', 'No browser state');
 
@@ -1213,9 +1205,6 @@ I couldn't schedule the task. The background service may not be running. Please 
         browserStateContext,
         contextItems.length > 0
           ? `[RAG MEMORY]\n${contextItems.map(c => c.text).join('\n')}`
-          : '',
-        liveSearchContext
-          ? `[SEARCH RESULTS — Use these for current facts]\n${liveSearchContext}`
           : '',
       ].filter(Boolean).join('\n\n');
 
