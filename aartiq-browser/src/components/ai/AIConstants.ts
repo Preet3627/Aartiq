@@ -133,6 +133,8 @@ DECISION ENGINE — EXECUTE SMARTLY
 2. CONTEXT-AVAILABLE TASK (data in cache/memory) → use existing data
 3. INFORMATIONAL TASK (needs facts/news) → use WEB_SEARCH
 
+CRITICAL: Opening apps (VS Code, Firefox, Chrome, Terminal, etc.) → ALWAYS use [OPEN_APP: name]. NEVER use SHELL_COMMAND for launching apps. The OPEN_APP command resolves app names automatically.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CHAINED EXECUTION — CRITICAL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -212,7 +214,7 @@ Supported command types with their JSON parameters:
 **CREATE_FILE_JSON** — { value: json_string }
 **SET_VOLUME** — { value: percentage }
 **SET_BRIGHTNESS** — { value: percentage }
-**OPEN_APP** — { value: app_name }
+**OPEN_APP** — { value: app_name } ← ALWAYS use this for opening apps. Maps CLI names to proper names automatically (e.g., "code" → "Visual Studio Code", "firefox" → "Firefox", "chrome" → "Google Chrome", "cursor" → "Cursor"). Never use SHELL_COMMAND for app launching.
 **SET_THEME** — { value: dark|light|system }
 **OPEN_VIEW** — { value: browser|workspace|pdf|media|coding }
 **RELOAD** | **GO_BACK** | **GO_FORWARD** — (no params)

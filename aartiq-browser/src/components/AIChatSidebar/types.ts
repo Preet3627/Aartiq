@@ -64,6 +64,16 @@ export type ExtendedChatMessage = ChatMessage & {
 
 export type VisualStage = 'idle' | 'fetching' | 'capturing';
 
+export type AgentState = 'idle' | 'planning' | 'searching' | 'thinking' | 'waiting' | 'executing' | 'finished' | 'paused';
+
+export interface PlanningStep {
+  id: string;
+  label: string;
+  icon: string;
+  risk: 'low' | 'medium' | 'high';
+  estimatedTime?: number;
+}
+
 export interface Attachment {
   type: 'image' | 'pdf';
   data: string;

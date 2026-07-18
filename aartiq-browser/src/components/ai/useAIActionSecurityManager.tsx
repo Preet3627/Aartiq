@@ -19,6 +19,8 @@ interface PermissionContext {
   risk: ActionRiskLevel;
   highRiskQr?: string | null;
   requiresDeviceUnlock?: boolean;
+  affectedPaths?: string[];
+  estimatedImpact?: string;
 }
 
 interface BatchCommandInfo {

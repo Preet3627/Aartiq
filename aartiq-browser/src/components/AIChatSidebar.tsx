@@ -511,6 +511,15 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     approvalModal,
   } = useAIActionSecurityManager();
 
+  // Update agent state when permission is pending
+  useEffect(() => {
+    if (permissionPending) {
+      setAgentState('waiting');
+    } else if (agentState === 'waiting') {
+      setAgentState('executing');
+    }
+  }, [permissionPending]);
+
   const markSidebarInteraction = useCallback(() => {
     setLastSidebarInteractionAt(Date.now());
   }, []);
@@ -1545,6 +1554,8 @@ I couldn't schedule the task. The background service may not be running. Please 
     } finally {
       setIsLoading(false);
       setIsThinking(false);
+      setAgentState('finished');
+      setTimeout(() => setAgentState('idle'), 2000);
     }
   }, [inputMessage, attachments, messages, aiProvider, currentUrl, addThinkingStep, resolveThinkingStep, getStreamingResponse, isAiSetup, fetchRealSearchContext, buildActionChainClarification, waitForCommandQueueCompletion, createMessageId]);
 
@@ -2612,6 +2623,41 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
 
         case 'SHELL_COMMAND': {
+          // Smart redirect: detect app launch attempts and use OPEN_APP instead
+          const shellCmd = command.value.trim();
+          const appLaunchMatch = shellCmd.match(/^(?:open\s+-a\s+)?([a-zA-Z0-9\-\s]+?)(?:\s+|$)/i);
+          if (appLaunchMatch) {
+            const potentialApp = appLaunchMatch[1].trim().toLowerCase();
+            const knownApps: Record<string, string> = {
+              'code': 'Visual Studio Code', 'code-insiders': 'Visual Studio Code - Insiders',
+              'cursor': 'Cursor', 'firefox': 'Firefox', 'chrome': 'Google Chrome',
+              'safari': 'Safari', 'terminal': 'Terminal', 'iterm': 'iTerm', 'iterm2': 'iTerm',
+              'spotify': 'Spotify', 'slack': 'Slack', 'discord': 'Discord',
+              'figma': 'Figma', 'notion': 'Notion', 'obsidian': 'Obsidian',
+              'docker': 'Docker', 'postman': 'Postman', 'insomnia': 'Insomnia',
+            };
+            if (knownApps[potentialApp] || (!shellCmd.includes(' ') && !shellCmd.includes('/') && !shellCmd.includes('|') && !shellCmd.includes('>') && !shellCmd.includes('<'))) {
+              // Redirect to OPEN_APP
+              const resolvedName = knownApps[potentialApp] || potentialApp;
+              setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, type: 'OPEN_APP', value: resolvedName, status: 'awaiting_permission' } : cmd));
+              const openConfirmed = await requestActionPermission({
+                actionType: 'OPEN_APP',
+                action: 'Open Application',
+                target: resolvedName,
+                what: resolvedName,
+                reason: 'The AI wants to launch an application.',
+                risk: 'medium',
+              });
+              if (openConfirmed) {
+                setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing' } : cmd));
+                const openRes = await window.electronAPI.openExternalApp(resolvedName);
+                output = openRes?.success ? `Opened ${resolvedName}.` : `Failed to open ${resolvedName}: ${openRes?.error || 'unknown error'}`;
+              } else {
+                output = 'App launch denied by user.';
+              }
+              break;
+            }
+          }
           const batchCommands = [command];
           let lookahead = currentCommandIndex + 1;
           const queue = commandQueueRef.current;
@@ -2731,8 +2777,36 @@ I couldn't schedule the task. The background service may not be running. Please 
           });
           if (confirmed) {
             setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing' } : cmd));
-            await window.electronAPI.openExternalApp(command.value);
-            output = `Application ${command.value} launched.`;
+            // Map common CLI names to their proper macOS app names
+            const appMap: Record<string, string> = {
+              'code': 'Visual Studio Code',
+              'code-insiders': 'Visual Studio Code - Insiders',
+              'cursor': 'Cursor',
+              'firefox': 'Firefox',
+              'chrome': 'Google Chrome',
+              'safari': 'Safari',
+              'terminal': 'Terminal',
+              'iterm': 'iTerm',
+              'iterm2': 'iTerm',
+              'spotify': 'Spotify',
+              'slack': 'Slack',
+              'discord': 'Discord',
+              'figma': 'Figma',
+              'notion': 'Notion',
+              'obsidian': 'Obsidian',
+              'docker': 'Docker',
+              'postman': 'Postman',
+              'insomnia': 'Insomnia',
+            };
+            const rawApp = command.value.trim();
+            const appLower = rawApp.toLowerCase();
+            const resolvedApp = appMap[appLower] || rawApp;
+            const res = await window.electronAPI.openExternalApp(resolvedApp);
+            if (res?.success) {
+              output = `Opened ${resolvedApp}.`;
+            } else {
+              output = `Failed to open ${resolvedApp}: ${res?.error || 'unknown error'}. You may need to use the full path or exact app name.`;
+            }
           } else {
             output = 'App launch denied by user.';
           }
@@ -3284,73 +3358,66 @@ I couldn't schedule the task. The background service may not be running. Please 
         // Format: [GENERATE_PDF: title | screenshot:yes | author:Name | subtitle:Subtitle | content...]
         // NOTE: This is now a FALLBACK - prefer CREATE_PDF_JSON for structured content
         case 'GENERATE_PDF': {
-          let rawValue = command.value || '';
+          const cmdParams = (command as any).params || {};
 
-          // ── Clean up malformed input ────────────────────────────────────────
-          // Fix cases like "[GENERATE_PDF: ]: content" or malformed brackets
-          rawValue = rawValue
-            .replace(/^\s*\]+\s*:\s*/, '') // Remove leading ]: or ]]: patterns
-            .replace(/^\s*:\s*/, '') // Remove leading : pattern
-            .trim();
+          // ── JSON params path (AI sends {type, title, content, ...}) ──────
+          let pdfTitle = cmdParams.title || '';
+          let pdfContent = cmdParams.content || '';
+          const pdfSubtitle = cmdParams.subtitle || '';
+          const pdfAuthor = cmdParams.author || 'Aartiq';
+          const pdfTemplate = cmdParams.template || 'auto';
+          const shouldScreenshot = /yes|true/i.test(cmdParams.screenshot || '');
+          const shouldIncludeAttachments = (cmdParams.attachments || '').toLowerCase() !== 'no';
 
-          // ── Parse extended options from pipe-separated fields ───────────────
-          const allParts = rawValue.split('|').map((p: string) => p.trim()).filter(p => p.length > 0);
-          const options: Record<string, string> = {};
-          const contentParts: string[] = [];
+          // ── Pipe-delimited fallback path (legacy text commands) ──────────
+          if (!pdfTitle && !pdfContent) {
+            let rawValue = command.value || '';
 
-          for (const part of allParts) {
-            // Skip empty parts or just "]:"
-            if (!part || part === ']:' || part === ':') continue;
+            // Clean up malformed input
+            rawValue = rawValue
+              .replace(/^\s*\]+\s*:\s*/, '')
+              .replace(/^\s*:\s*/, '')
+              .trim();
 
-            // Parse key:value options
-            const kvMatch = part.match(/^(title|author|subtitle|screenshot|filename|template|tags|category|watermark)\s*:\s*(.+)$/i);
-            if (kvMatch) {
-              const key = kvMatch[1].toLowerCase();
-              const value = kvMatch[2].trim();
-              // Skip if value is empty or just placeholder
-              if (value && !/^\[?\s*\]?\s*$/.test(value) && value.toLowerCase() !== 'content' && value.toLowerCase() !== 'placeholder') {
-                options[key] = value;
+            // Parse extended options from pipe-separated fields
+            const allParts = rawValue.split('|').map((p: string) => p.trim()).filter(p => p.length > 0);
+            const options: Record<string, string> = {};
+            const contentParts: string[] = [];
+
+            for (const part of allParts) {
+              if (!part || part === ']:' || part === ':') continue;
+
+              const kvMatch = part.match(/^(title|author|subtitle|screenshot|filename|template|tags|category|watermark)\s*:\s*(.+)$/i);
+              if (kvMatch) {
+                const key = kvMatch[1].toLowerCase();
+                const val = kvMatch[2].trim();
+                if (val && !/^\[?\s*\]?\s*$/.test(val) && val.toLowerCase() !== 'content' && val.toLowerCase() !== 'placeholder') {
+                  options[key] = val;
+                }
+              } else {
+                contentParts.push(part);
               }
-            } else {
-              contentParts.push(part);
             }
-          }
 
-          // If no content parts but we have context, use context
-          if (contentParts.length === 0 && command.context) {
-            contentParts.push(command.context);
-          }
+            if (contentParts.length === 0 && command.context) {
+              contentParts.push(command.context);
+            }
 
-          // First non-option part is always the title if no explicit title: key
-          let pdfTitle = options.title || contentParts[0]?.trim() || 'Document';
+            pdfTitle = options.title || contentParts[0]?.trim() || 'Document';
 
-          // Clean up title if it's clearly malformed
-          if (!pdfTitle || pdfTitle.length < 2 || /^\[?\s*\]?\s*$/.test(pdfTitle)) {
-            pdfTitle = contentParts.length > 1 ? contentParts[1]?.trim() || 'Document' : 'Document';
-          }
+            if (!pdfTitle || pdfTitle.length < 2 || /^\[?\s*\]?\s*$/.test(pdfTitle)) {
+              pdfTitle = contentParts.length > 1 ? contentParts[1]?.trim() || 'Document' : 'Document';
+            }
 
-          // Fix for "title | actual title" or "title: actual title"
-          if (pdfTitle.toLowerCase() === 'title' && contentParts[1]) {
-            pdfTitle = contentParts[1];
-            contentParts.splice(0, 1);
-          }
+            if (pdfTitle.toLowerCase() === 'title' && contentParts[1]) {
+              pdfTitle = contentParts[1];
+              contentParts.splice(0, 1);
+            }
 
-          const pdfSubtitle = options.subtitle || '';
-          const pdfAuthor = options.author || 'Aartiq';
-          const mentionScreenshot = /screenshot|capture (?:the )?page|include this page/i.test(
-            `${command.context || ''} ${contentParts.join(' ')}`
-          );
-          const shouldScreenshot = options.screenshot?.toLowerCase() === 'yes'
-            || options.screenshot?.toLowerCase() === 'true'
-            || mentionScreenshot;
-          const shouldIncludeAttachments = options.attachments?.toLowerCase() !== 'no';
-
-          // Build content from remaining parts (skip title)
-          let pdfContent = contentParts.slice(1).join(' | ').trim();
-
-          // If content is still empty or placeholder, try the first content part
-          if (!pdfContent || pdfContent.length < 10 || /^\[?\s*\]?\s*$/.test(pdfContent)) {
-            pdfContent = contentParts[0]?.trim() || command.context || '';
+            pdfContent = contentParts.slice(1).join(' | ').trim();
+            if (!pdfContent || pdfContent.length < 10 || /^\[?\s*\]?\s*$/.test(pdfContent)) {
+              pdfContent = contentParts[0]?.trim() || command.context || '';
+            }
           }
 
           // ✅ NEW: If content is just a placeholder like "content", use the full message text passed in context
@@ -5121,7 +5188,12 @@ I've successfully executed the following real tasks:
           <AICommandQueue
             commands={commandQueue}
             currentCommandIndex={currentCommandIndex}
-            onCancel={() => setCommandQueue([])}
+            onCancel={() => { setCommandQueue([]); setAgentState('idle'); setPlanningSteps([]); }}
+            onStopCurrent={() => {
+              const remaining = commandQueue.slice(currentCommandIndex + 1);
+              setCommandQueue(prev => prev.slice(0, currentCommandIndex + 1));
+            }}
+            cancelImmediately={() => { setCommandQueue([]); setAgentState('idle'); setPlanningSteps([]); }}
           />
         )}
       </AnimatePresence>
@@ -5317,8 +5389,23 @@ I've successfully executed the following real tasks:
             <div>
               <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary-text leading-tight">Aartiq</h2>
               <div className="flex items-center gap-1.5 mt-0.5">
-                <div className={`w-1 h-1 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                <span className="text-[8px] font-bold text-secondary-text uppercase tracking-widest">Autonomous</span>
+                <div className={`w-1 h-1 rounded-full ${
+                  agentState === 'executing' ? 'bg-sky-500 animate-pulse' :
+                  agentState === 'thinking' ? 'bg-indigo-500 animate-pulse' :
+                  agentState === 'planning' ? 'bg-amber-500 animate-pulse' :
+                  agentState === 'waiting' ? 'bg-orange-500 animate-pulse' :
+                  agentState === 'finished' ? 'bg-green-500' :
+                  isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+                }`} />
+                <span className="text-[8px] font-bold text-secondary-text uppercase tracking-widest">
+                  {agentState === 'idle' ? 'Autonomous' : 
+                   agentState === 'planning' ? 'Planning' :
+                   agentState === 'thinking' ? 'Thinking' :
+                   agentState === 'executing' ? 'Executing' :
+                   agentState === 'waiting' ? 'Waiting' :
+                   agentState === 'finished' ? 'Done' :
+                   'Autonomous'}
+                </span>
               </div>
             </div>
           </div>
