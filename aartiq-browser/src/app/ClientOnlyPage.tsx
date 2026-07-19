@@ -189,30 +189,47 @@ export default function Home() {
     } catch {
     }
 
-    const playClick = (variant: 'tap' | 'confirm' = 'tap') => {
+    const playClick = (variant: 'tap' | 'confirm' | 'success' | 'error' | 'toggle' | 'drag' | 'navigate' | 'delete' = 'tap') => {
       if (!clickSoundEnabledRef.current) return;
       const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextCtor) return;
       const context = clickAudioContextRef.current || new AudioContextCtor();
       clickAudioContextRef.current = context;
+
+      const configs: Record<string, { freq: number; gain: number; dur: number; type: OscillatorType; endFreq?: number }> = {
+        tap:      { freq: 440, gain: 0.025, dur: 0.08, type: 'sine' },
+        confirm:  { freq: 660, gain: 0.045, dur: 0.09, type: 'sine' },
+        success:  { freq: 523, gain: 0.035, dur: 0.12, type: 'sine', endFreq: 659 },
+        error:    { freq: 220, gain: 0.04,  dur: 0.15, type: 'triangle', endFreq: 180 },
+        toggle:   { freq: 580, gain: 0.02,  dur: 0.06, type: 'sine', endFreq: 780 },
+        drag:     { freq: 300, gain: 0.012, dur: 0.04, type: 'sine' },
+        navigate: { freq: 500, gain: 0.03,  dur: 0.07, type: 'sine', endFreq: 700 },
+        delete:   { freq: 350, gain: 0.035, dur: 0.1,  type: 'triangle', endFreq: 200 },
+      };
+
+      const cfg = configs[variant] || configs.tap;
       const oscillator = context.createOscillator();
       const gain = context.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = variant === 'confirm' ? 660 : 440;
+      oscillator.type = cfg.type;
+      oscillator.frequency.setValueAtTime(cfg.freq, context.currentTime);
+      if (cfg.endFreq) {
+        oscillator.frequency.exponentialRampToValueAtTime(cfg.endFreq, context.currentTime + cfg.dur * 0.7);
+      }
       gain.gain.setValueAtTime(0.0001, context.currentTime);
-      gain.gain.exponentialRampToValueAtTime(variant === 'confirm' ? 0.045 : 0.025, context.currentTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.08);
+      gain.gain.exponentialRampToValueAtTime(cfg.gain, context.currentTime + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + cfg.dur);
       oscillator.connect(gain);
       gain.connect(context.destination);
       oscillator.start();
-      oscillator.stop(context.currentTime + 0.09);
+      oscillator.stop(context.currentTime + cfg.dur + 0.01);
     };
 
     const handlePreference = (event: Event) => {
       clickSoundEnabledRef.current = !!(event as CustomEvent<{ enabled?: boolean }>).detail?.enabled;
     };
     const handleManualSound = (event: Event) => {
-      playClick((event as CustomEvent<{ variant?: 'tap' | 'confirm' }>).detail?.variant || 'tap');
+      const v = (event as CustomEvent<{ variant?: string }>).detail?.variant || 'tap';
+      playClick(v as any);
     };
     const handleDocumentClick = (event: MouseEvent) => {
       if ((event.target as HTMLElement | null)?.closest('button,a,[role="button"],input,select,textarea')) {
@@ -2292,7 +2309,15 @@ export default function Home() {
             <motion.div
               drag="x"
               dragConstraints={{ left: 0, right: 0 }}
+              onDragStart={() => {
+                window.dispatchEvent(new CustomEvent('aartiq-play-click-sound', { detail: { variant: 'drag' } }));
+              }}
               onDragEnd={(e, info) => {
+                const switched = (info.offset.x > 100 && store.sidebarSide === 'left') ||
+                                 (info.offset.x < -100 && store.sidebarSide === 'right');
+                if (switched) {
+                  window.dispatchEvent(new CustomEvent('aartiq-play-click-sound', { detail: { variant: 'navigate' } }));
+                }
                 if (info.offset.x > 100 && store.sidebarSide === 'left') {
                   store.setSidebarSide('right');
                   if (window.electronAPI) window.dispatchEvent(new Event('resize'));

@@ -12,6 +12,48 @@ import { useAppStore } from '@/store/useAppStore';
 import { Cpu, Cloud, Settings, Save, Shield, Database, ChevronDown, Check, Sparkles, Puzzle, FolderOpen, ExternalLink, Monitor, RefreshCw, X } from 'lucide-react';
 import { getGeminiModelMetadata, getRecommendedGeminiModel } from '@/lib/modelRegistry';
 
+// ─── Collapsible Section Component ─────────────────────────────────────────────
+
+function CollapsibleSection({ icon, label, defaultOpen = false, children }: {
+  icon: React.ReactNode;
+  label: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="rounded-xl border border-white/[0.04] overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-white/[0.02] transition-colors text-left"
+      >
+        <span className="text-deep-space-accent-neon">{icon}</span>
+        <span className="text-[10px] uppercase font-black tracking-widest text-white/50 flex-1">{label}</span>
+        <ChevronDown
+          size={12}
+          className={`text-white/20 transition-transform duration-200 shrink-0 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 space-y-3">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 interface LLMProviderSettingsProps {
   selectedEngine: string;
   setSelectedEngine: (engine: string) => void;
@@ -449,68 +491,36 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden" // Removed border-t to let the parent AIChatSidebar handle it
+            className="overflow-hidden"
           >
-            <div className="p-4 space-y-6 custom-scrollbar max-h-[450px] overflow-y-auto">
-              <ThemeSettings {...props} />
-              <SearchEngineSettings {...props} />
-              <BackendSettings {...props} />
+            <div className="p-4 space-y-4 custom-scrollbar max-h-[450px] overflow-y-auto">
 
-              <div className="space-y-4 pt-4 border-t border-white/5">
-                <div className="flex items-center gap-2 mb-2">
-                  <Cloud size={12} className="text-deep-space-accent-neon" />
-                  <label htmlFor="ai-orchestration-select" className="block text-[10px] uppercase font-black tracking-widest text-white/40">AI Orchestration</label>
+              {/* ── Section: Appearance ─────────────────────────────── */}
+              <CollapsibleSection icon={<Cpu size={12} />} label="Appearance" defaultOpen={false}>
+                <ThemeSettings {...props} />
+                <SearchEngineSettings {...props} />
+                <BackendSettings {...props} />
+              </CollapsibleSection>
+
+              {/* ── Section: AI Provider ────────────────────────────── */}
+              <CollapsibleSection icon={<Cloud size={12} />} label="AI Provider" defaultOpen={true}>
+                <div className="space-y-3">
+                  <select
+                    id="ai-orchestration-select"
+                    aria-label="AI Orchestration Provider Selection"
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
+                    value={activeProviderId || ''}
+                    onChange={handleProviderChange}
+                  >
+                    {providers.map((p: { id: string; name: string }) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
                 </div>
+              </CollapsibleSection>
 
-                <select
-                  id="ai-orchestration-select"
-                  aria-label="AI Orchestration Provider Selection"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
-                  value={activeProviderId || ''}
-                  onChange={handleProviderChange}
-                >
-                  {providers.map((p: { id: string; name: string }) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
-
-                <div className="space-y-4">
-                  <p className="text-[10px] uppercase font-black tracking-widest text-white/40 mb-2">MCP Server Settings</p>
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-white/30 uppercase font-bold">MCP Server Port</label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 3001"
-                      className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
-                      value={store.mcpServerPort || ''}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        const newPort = parseInt(e.target.value, 10);
-                        if (!isNaN(newPort)) {
-                          store.setMcpServerPort(newPort);
-                          // Send update to main process to restart server if needed, or just update port variable
-                          if (window.electronAPI) {
-                            (window.electronAPI as any).setMcpServerPort(newPort);
-                          }
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4 pt-4 border-t border-white/5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Shield size={12} className="text-deep-space-accent-neon" />
-                    <label className="block text-[10px] uppercase font-black tracking-widest text-white/40">Additional AI Instructions</label>
-                  </div>
-                  <textarea
-                    placeholder="Enter persistent instructions for the AI (e.g., 'Always respond in markdown and act as a pirate')."
-                    className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none h-24 resize-none"
-                    value={store.additionalAIInstructions}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => store.setAdditionalAIInstructions(e.target.value)}
-                  />
-                </div>
-
-                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+              {/* ── Section: Provider Configuration ─────────────────── */}
+              <CollapsibleSection icon={<Settings size={12} />} label="Provider Config" defaultOpen={true}>
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
                   <div className="space-y-4">
-
                     {activeProviderId === 'ollama' && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
@@ -542,7 +552,6 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                               const newModel = e.target.value;
                               store.setOllamaModel(newModel);
                               if (window.electronAPI && newModel !== 'custom') {
-                                // Auto-sync configuration to main process
                                 await window.electronAPI.configureLLMProvider('ollama', {
                                   baseUrl: store.ollamaBaseUrl,
                                   model: newModel
@@ -575,9 +584,9 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                             <option value="custom">Custom (Type below)</option>
                           </select>
                           <p className="text-[8px] text-amber-400/60 font-medium pt-1 italic">
-                            ⚠️ Choose Ollama Only if You have at Least enough hardware to run LLM
+                            Choose Ollama Only if You have at Least enough hardware to run LLM
                           </p>
-                          <button 
+                          <button
                             onClick={async () => {
                               try {
                                 setFeedback("Verifying...");
@@ -596,15 +605,15 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                             }}
                             className="mt-2 w-full py-2 bg-sky-500/10 border border-sky-500/20 rounded-lg text-sky-400 text-[9px] font-black uppercase tracking-widest hover:bg-sky-500/20 transition-all"
                           >
-                             Verify Connection
+                            Verify Connection
                           </button>
                         </div>
 
                         {/* Manual Override */}
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center justify-between mb-1">
-                             <label className="text-[9px] text-white/30 uppercase font-bold">Manual Model Override</label>
-                             <span className="text-[8px] text-purple-400 font-bold uppercase cursor-pointer hover:underline" onClick={() => store.setOllamaModel('gpt-oss-cloud:120b')}>Try GPT-OSS 120B</span>
+                            <label className="text-[9px] text-white/30 uppercase font-bold">Manual Model Override</label>
+                            <span className="text-[8px] text-purple-400 font-bold uppercase cursor-pointer hover:underline" onClick={() => store.setOllamaModel('gpt-oss-cloud:120b')}>Try GPT-OSS 120B</span>
                           </div>
                           <input
                             type="text"
@@ -617,7 +626,7 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
 
                         {/* Local LLM Mode Selection */}
                         <div className="space-y-1">
-                          <label htmlFor="local-mode-select" className="text-[9px] text-white/30 uppercase font-bold">Local intelligence Intensity</label>
+                          <label htmlFor="local-mode-select" className="text-[9px] text-white/30 uppercase font-bold">Local Intelligence Intensity</label>
                           <div className="grid grid-cols-3 gap-2">
                             {(['light', 'normal', 'heavy'] as const).map((m) => (
                               <button
@@ -657,124 +666,103 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                                 const input = document.getElementById('ollama-pull-input') as HTMLInputElement;
                                 const model = input.value.trim();
                                 if (!model || !window.electronAPI) return;
-
-                                const outputDiv = document.getElementById('ollama-terminal');
-                                if (outputDiv) outputDiv.innerText = `> Initializing pull for ${model}...\n`;
-
-                                window.electronAPI.pullOllamaModel(model, (data: any) => {
-                                  if (outputDiv) {
-                                    if (data.done) {
-                                      outputDiv.innerText += `\n> DONE: ${model} installed successfully.\n`;
-                                    } else {
-                                      if (data.output.includes('%') || data.output.includes('[')) {
-                                        const lines = outputDiv.innerText.split('\n');
-                                        if (lines.length > 0 && (lines[lines.length - 1].includes('%') || lines[lines.length - 1].includes('['))) lines.pop();
-                                        outputDiv.innerText = lines.join('\n') + '\n' + data.output.trim();
-                                      } else {
-                                        outputDiv.innerText += data.output;
-                                      }
-                                      outputDiv.scrollTop = outputDiv.scrollHeight;
-                                    }
+                                setFeedback(`Pulling ${model}...`);
+                                window.electronAPI.ollamaPullModel(model).then((res) => {
+                                  if (res.success) {
+                                    setFeedback(`Installed: ${model}`);
+                                  } else {
+                                    setFeedback(`Failed: ${res.error}`);
                                   }
+                                  setTimeout(() => setFeedback(null), 3000);
                                 });
                               }}
-                              className="px-3 py-1 bg-sky-400/20 hover:bg-sky-400/30 text-sky-400 text-[10px] font-black uppercase rounded-lg transition-all border border-sky-400/20"
+                              className="px-3 py-2 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/20 rounded-lg text-deep-space-accent-neon text-[9px] font-bold uppercase hover:bg-deep-space-accent-neon/20 transition-all"
                             >
-                              PULL GPT-120B
+                              Pull
                             </button>
                           </div>
-                          <div id="ollama-terminal" className="h-[60px] bg-black/40 rounded-lg p-2 text-[9px] font-mono text-green-400/80 overflow-y-auto whitespace-pre-wrap border border-white/5 custom-scrollbar">
-                            Ready to install models from ollama.com/library
-                          </div>
-                        </div>
-
-                        {/* Import Local GGUF */}
-                        <div className="flex flex-col gap-2 pt-2 border-t border-white/5 mt-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-[9px] text-white/30 uppercase font-bold">Import Custom Model (.GGUF)</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={async () => {
-                                if (!window.electronAPI) return;
-                                const filePath = await window.electronAPI.selectLocalFile();
-                                if (filePath) {
-                                  // Simple generic prompt for name - in a real app would be a modal
-                                  const name = prompt("Enter a name for this model (e.g. my-custom-model):");
-                                  if (name) {
-                                    const outputDiv = document.getElementById('ollama-terminal');
-                                    if (outputDiv) outputDiv.innerText += `\n> Importing ${name} from local file...\n`;
-
-                                    const res = await window.electronAPI.importOllamaModel({ modelName: name, filePath });
-                                    if (outputDiv) {
-                                      if (res.success) {
-                                        outputDiv.innerText += `> SUCCESS: Model '${name}' created.\n`;
-                                        store.setOllamaModel(name);
-                                      } else {
-                                        outputDiv.innerText += `> ERROR: ${res.error}\n`;
-                                      }
-                                      outputDiv.scrollTop = outputDiv.scrollHeight;
-                                    }
-                                  }
+                          <div className="flex gap-2 mt-1">
+                            <label className="flex-1 flex items-center gap-2 px-3 py-2 bg-black/20 border border-white/5 rounded-lg text-[9px] text-white/40 cursor-pointer hover:bg-white/[0.03] transition-all">
+                              <input type="file" accept=".gguf" className="hidden" onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file && window.electronAPI) {
+                                  setFeedback(`Importing ${file.name}...`);
+                                  window.electronAPI.ollamaImportModel?.(file.path).then((res: any) => {
+                                    setFeedback(res?.success ? `Imported: ${file.name}` : `Failed: ${res?.error}`);
+                                    setTimeout(() => setFeedback(null), 3000);
+                                  });
                                 }
-                              }}
-                              className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-lg text-white/60 text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2"
-                            >
-                              <Database size={12} />
-                              Select .GGUF File
-                            </button>
+                              }} />
+                              <FolderOpen size={10} />
+                              Import .GGUF
+                            </label>
                           </div>
                         </div>
-
-                        <p className="text-[9px] text-green-400/60 font-medium pt-2">
-                          * Native backend running. Models stored in local user data.
-                        </p>
                       </div>
                     )}
 
-                    {(activeProviderId === 'google' || activeProviderId === 'google-flash') && (
+                    {activeProviderId === 'gemini' && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
-                          <img src="/ai-logos/gemini.svg" className="w-4 h-4 object-contain" alt="Gemini" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">
-                            {geminiPreferences.metadata.friendlyName}
-                          </span>
+                          <img src="/ai-logos/gemini.png" className="w-4 h-4 object-contain" alt="Gemini" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">Google Gemini Configuration</span>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[9px] text-white/30 uppercase font-bold">API Key</label>
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Gemini API Key</label>
                           <input
                             type="password"
-                            placeholder="Enter Gemini API Key..."
+                            placeholder="Enter Gemini API Key"
                             className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
                             value={store.geminiApiKey || ''}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setGeminiApiKey(e.target.value)}
                           />
                         </div>
-                        {renderCatalogControls(
-                          activeProviderId,
-                          activeProviderId === 'google-flash' ? (store.geminiFlashModel || '') : (store.geminiModel || ''),
-                          (model) => activeProviderId === 'google-flash' ? store.setGeminiFlashModel(model) : store.setGeminiModel(model),
-                          `e.g. ${activeCatalog?.recommendedModel || geminiPreferences.metadata.id}`
-                        )}
-                        <div className="space-y-2 p-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] text-white/80">
-                          <div className="flex items-center justify-between">
-                            <span className="font-black uppercase tracking-[0.3em] text-white/40">Gemini Update Feed</span>
-                            <button
-                              type="button"
-                              onClick={() => store.setAutoGeminiModelUpdates(!store.autoGeminiModelUpdates)}
-                              className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.4em] transition ${store.autoGeminiModelUpdates ? 'bg-deep-space-accent-neon/80 text-black' : 'bg-white/10 text-white/70'}`}
-                            >
-                              Auto {store.autoGeminiModelUpdates ? 'On' : 'Off'}
-                            </button>
-                          </div>
-                          <p className="text-[9px] text-white/50">
-                            Recommended: <strong className="text-white">{geminiPreferences.metadata.friendlyName}</strong> ({geminiPreferences.metadata.id})
-                          </p>
-                          <p className="text-[9px] text-white/40">Released {geminiPreferences.metadata.releaseDate}</p>
-                          <p className="text-[8px] text-white/40 leading-snug">{geminiPreferences.metadata.notes}</p>
-                          <p className="text-[8px] text-white/30">
-                            Auto-updates pin your Google provider to the freshest Gemini 3.0/3.1 reasoning builds with no manual steps.
-                          </p>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Active Model</label>
+                          <select
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
+                            value={store.geminiModel}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => store.setGeminiModel(e.target.value)}
+                          >
+                            {props.ollamaModels.length > 0 ? (
+                              props.ollamaModels.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)
+                            ) : (
+                              <>
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast)</option>
+                                <option value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro (Reasoning)</option>
+                                <option value="gemini-2.5-flash-preview-04-17">Gemini 2.5 Flash (Balanced)</option>
+                              </>
+                            )}
+                          </select>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!store.geminiApiKey) { setFeedback("Enter API Key"); setTimeout(() => setFeedback(null), 2000); return; }
+                            try {
+                              setFeedback("Fetching Models...");
+                              const catalogs = await (window.electronAPI as any).fetchProviderCatalogs?.('gemini', store.geminiApiKey);
+                              if (catalogs?.success && catalogs.models?.length > 0) {
+                                props.setOllamaModels(catalogs.models.map((m: any) => ({ name: m.id, modified_at: '' })));
+                                setFeedback(`${catalogs.models.length} Models Loaded`);
+                              } else {
+                                setFeedback("No Models Found");
+                              }
+                            } catch { setFeedback("API Key Invalid"); }
+                            setTimeout(() => setFeedback(null), 2500);
+                          }}
+                          className="w-full py-2 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/20 rounded-lg text-deep-space-accent-neon text-[9px] font-black uppercase tracking-widest hover:bg-deep-space-accent-neon/20 transition-all flex items-center justify-center gap-2"
+                        >
+                          <RefreshCw size={10} />
+                          Fetch Live Model Catalog
+                        </button>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] text-white/30 uppercase font-bold">Auto-Update Models</span>
+                          <button
+                            onClick={() => store.setGeminiAutoUpdate(!store.geminiAutoUpdate)}
+                            className={`w-8 h-4 rounded-full transition-all ${store.geminiAutoUpdate ? 'bg-deep-space-accent-neon' : 'bg-white/10'}`}
+                          >
+                            <span className={`block w-3 h-3 rounded-full bg-white shadow transition-transform ${store.geminiAutoUpdate ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          </button>
                         </div>
                       </div>
                     )}
@@ -782,248 +770,336 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                     {activeProviderId === 'openai' && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
-                          <img src="/ai-logos/chatgpt.png" className="w-4 h-4 object-contain" alt="OpenAI" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">OpenAI (GPT-4o/o1)</span>
+                          <img src="/ai-logos/openai.png" className="w-4 h-4 object-contain" alt="OpenAI" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">OpenAI Configuration</span>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[9px] text-white/30 uppercase font-bold">API Key</label>
+                          <label className="text-[9px] text-white/30 uppercase font-bold">OpenAI API Key</label>
                           <input
                             type="password"
-                            placeholder="sk-..."
+                            placeholder="Enter OpenAI API Key"
                             className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
                             value={store.openaiApiKey || ''}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setOpenaiApiKey(e.target.value)}
                           />
                         </div>
-                        {renderCatalogControls('openai', store.openaiModel || '', (model) => store.setOpenaiModel(model), 'e.g. gpt-5.1')}
-                      </div>
-                    )}
-
-                    {activeProviderId === 'azure-openai' && (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
-                          <Cloud size={16} className="text-cyan-300" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">Microsoft Azure OpenAI</span>
-                        </div>
                         <div className="space-y-1">
-                          <label className="text-[9px] text-white/30 uppercase font-bold">API Key</label>
-                          <input
-                            type="password"
-                            placeholder="Azure OpenAI key"
-                            className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
-                            value={store.azureOpenaiApiKey || ''}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureOpenaiApiKey(e.target.value)}
-                          />
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Active Model</label>
+                          <select
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
+                            value={store.openaiModel}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => store.setOpenaiModel(e.target.value)}
+                          >
+                            {props.ollamaModels.length > 0 ? (
+                              props.ollamaModels.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)
+                            ) : (
+                              <>
+                                <option value="gpt-4o">GPT-4o</option>
+                                <option value="gpt-4o-mini">GPT-4o Mini</option>
+                                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                                <option value="o3-mini">o3-mini</option>
+                              </>
+                            )}
+                          </select>
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-white/30 uppercase font-bold">Base URL</label>
-                          <input
-                            type="text"
-                            placeholder="https://YOUR-RESOURCE.openai.azure.com/openai/v1"
-                            className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
-                            value={store.azureOpenaiEndpoint || ''}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureOpenaiEndpoint(e.target.value)}
-                          />
-                          <p className="text-[8px] text-white/35">
-                            Use the Azure OpenAI v1 base URL for your resource.
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] text-white/30 uppercase font-bold">Model / Deployment</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. gpt-4.1-mini"
-                            className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
-                            value={store.azureOpenaiModel || ''}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureOpenaiModel(e.target.value)}
-                          />
-                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!store.openaiApiKey) { setFeedback("Enter API Key"); setTimeout(() => setFeedback(null), 2000); return; }
+                            try {
+                              setFeedback("Fetching Models...");
+                              const catalogs = await (window.electronAPI as any).fetchProviderCatalogs?.('openai', store.openaiApiKey);
+                              if (catalogs?.success && catalogs.models?.length > 0) {
+                                props.setOllamaModels(catalogs.models.map((m: any) => ({ name: m.id, modified_at: '' })));
+                                setFeedback(`${catalogs.models.length} Models Loaded`);
+                              } else {
+                                setFeedback("No Models Found");
+                              }
+                            } catch { setFeedback("API Key Invalid"); }
+                            setTimeout(() => setFeedback(null), 2500);
+                          }}
+                          className="w-full py-2 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/20 rounded-lg text-deep-space-accent-neon text-[9px] font-black uppercase tracking-widest hover:bg-deep-space-accent-neon/20 transition-all flex items-center justify-center gap-2"
+                        >
+                          <RefreshCw size={10} />
+                          Fetch Live Model Catalog
+                        </button>
                       </div>
                     )}
 
                     {activeProviderId === 'anthropic' && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
-                          <img src="/ai-logos/claude.webp" className="w-4 h-4 object-contain" alt="Claude" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">Anthropic Claude</span>
+                          <img src="/ai-logos/anthropic.png" className="w-4 h-4 object-contain" alt="Anthropic" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">Anthropic Claude Configuration</span>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[9px] text-white/30 uppercase font-bold">API Key</label>
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Anthropic API Key</label>
                           <input
                             type="password"
-                            placeholder="sk-ant-..."
+                            placeholder="Enter Anthropic API Key"
                             className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
                             value={store.anthropicApiKey || ''}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAnthropicApiKey(e.target.value)}
                           />
                         </div>
-                        {renderCatalogControls('anthropic', store.anthropicModel || '', (model) => store.setAnthropicModel(model), 'e.g. claude-sonnet-4-20250514')}
-                      </div>
-                    )}
-
-                    {activeProviderId === 'xai' && (
-                      <div className="space-y-4">
-                        <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
-                          <img src="/ai-logos/Grok.png" className="w-4 h-4 object-contain" alt="Grok" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">xAI Grok</span>
-                        </div>
                         <div className="space-y-1">
-                          <label className="text-[9px] text-white/30 uppercase font-bold">API Key</label>
-                          <input
-                            type="password"
-                            placeholder="xai-..."
-                            className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
-                            value={store.xaiApiKey || ''}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setXaiApiKey(e.target.value)}
-                          />
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Active Model</label>
+                          <select
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
+                            value={store.anthropicModel}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => store.setAnthropicModel(e.target.value)}
+                          >
+                            {props.ollamaModels.length > 0 ? (
+                              props.ollamaModels.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)
+                            ) : (
+                              <>
+                                <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                                <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>
+                              </>
+                            )}
+                          </select>
                         </div>
-                        {renderCatalogControls('xai', store.xaiModel || '', (model) => store.setXaiModel(model), 'e.g. grok-4-fast-reasoning')}
+                        <button
+                          onClick={async () => {
+                            if (!store.anthropicApiKey) { setFeedback("Enter API Key"); setTimeout(() => setFeedback(null), 2000); return; }
+                            try {
+                              setFeedback("Fetching Models...");
+                              const catalogs = await (window.electronAPI as any).fetchProviderCatalogs?.('anthropic', store.anthropicApiKey);
+                              if (catalogs?.success && catalogs.models?.length > 0) {
+                                props.setOllamaModels(catalogs.models.map((m: any) => ({ name: m.id, modified_at: '' })));
+                                setFeedback(`${catalogs.models.length} Models Loaded`);
+                              } else {
+                                setFeedback("No Models Found");
+                              }
+                            } catch { setFeedback("API Key Invalid"); }
+                            setTimeout(() => setFeedback(null), 2500);
+                          }}
+                          className="w-full py-2 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/20 rounded-lg text-deep-space-accent-neon text-[9px] font-black uppercase tracking-widest hover:bg-deep-space-accent-neon/20 transition-all flex items-center justify-center gap-2"
+                        >
+                          <RefreshCw size={10} />
+                          Fetch Live Model Catalog
+                        </button>
                       </div>
                     )}
 
                     {activeProviderId === 'groq' && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
-                          <img src="/ai-logos/Grok.png" className="w-4 h-4 object-contain" alt="Groq" />
-                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">Groq (LPU)</span>
+                          <img src="/ai-logos/groq.png" className="w-4 h-4 object-contain" alt="Groq" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">Groq (LPU) Configuration</span>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[9px] text-white/30 uppercase font-bold">API Key</label>
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Groq API Key</label>
                           <input
                             type="password"
-                            placeholder="gsk_..."
+                            placeholder="Enter Groq API Key"
                             className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
                             value={store.groqApiKey || ''}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setGroqApiKey(e.target.value)}
                           />
                         </div>
-                        {renderCatalogControls('groq', store.groqModel || '', (model) => store.setGroqModel(model), 'e.g. llama-3.3-70b-versatile')}
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Active Model</label>
+                          <select
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
+                            value={store.groqModel}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => store.setGroqModel(e.target.value)}
+                          >
+                            {props.ollamaModels.length > 0 ? (
+                              props.ollamaModels.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)
+                            ) : (
+                              <>
+                                <option value="llama-3.3-70b-versatile">Llama 3.3 70B</option>
+                                <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+                                <option value="gemma2-9b-it">Gemma 2 9B</option>
+                              </>
+                            )}
+                          </select>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!store.groqApiKey) { setFeedback("Enter API Key"); setTimeout(() => setFeedback(null), 2000); return; }
+                            try {
+                              setFeedback("Fetching Models...");
+                              const catalogs = await (window.electronAPI as any).fetchProviderCatalogs?.('groq', store.groqApiKey);
+                              if (catalogs?.success && catalogs.models?.length > 0) {
+                                props.setOllamaModels(catalogs.models.map((m: any) => ({ name: m.id, modified_at: '' })));
+                                setFeedback(`${catalogs.models.length} Models Loaded`);
+                              } else {
+                                setFeedback("No Models Found");
+                              }
+                            } catch { setFeedback("API Key Invalid"); }
+                            setTimeout(() => setFeedback(null), 2500);
+                          }}
+                          className="w-full py-2 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/20 rounded-lg text-deep-space-accent-neon text-[9px] font-black uppercase tracking-widest hover:bg-deep-space-accent-neon/20 transition-all flex items-center justify-center gap-2"
+                        >
+                          <RefreshCw size={10} />
+                          Fetch Live Model Catalog
+                        </button>
                       </div>
                     )}
 
-                    {isMac && (
-                      <div className="pt-6 border-t border-white/5 mt-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <img src="/ai-logos/apple.png" className="w-4 h-4 object-contain invert" alt="Apple" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-white/60">macOS Apple Intelligence</span>
-                          </div>
-                          <button
-                            onClick={refreshAppleStatus}
-                            className="p-1.5 rounded-lg hover:bg-white/5 text-white/30 hover:text-white/60 transition-all"
-                          >
-                            <RefreshCw size={12} className={appleBusy ? 'animate-spin' : ''} />
-                          </button>
+                    {activeProviderId === 'xai' && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">xAI Grok Configuration</span>
                         </div>
-
-                        {!appleStatus?.supportsSummaries ? (
-                          <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 mb-4">
-                            <p className="text-[10px] text-amber-500/80 font-bold uppercase tracking-widest leading-relaxed">
-                              ⚠️ Native Apple Intelligence Unavailable
-                            </p>
-                            <p className="text-[9px] text-white/40 mt-1 leading-relaxed">
-                              {getAppleIntelligenceErrorMessage(appleStatus)}
-                            </p>
-                            <div className="mt-2 space-y-1 text-[8px] text-white/30">
-                              <p>• {appleStatus?.summaryReason || 'Summaries: macOS 26.0+ required'}</p>
-                              <p>• {appleStatus?.imageReason || 'Images: macOS 15.4+ required'}</p>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {/* Summary Section */}
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[9px] text-white/30 uppercase font-black tracking-widest">Page & Text Summarizer</span>
-                                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${canUseAppleSummary ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                                  {canUseAppleSummary ? 'Ready' : 'Unavailable'}
-                                </span>
-                              </div>
-                              
-                              <button
-                                onClick={handleApplePageSummary}
-                                disabled={!!appleBusy || !canUseAppleSummary}
-                                className="w-full py-2.5 bg-white/5 border border-white/10 rounded-xl text-white/70 text-[10px] font-black uppercase tracking-widest hover:bg-white/10 disabled:opacity-30 transition-all flex items-center justify-center gap-2"
-                              >
-                                {appleBusy === 'summary' ? <RefreshCw size={12} className="animate-spin" /> : <Sparkles size={12} className="text-sky-400" />}
-                                Summarize Current Page
-                              </button>
-
-                              {appleSummaryResult && (
-                                <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-[8px] font-black uppercase tracking-tighter text-white/30">Intelligence Output</span>
-                                    <button onClick={() => setAppleSummaryResult('')} className="text-white/20 hover:text-white/60"><X size={10} /></button>
-                                  </div>
-                                  <p className="text-[11px] text-white/80 leading-relaxed italic border-l-2 border-sky-500/50 pl-3">
-                                    "{appleSummaryResult}"
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Image Section */}
-                            {appleStatus.supportsImageGeneration && (
-                              <div className="space-y-3 pt-3 border-t border-white/5">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[9px] text-white/30 uppercase font-black tracking-widest">Image Playground (Native)</span>
-                                  <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${canUseAppleImage ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                                    {canUseAppleImage ? 'Ready' : 'Unavailable'}
-                                  </span>
-                                </div>
-
-                                <div className="flex gap-2">
-                                  <input
-                                    type="text"
-                                    placeholder="Describe image..."
-                                    value={appleImagePrompt}
-                                    onChange={(e) => setAppleImagePrompt(e.target.value)}
-                                    className="flex-1 bg-black/20 border border-white/5 rounded-lg px-3 py-2 text-[10px] text-white outline-none"
-                                  />
-                                  <button
-                                    onClick={handleAppleImage}
-                                    disabled={!!appleBusy || !canUseAppleImage}
-                                    className="px-4 py-2 bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg text-[10px] font-black uppercase transition-all hover:bg-purple-500/30"
-                                  >
-                                    {appleBusy === 'image' ? <RefreshCw size={12} className="animate-spin" /> : 'Gen'}
-                                  </button>
-                                </div>
-
-                                {appleImagePath && (
-                                  <div className="rounded-xl overflow-hidden border border-white/10 group relative">
-                                    <img src={`file://${appleImagePath}`} className="w-full h-32 object-cover" alt="Apple AI" />
-                                    <button 
-                                      onClick={() => window.open(`file://${appleImagePath}`)}
-                                      className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-[10px] font-black uppercase tracking-widest text-white transition-all"
-                                    >
-                                      Open Image
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-white/30 uppercase font-bold">xAI API Key</label>
+                          <input
+                            type="password"
+                            placeholder="Enter xAI API Key"
+                            className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
+                            value={store.xaiApiKey || ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setXaiApiKey(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Active Model</label>
+                          <select
+                            className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
+                            value={store.xaiModel}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => store.setXaiModel(e.target.value)}
+                          >
+                            {props.ollamaModels.length > 0 ? (
+                              props.ollamaModels.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)
+                            ) : (
+                              <>
+                                <option value="grok-3">Grok 3</option>
+                                <option value="grok-3-mini">Grok 3 Mini</option>
+                              </>
                             )}
+                          </select>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!store.xaiApiKey) { setFeedback("Enter API Key"); setTimeout(() => setFeedback(null), 2000); return; }
+                            try {
+                              setFeedback("Fetching Models...");
+                              const catalogs = await (window.electronAPI as any).fetchProviderCatalogs?.('xai', store.xaiApiKey);
+                              if (catalogs?.success && catalogs.models?.length > 0) {
+                                props.setOllamaModels(catalogs.models.map((m: any) => ({ name: m.id, modified_at: '' })));
+                                setFeedback(`${catalogs.models.length} Models Loaded`);
+                              } else {
+                                setFeedback("No Models Found");
+                              }
+                            } catch { setFeedback("API Key Invalid"); }
+                            setTimeout(() => setFeedback(null), 2500);
+                          }}
+                          className="w-full py-2 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/20 rounded-lg text-deep-space-accent-neon text-[9px] font-black uppercase tracking-widest hover:bg-deep-space-accent-neon/20 transition-all flex items-center justify-center gap-2"
+                        >
+                          <RefreshCw size={10} />
+                          Fetch Live Model Catalog
+                        </button>
+                      </div>
+                    )}
 
-                            {appleUiError && (
-                              <p className="text-[9px] text-red-400/80 italic text-center">{appleUiError}</p>
-                            )}
-                          </div>
-                        )}
+                    {activeProviderId === 'azure' && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">Azure OpenAI Configuration</span>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Azure API Key</label>
+                          <input
+                            type="password"
+                            placeholder="Enter Azure API Key"
+                            className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
+                            value={store.azureApiKey || ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureApiKey(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Azure Base URL</label>
+                          <input
+                            type="text"
+                            placeholder="https://your-resource.openai.azure.com"
+                            className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
+                            value={store.azureBaseUrl || ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureBaseUrl(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-white/30 uppercase font-bold">Deployment / Model</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. gpt-4o"
+                            className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
+                            value={store.azureModel || ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureModel(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {activeProviderId === 'apple-intelligence' && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3 text-deep-space-accent-neon mb-1">
+                          <Monitor size={16} className="text-white" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-deep-space-accent-neon">Apple Intelligence (macOS)</span>
+                        </div>
+                        <p className="text-[9px] text-white/30 leading-relaxed">
+                          Use Apple Intelligence for on-device summarization, writing, and image generation on macOS.
+                        </p>
+                        <button
+                          onClick={() => window.electronAPI?.openAppleIntelligence?.()}
+                          className="w-full py-2 bg-white/5 border border-white/10 rounded-lg text-white/60 text-[9px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                        >
+                          Open Apple Intelligence
+                        </button>
                       </div>
                     )}
                   </div>
-
-                  <button
-                    onClick={handleSaveConfig}
-                    className="w-full mt-4 py-3 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/20 hover:bg-deep-space-accent-neon/20 text-deep-space-accent-neon text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
-                  >
-                    <Save size={12} />
-                    {feedback || 'Save Intelligence Config'}
-                  </button>
                 </div>
-              </div>
+              </CollapsibleSection>
 
-              {/* Password Manager Mini Entry (Quick Access) */}
-              <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+              {/* ── Section: Advanced ───────────────────────────────── */}
+              <CollapsibleSection icon={<Shield size={12} />} label="Advanced" defaultOpen={false}>
+                <div className="space-y-4">
+                  {/* MCP Server */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-white/30 uppercase font-bold">MCP Server Port</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 3001"
+                      className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
+                      value={store.mcpServerPort || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const newPort = parseInt(e.target.value, 10);
+                        if (!isNaN(newPort)) {
+                          store.setMcpServerPort(newPort);
+                          if (window.electronAPI) {
+                            (window.electronAPI as any).setMcpServerPort(newPort);
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* AI Instructions */}
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-white/30 uppercase font-bold">Persistent AI Instructions</label>
+                    <textarea
+                      placeholder="Enter persistent instructions for the AI (e.g., 'Always respond in markdown')."
+                      className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none h-20 resize-none"
+                      value={store.additionalAIInstructions}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => store.setAdditionalAIInstructions(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CollapsibleSection>
+
+              {/* ── Save Button ──────────────────────────────────────── */}
+              <button
+                onClick={handleSaveConfig}
+                className="w-full py-3 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/20 hover:bg-deep-space-accent-neon/20 text-deep-space-accent-neon text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+              >
+                <Save size={12} />
+                {feedback || 'Save Intelligence Config'}
+              </button>
+
+              {/* ── Vault Status ─────────────────────────────────────── */}
+              <div className="pt-2 border-t border-white/5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Database size={12} className="text-white/40" />
                   <span className="text-[10px] uppercase font-black tracking-widest text-white/30">Vault Status</span>
@@ -1031,8 +1107,8 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                 <span className="text-[10px] font-black text-green-500 uppercase tracking-widest">Secure</span>
               </div>
 
-              {/* Extensions Directory */}
-              <div className="pt-4 border-t border-white/5">
+              {/* ── Extensions ───────────────────────────────────────── */}
+              <div className="pt-2 border-t border-white/5">
                 <div className="flex items-center gap-2 mb-2">
                   <Puzzle size={12} className="text-deep-space-accent-neon" />
                   <label className="block text-[10px] uppercase font-black tracking-widest text-white/40">Extensions</label>
@@ -1043,12 +1119,13 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                       window.electronAPI.openExtensionDir();
                     }
                   }}
-                  className="w-full mt-2 py-3 bg-white/5 hover:bg-white/10 text-white/60 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-white/5 hover:bg-white/10 text-white/60 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2"
                 >
                   <FolderOpen size={12} />
                   Open Extensions Directory
                 </button>
               </div>
+
             </div>
           </motion.div>
         )}
