@@ -47,6 +47,7 @@ import { AICommandQueue, type AICommand } from './AICommandQueue';
 import { type AgentState, type PlanningStep } from './AIChatSidebar/types';
 import CapabilitiesPanel from './CapabilitiesPanel';
 import DOMSearchDisplay, { DOMMetaDisplay } from './ai/DOMSearchDisplay';
+import SmartMessageContent, { URLCard, FilePathChip } from './ai/SmartMessageContent';
 import { secureDOMReader, type DOMSearchResult, type FilteredDOMResult, type DOMElement } from './ai/SecureDOMReader';
 import { detectSchedulingIntent, type SchedulingIntent } from './ai/SchedulingIntentDetector';
 import SchedulingModal from './ai/SchedulingModal';
@@ -180,27 +181,38 @@ const formatSearchResultsForLLM = (query: string, results: SearchResultEntry[]):
 const FILE_PATH_RE = /^\/(?:[^\s]+\/)+[^\s]+(?:\.[a-zA-Z0-9]+)?$|^[A-Za-z]:\\(?:[^\s]+\\)+[^\s]+(?:\.[a-zA-Z0-9]+)?$/;
 
 function FilePathLink({ filePath }: { filePath: string }) {
+  const [hovered, setHovered] = useState(false);
   const openInFinder = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     window.electronAPI?.showItemInFolder?.(filePath);
   }, [filePath]);
 
-  const displayPath = useMemo(() => {
-    if (filePath.length <= 50) return filePath;
-    const parts = filePath.split(/[/\\]/);
-    if (parts.length > 2) {
-      return parts[0] + '/.../' + parts[parts.length - 1];
-    }
-    return filePath.slice(0, 20) + '...' + filePath.slice(-20);
-  }, [filePath]);
+  const parts = useMemo(() => filePath.split(/[/\\]/), [filePath]);
+  const parentDir = useMemo(() => parts.length > 2 ? parts[parts.length - 2] : '', [parts]);
+  const fileName = useMemo(() => parts[parts.length - 1] || filePath, [parts, filePath]);
+  const isDirectory = useMemo(() => !/\.[a-zA-Z0-9]{1,10}$/.test(filePath), [filePath]);
 
   return (
     <span
       onClick={openInFinder}
-      title={filePath}
-      className="bg-white/10 px-2 py-0.5 rounded-lg text-[12px] font-mono text-sky-300 cursor-pointer hover:bg-sky-500/20 transition-all truncate inline-block max-w-[260px] align-bottom"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="inline-flex items-center gap-1 bg-white/[0.07] px-2 py-0.5 rounded-lg text-[12px] font-mono cursor-pointer hover:bg-sky-500/15 transition-all align-bottom max-w-[280px] relative"
     >
-      {displayPath}
+      {isDirectory ? (
+        <span className="text-sky-400/70 text-[10px]">&#128193;</span>
+      ) : (
+        <span className="text-emerald-400/70 text-[10px]">&#128196;</span>
+      )}
+      {parentDir && (
+        <span className="text-white/30 text-[10px]">{parentDir}/</span>
+      )}
+      <span className="text-sky-300 truncate">{fileName}</span>
+      {hovered && (
+        <span className="pointer-events-none absolute left-0 top-full z-50 mt-1 max-w-[500px] rounded-lg border border-white/10 bg-[#1a1a2e]/95 px-3 py-2 text-[11px] text-white/80 shadow-2xl backdrop-blur-xl whitespace-nowrap font-mono">
+          {filePath}
+        </span>
+      )}
     </span>
   );
 }
@@ -374,13 +386,47 @@ const collapseRawSearchDump = (content: string): string => {
 
 const sanitizeVisibleMessage = (content: string): string => {
   if (!content) return '';
-  return collapseRawSearchDump(stripAllCommands(content)
-    .replace(INTERNAL_TAG_RE, '')
-    .replace(/ACTION_CHAIN_JSON\s*[:=]?\s*```[\s\S]*?```/gi, '')
-    .replace(/ACTION_CHAIN_JSON\s*[:=]?\s*\{[\s\S]*?\}\s*$/gi, '')
-    .replace(/```(?:json)?\s*\{[\s\S]*?"(?:type|actions|commands)"[\s\S]*?\}\s*```/gi, '')
-    .replace(/\[(?:SHELL_COMMAND|ACTION_CHAIN_JSON|WEB_SEARCH|READ_PAGE_CONTENT|CLICK_ELEMENT|CLICK_AT|FIND_AND_CLICK|FILL_FORM|DOM_SEARCH|OCR_SCREEN|SCREENSHOT_AND_ANALYZE)[^\]]*\]/gi, ''))
-    .trim();
+  let cleaned = stripAllCommands(content);
+
+  // Strip [ACTION_CHAIN_JSON]...[/ACTION_CHAIN_JSON] paired tags with their content
+  cleaned = cleaned.replace(/\[ACTION_CHAIN_JSON\][\s\S]*?\[\/ACTION_CHAIN_JSON\]/gi, '');
+
+  // Strip XML-style action chain tags
+  cleaned = cleaned.replace(/<(?:action_chain|actions|tool_calls|command_json|commands)>\s*[\s\S]*?\s*<\/(?:action_chain|actions|tool_calls|command_json|commands)>/gi, '');
+
+  // Strip <think>...</think> tags if they leaked through
+  cleaned = cleaned.replace(/<(?:think|thinking|thought)>\s*[\s\S]*?\s*<\/(?:think|thinking|thought)>/gi, '');
+
+  // Strip standalone internal tags
+  cleaned = cleaned.replace(INTERNAL_TAG_RE, '');
+
+  // Strip ACTION_CHAIN_JSON = ```json...``` patterns
+  cleaned = cleaned.replace(/ACTION_CHAIN_JSON\s*[:=]?\s*```[\s\S]*?```/gi, '');
+
+  // Strip ACTION_CHAIN_JSON = {...} patterns at end of string
+  cleaned = cleaned.replace(/ACTION_CHAIN_JSON\s*[:=]?\s*\{[\s\S]*?\}\s*$/gi, '');
+
+  // Strip ```json blocks that contain command/action structure
+  cleaned = cleaned.replace(/```(?:json)?\s*\n?\s*\{[\s\S]*?"(?:type|actions|commands|command|tool_calls|action_chain)"[\s\S]*?\}\s*```/gi, '');
+
+  // Strip standalone JSON objects with command keys (bare objects in text)
+  cleaned = cleaned.replace(/\{\s*"commands"\s*:\s*\[[\s\S]*?\]\s*\}/gi, '');
+  cleaned = cleaned.replace(/\{\s*"actions"\s*:\s*\[[\s\S]*?\]\s*\}/gi, '');
+  cleaned = cleaned.replace(/\{\s*"type"\s*:\s*"[A-Z_]+"\s*,\s*"value"\s*:/gi, '');
+
+  // Strip bare command tags
+  cleaned = cleaned.replace(/\[(?:SHELL_COMMAND|ACTION_CHAIN_JSON|WEB_SEARCH|READ_PAGE_CONTENT|CLICK_ELEMENT|CLICK_AT|FIND_AND_CLICK|FILL_FORM|DOM_SEARCH|OCR_SCREEN|SCREENSHOT_AND_ANALYZE|NAVIGATE|OPEN_APP|ENABLE_CLI)[^\]]*\]/gi, '');
+
+  // Strip empty ```json``` fences left behind
+  cleaned = cleaned.replace(/```(?:json)?\s*```/g, '');
+
+  // Collapse raw search dumps
+  cleaned = collapseRawSearchDump(cleaned);
+
+  // Clean up excessive whitespace left from stripping
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+
+  return cleaned;
 };
 
 function ThinkingStatus({ state }: { state: AgentState }) {
@@ -922,7 +968,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     }));
   }, []);
 
-  const playClickSound = useCallback((variant: 'tap' | 'confirm' = 'tap') => {
+  const playClickSound = useCallback((variant: 'tap' | 'confirm' | 'success' | 'error' | 'toggle' | 'drag' | 'navigate' | 'delete' = 'tap') => {
     if (!workspacePrefs.soundsEnabled || typeof window === 'undefined') return;
     window.dispatchEvent(new CustomEvent('aartiq-play-click-sound', { detail: { variant } }));
   }, [workspacePrefs.soundsEnabled]);
@@ -2099,6 +2145,86 @@ I couldn't schedule the task. The background service may not be running. Please 
             output = `Fill error: ${e.message}`;
             commandResult = { output: '', error: output };
             resolveThinkingStep(fillStepId, 'error', e.message);
+          }
+          break;
+        }
+
+        case 'MULTI_FILL_FORM': {
+          // JSON: {"type": "MULTI_FILL_FORM", "fields": {"#email":"a@b.com","#pass":"secret"}, "delayBetweenFields": 100}
+          // Pipe: [MULTI_FILL_FORM: {"#email":"a@b.com","#pass":"secret"}]
+          let fieldMap: Record<string, string> = {};
+          const mfParams = (command as any).params || {};
+
+          if (mfParams.fields) {
+            try { fieldMap = typeof mfParams.fields === 'string' ? JSON.parse(mfParams.fields) : mfParams.fields; } catch (_) {}
+          } else {
+            try { fieldMap = JSON.parse(command.value.trim()); } catch (_) {
+              try {
+                const cleaned = command.value.trim().replace(/^["']|["']$/g, '');
+                fieldMap = JSON.parse(cleaned);
+              } catch (_) {}
+            }
+          }
+
+          const fieldEntries = Object.entries(fieldMap);
+          if (fieldEntries.length === 0) {
+            output = 'MULTI_FILL_FORM requires a JSON object mapping selectors to values';
+            break;
+          }
+
+          const mfStepId = addThinkingStep(`Filling ${fieldEntries.length} form fields...`);
+          try {
+            setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'awaiting_permission' } : cmd));
+            const confirmed = await requestActionPermission({
+              actionType: 'MULTI_FILL_FORM',
+              action: 'Fill Multiple Form Fields',
+              target: fieldEntries.map(([s, v]) => `${s}=${v}`).join(', '),
+              what: `Fill ${fieldEntries.length} fields`,
+              reason: command.reason || 'The AI wants to fill multiple form fields at once.',
+              risk: 'medium',
+            });
+            if (!confirmed) {
+              output = 'Multi-fill denied';
+              resolveThinkingStep(mfStepId, 'error', 'Permission denied');
+              break;
+            }
+            setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing' } : cmd));
+
+            const delay = parseInt(mfParams.delayBetweenFields || '100', 10);
+            let res: any;
+            if (window.electronAPI.multiFillForm) {
+              res = await window.electronAPI.multiFillForm({
+                fields: fieldMap,
+                delayBetweenFields: delay,
+                retry: 3,
+                verify: true,
+              });
+            } else {
+              // Fallback: fill fields sequentially
+              const results = [];
+              for (const [sel, val] of fieldEntries) {
+                const r = await window.electronAPI.fillForm({ selector: sel, value: val, retry: 2, verify: true, clearFirst: true });
+                results.push({ selector: sel, ...r });
+                if (delay > 0) await new Promise(r => setTimeout(r, delay));
+              }
+              res = { success: results.every(r => r.success), results };
+            }
+
+            if (res.success) {
+              const filled = res.results?.length || fieldEntries.length;
+              output = `Filled ${filled} fields successfully`;
+              resolveThinkingStep(mfStepId, 'done', `${filled} fields filled`);
+            } else {
+              const failed = res.results?.filter((r: any) => !r.success) || [];
+              const errMsg = failed.map((f: any) => f.selector).join(', ') || 'Multi-fill failed';
+              output = `Multi-fill partially failed: ${errMsg}`;
+              commandResult = { output: '', error: output };
+              resolveThinkingStep(mfStepId, 'error', errMsg);
+            }
+          } catch (e: any) {
+            output = `Multi-fill error: ${e.message}`;
+            commandResult = { output: '', error: output };
+            resolveThinkingStep(mfStepId, 'error', e.message);
           }
           break;
         }
@@ -5483,7 +5609,7 @@ I've successfully executed the following real tasks:
     else if (provider === 'xai') state.setXaiModel(model);
     else if (provider === 'ollama') state.setOllamaModel(model);
     setShowModelPicker(false);
-    playClickSound('confirm');
+    playClickSound('success');
   }, [playClickSound]);
 
   const updateActiveModelNickname = useCallback((nickname: string) => {
@@ -5975,7 +6101,7 @@ I've successfully executed the following real tasks:
                         <span className="text-[12px] font-medium text-secondary-text">Aartiq</span>
                       </div>
                       <button
-                        onClick={() => { navigator.clipboard.writeText(displayContent); }}
+                        onClick={() => { navigator.clipboard.writeText(displayContent); playClickSound('confirm'); }}
                         className="rounded-md p-1.5 text-secondary-text opacity-0 transition-all hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text group-hover:opacity-100"
                         title="Copy response"
                       >
@@ -5984,10 +6110,20 @@ I've successfully executed the following real tasks:
                     </div>
                   )}
                   {displayContent && (
-                    <StreamingMarkdownMessage
-                      content={displayContent}
-                      animate={msg.role === 'model' && msg.id === activeStreamingMessageIdRef.current}
-                    />
+                    msg.role === 'model' ? (
+                      <SmartMessageContent
+                        content={displayContent}
+                        animate={msg.id === activeStreamingMessageIdRef.current}
+                        renderText={(text, anim) => (
+                          <StreamingMarkdownMessage content={text} animate={anim} />
+                        )}
+                      />
+                    ) : (
+                      <StreamingMarkdownMessage
+                        content={displayContent}
+                        animate={false}
+                      />
+                    )
                   )}
                   {msgIsOcr && (msg as any).ocrText && (
                     <CollapsibleOCRMessage label={(msg as any).ocrLabel || 'SCREENSHOT_ANALYSIS'} content={(msg as any).ocrText} />
@@ -6396,7 +6532,7 @@ I've successfully executed the following real tasks:
                 <button onClick={handleVoiceInput} className={`rounded-lg p-2 transition-colors ${isRecordingVoice ? 'bg-red-500/10 text-red-500' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'}`} title={isRecordingVoice ? 'Stop recording' : 'Voice input'}><Mic size={18} /></button>
               )}
               {workspacePrefs.visibleComposerIcons.neuralCache && (
-                <button onClick={() => { playClickSound(); setShowRagPanel((value) => !value); }} className={`rounded-lg p-2 transition-colors ${showRagPanel ? 'bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-primary-text' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'} ${workspacePrefs.gradientEffectsEnabled ? 'shadow-[0_0_16px_rgba(124,58,237,0.18)]' : ''}`} title="Neural cache"><Database size={18} /></button>
+                <button onClick={() => { playClickSound('toggle'); setShowRagPanel((value) => !value); }} className={`rounded-lg p-2 transition-colors ${showRagPanel ? 'bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-primary-text' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'} ${workspacePrefs.gradientEffectsEnabled ? 'shadow-[0_0_16px_rgba(124,58,237,0.18)]' : ''}`} title="Neural cache"><Database size={18} /></button>
               )}
               {workspacePrefs.visibleComposerIcons.history && (
                 <button
@@ -6412,7 +6548,7 @@ I've successfully executed the following real tasks:
               )}
             </div>
             <div className="hidden min-w-0 flex-1 justify-center px-3 text-[11px] text-secondary-text/80 sm:flex">
-              <button onClick={() => { playClickSound(); setShowModelPicker((value) => !value); }} className="truncate rounded-md px-2 py-1 hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text" title={currentActiveModel}>
+                <button onClick={() => { playClickSound('toggle'); setShowModelPicker((value) => !value); }} className="truncate rounded-md px-2 py-1 hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text" title={currentActiveModel}>
                 {activeModelDisplayName}
               </button>
             </div>

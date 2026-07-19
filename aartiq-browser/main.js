@@ -284,6 +284,7 @@ const { WebSearchProvider } = require('./src/lib/web-search-service.js');
 const { MacNativePanelManager } = require('./src/lib/macos-native-panels.js');
 const { PluginManager, pluginManager } = require('./src/lib/plugin-manager.js');
 const { resolveAndClickWithAi } = require('./src/lib/browser-navigation-service.js');
+const { domEngine } = require('./src/lib/dom-engine.js');
 const { getMacOSPermissionHealth, resetMacOSPermissions } = require('./src/lib/macos-permission-health.js');
 const {
   generateAppleIntelligenceImage,
@@ -7851,6 +7852,61 @@ if (isPackaged && process.platform === 'darwin') {
       console.error('[Main] DOM fill form failed:', e);
       return { success: false, error: e.message };
     }
+  });
+
+  // --- DOM Multi-Fill Form Handler ---
+  // Accepts: { fields: {selector: value, ...}, delayBetweenFields, retry, verify, tabId }
+  ipcMain.handle('dom-multi-fill-form', async (event, opts) => {
+    const { tabId, fields, delayBetweenFields = 100, retry = 2, verify = true } = opts || {};
+    const targetTabId = tabId || activeTabId;
+    const view = tabViews.get(targetTabId);
+
+    if (!view || !view.webContents) {
+      return { success: false, error: 'Browser view not found' };
+    }
+
+    try {
+      return await domEngine.multiFillForm(view.webContents, { fields, delayBetweenFields, retry, verify });
+    } catch (e) {
+      console.error('[Main] DOM multi-fill form failed:', e);
+      return { success: false, error: e.message };
+    }
+  });
+
+  // --- DOM Engine: Find Element ---
+  ipcMain.handle('dom-engine-find', async (event, opts) => {
+    const { tabId, selector, text, 'aria-label': ariaLabel } = opts || {};
+    const targetTabId = tabId || activeTabId;
+    const view = tabViews.get(targetTabId);
+    if (!view || !view.webContents) return { success: false, error: 'Browser view not found' };
+    return domEngine.findElement(view.webContents, { selector, text, 'aria-label': ariaLabel });
+  });
+
+  // --- DOM Engine: CDP Click ---
+  ipcMain.handle('dom-cdp-click', async (event, opts) => {
+    const { tabId, x, y } = opts || {};
+    const targetTabId = tabId || activeTabId;
+    const view = tabViews.get(targetTabId);
+    if (!view || !view.webContents) return { success: false, error: 'Browser view not found' };
+    return domEngine.cdpClick(view.webContents, { x, y });
+  });
+
+  // --- DOM Engine: Accessibility Tree ---
+  ipcMain.handle('dom-get-accessibility-tree', async (event, opts) => {
+    const { tabId, maxDepth } = opts || {};
+    const targetTabId = tabId || activeTabId;
+    const view = tabViews.get(targetTabId);
+    if (!view || !view.webContents) return { error: 'Browser view not found' };
+    return domEngine.getAccessibilityTree(view.webContents, maxDepth);
+  });
+
+  // --- DOM Engine: Get Clickable Elements ---
+  ipcMain.handle('dom-get-clickable-elements', async (event, opts) => {
+    const { tabId } = opts || {};
+    const targetTabId = tabId || activeTabId;
+    const view = tabViews.get(targetTabId);
+    if (!view || !view.webContents) return [];
+    return domEngine.getClickableElements(view.webContents);
   });
 
   ipcMain.handle('dom-find-element', async (event, { tabId, selector, text }) => {
