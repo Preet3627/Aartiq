@@ -279,6 +279,7 @@ const { BrowserMcpServer } = require('./src/lib/mcp-browser-server.js');
 const { RagService } = require('./src/lib/rag-service.js');
 const { VoiceService } = require('./src/lib/voice-service.js');
 const { WorkflowRecorder } = require('./src/lib/workflow-recorder.js');
+const { automationManager } = require('./src/lib/automation-manager.js');
 const { PopSearchService, popSearchService } = require('./src/lib/pop-search-service.js');
 const { WebSearchProvider } = require('./src/lib/web-search-service.js');
 const { MacNativePanelManager } = require('./src/lib/macos-native-panels.js');
@@ -647,6 +648,39 @@ ipcMain.handle('automation:uninstall-background-service', async (event, { userMo
   } catch (error) {
     return { success: false, error: error.message };
   }
+});
+
+// --- Automation Manager CRUD IPC Handlers ---
+ipcMain.handle('automation:create-task', async (event, taskData) => {
+  try {
+    return automationManager.addTask(taskData);
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('automation:get-tasks', async () => {
+  return automationManager.getAllTasks();
+});
+
+ipcMain.handle('automation:update-task', async (event, taskId, updates) => {
+  return automationManager.updateTask(taskId, updates);
+});
+
+ipcMain.handle('automation:delete-task', async (event, taskId) => {
+  return automationManager.deleteTask(taskId);
+});
+
+ipcMain.handle('automation:toggle-task', async (event, taskId) => {
+  return automationManager.toggleTask(taskId);
+});
+
+ipcMain.handle('automation:run-task', async (event, taskId) => {
+  return automationManager.runTask(taskId);
+});
+
+ipcMain.handle('automation:get-logs', async (event, date) => {
+  return { logs: [] };
 });
 
 ipcMain.handle('siri:listen', async (event, timeout = 10000) => {
@@ -5740,6 +5774,9 @@ function checkAiActionPermission(actionType, target, riskLevel) {
 }
 
 app.whenReady().then(async () => {
+  // Initialize automation manager persistence
+  automationManager.init();
+
   // ─── Passkey / WebAuthn support ────────────────────────────────────────────
   // macOS: Enables Touch ID (Secure Enclave) + platform passkeys (iCloud Keychain, 1Password, etc.)
   // Windows: Chromium's built-in Windows Hello WebAuthn is active by default.
