@@ -3,12 +3,18 @@ const fsPromises = require('fs/promises');
 const path = require('path');
 const { app } = require('electron');
 
+/**
+ * WorkflowRecorder
+ * Records and replays sequences of DOM interactions (fill, click, navigate, wait).
+ * Each step stores enough context to be replayed by dom-engine.
+ */
 class WorkflowRecorder {
   constructor() {
     this.recording = [];
     this.isRecording = false;
     this.lastStep = 0;
     this.workflowDir = null;
+    this.recordingName = '';
   }
 
   _ensureDir() {
@@ -20,12 +26,15 @@ class WorkflowRecorder {
     }
   }
 
-  start() {
+  // ---- Recording ----
+
+  start(name = '') {
     this.recording = [];
     this.isRecording = true;
     this.lastStep = Date.now();
-    console.log('[Workflow] Recording started');
-    return { recording: true };
+    this.recordingName = name || `workflow-${Date.now()}`;
+    console.log(`[Workflow] Recording started: "${this.recordingName}"`);
+    return { recording: true, name: this.recordingName };
   }
 
   record(type, action) {
@@ -41,29 +50,57 @@ class WorkflowRecorder {
     return true;
   }
 
+  /**
+   * Record a DOM-aware step (preferred over raw record()).
+   * Types: 'fill', 'click', 'navigate', 'wait', 'scroll', 'type'
+   * Each step includes: { type, selector, text, value, url, delay, timestamp }
+   */
+  recordDomStep(step) {
+    if (!this.isRecording) return false;
+    const now = Date.now();
+    this.recording.push({
+      type: step.type || 'action',
+      selector: step.selector || null,
+      text: step.text || null,
+      value: step.value || null,
+      url: step.url || null,
+      ariaLabel: step.ariaLabel || null,
+      delay: now - this.lastStep,
+      timestamp: now,
+      metadata: step.metadata || null,
+    });
+    this.lastStep = now;
+    return true;
+  }
+
   stop() {
     this.isRecording = false;
-    console.log(`[Workflow] Recording stopped (${this.recording.length} steps)`);
-    return { steps: this.recording.length };
+    const count = this.recording.length;
+    console.log(`[Workflow] Recording stopped (${count} steps)`);
+    return { steps: count, name: this.recordingName };
   }
+
+  // ---- Persistence ----
 
   async save(name, description = '') {
     this._ensureDir();
     this.isRecording = false;
+    const workflowName = name || this.recordingName;
 
     const workflow = {
-      name,
+      name: workflowName,
       description,
       steps: this.recording,
       created: Date.now(),
-      version: '1.0',
+      version: '2.0',
+      stepTypes: [...new Set(this.recording.map(s => s.type))],
     };
 
-    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '-');
+    const safeName = workflowName.replace(/[^a-zA-Z0-9_-]/g, '-');
     const filePath = path.join(this.workflowDir, `${safeName}.json`);
     await fsPromises.writeFile(filePath, JSON.stringify(workflow, null, 2));
-    console.log(`[Workflow] Saved "${name}" to ${filePath}`);
-    return { filePath, steps: workflow.steps.length };
+    console.log(`[Workflow] Saved "${workflowName}" (${this.recording.length} steps)`);
+    return { filePath, steps: workflow.steps.length, name: workflowName };
   }
 
   async load(name) {
@@ -78,6 +115,12 @@ class WorkflowRecorder {
     return JSON.parse(await fsPromises.readFile(filePath, 'utf-8'));
   }
 
+  // ---- Replay ----
+
+  /**
+   * Replay a workflow using a step executor function.
+   * executor(step, index) should return { success: boolean, error?: string }
+   */
   async replay(name, executor) {
     const workflow = await this.load(name);
     const results = [];
@@ -87,22 +130,34 @@ class WorkflowRecorder {
     for (let i = 0; i < workflow.steps.length; i++) {
       const step = workflow.steps[i];
 
-      if (step.delay > 0) {
-        await new Promise(r => setTimeout(r, Math.min(step.delay, 2000)));
+      // Respect recorded delay between steps (capped at 3s)
+      if (step.delay > 0 && i > 0) {
+        await new Promise(r => setTimeout(r, Math.min(step.delay, 3000)));
+      }
+
+      // Wait steps: honor the value as explicit delay
+      if (step.type === 'wait') {
+        const waitMs = parseInt(step.value || step.delay, 10) || 500;
+        await new Promise(r => setTimeout(r, Math.min(waitMs, 10000)));
+        results.push({ step: i, success: true, type: 'wait' });
+        continue;
       }
 
       try {
-        const result = await executor(step);
-        results.push({ step: i, success: true, result });
+        const result = await executor(step, i);
+        results.push({ step: i, success: true, result, type: step.type });
       } catch (e) {
-        results.push({ step: i, success: false, error: e.message });
-        console.error(`[Workflow] Step ${i} failed:`, e.message);
+        results.push({ step: i, success: false, error: e.message, type: step.type });
+        console.error(`[Workflow] Step ${i} (${step.type}) failed:`, e.message);
       }
     }
 
-    console.log(`[Workflow] Replay complete: ${results.filter(r => r.success).length}/${results.length} succeeded`);
-    return results;
+    const succeeded = results.filter(r => r.success).length;
+    console.log(`[Workflow] Replay complete: ${succeeded}/${results.length} succeeded`);
+    return { results, total: results.length, succeeded, failed: results.length - succeeded };
   }
+
+  // ---- Listing ----
 
   async list() {
     this._ensureDir();
@@ -117,10 +172,12 @@ class WorkflowRecorder {
           name: raw.name,
           description: raw.description || '',
           steps: raw.steps?.length || 0,
+          stepTypes: raw.stepTypes || [],
           created: raw.created,
+          version: raw.version || '1.0',
           file,
         });
-      } catch (e) {
+      } catch (_) {
         continue;
       }
     }
@@ -143,7 +200,12 @@ class WorkflowRecorder {
     return {
       isRecording: this.isRecording,
       stepCount: this.recording.length,
+      name: this.recordingName,
     };
+  }
+
+  getSteps() {
+    return [...this.recording];
   }
 }
 

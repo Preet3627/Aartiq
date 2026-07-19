@@ -2245,6 +2245,93 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
+        case 'RECORD_WORKFLOW': {
+          const action = command.value.trim().toLowerCase() || 'start';
+          const recStepId = addThinkingStep(`Workflow recording: ${action}...`);
+          try {
+            if (action === 'start' || action === '') {
+              const name = command.value.split('|')[1]?.trim() || '';
+              const res = await (window.electronAPI as any).workflowStartRecording?.({ name }) ||
+                          await (window.electronAPI as any).invoke?.('workflow-start', { name });
+              if (res?.success) {
+                output = `Recording workflow "${res.name || 'unnamed'}"`;
+                resolveThinkingStep(recStepId, 'done', 'Recording started');
+              } else {
+                output = `Failed to start recording: ${res?.error || 'unknown'}`;
+                resolveThinkingStep(recStepId, 'error', output);
+              }
+            } else if (action === 'stop') {
+              const res = await (window.electronAPI as any).workflowStopRecording?.() ||
+                          await (window.electronAPI as any).invoke?.('workflow-stop');
+              if (res?.success) {
+                output = `Stopped recording (${res.steps || 0} steps captured)`;
+                resolveThinkingStep(recStepId, 'done', 'Recording stopped');
+              } else {
+                output = `Failed to stop recording: ${res?.error || 'unknown'}`;
+                resolveThinkingStep(recStepId, 'error', output);
+              }
+            } else if (action.startsWith('save:')) {
+              const saveName = action.replace('save:', '').trim() || `workflow-${Date.now()}`;
+              const desc = command.value.split('|')[1]?.trim() || '';
+              const res = await (window.electronAPI as any).workflowSave?.({ name: saveName, description: desc }) ||
+                          await (window.electronAPI as any).invoke?.('workflow-save', { name: saveName, description: desc });
+              if (res?.success) {
+                output = `Saved workflow "${saveName}" (${res.steps || 0} steps)`;
+                resolveThinkingStep(recStepId, 'done', 'Workflow saved');
+              } else {
+                output = `Failed to save: ${res?.error || 'unknown'}`;
+                resolveThinkingStep(recStepId, 'error', output);
+              }
+            } else {
+              output = `Unknown RECORD_WORKFLOW action: ${action}. Use start, stop, or save:name`;
+              resolveThinkingStep(recStepId, 'error', output);
+            }
+          } catch (e: any) {
+            output = `Workflow error: ${e.message}`;
+            resolveThinkingStep(recStepId, 'error', e.message);
+          }
+          break;
+        }
+
+        case 'PLAY_WORKFLOW': {
+          const workflowName = command.value.trim();
+          const playStepId = addThinkingStep(`Playing workflow: "${workflowName}"...`);
+          try {
+            setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'awaiting_permission' } : cmd));
+            const confirmed = await requestActionPermission({
+              actionType: 'PLAY_WORKFLOW',
+              action: 'Play Workflow',
+              target: workflowName,
+              what: `Replay workflow "${workflowName}"`,
+              reason: command.reason || 'The AI wants to replay a recorded workflow.',
+              risk: 'medium',
+            });
+            if (!confirmed) {
+              output = 'Workflow playback denied';
+              resolveThinkingStep(playStepId, 'error', 'Permission denied');
+              break;
+            }
+            setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing' } : cmd));
+            const res = await (window.electronAPI as any).workflowReplay?.(workflowName) ||
+                        await (window.electronAPI as any).invoke?.('workflow-replay', workflowName);
+            if (res?.success) {
+              const succeeded = res.succeeded || res.results?.filter((r: any) => r.success)?.length || 0;
+              const total = res.total || res.results?.length || 0;
+              output = `Workflow "${workflowName}" completed: ${succeeded}/${total} steps succeeded`;
+              resolveThinkingStep(playStepId, 'done', `${succeeded}/${total} steps`);
+            } else {
+              output = `Workflow failed: ${res?.error || 'unknown'}`;
+              commandResult = { output: '', error: output };
+              resolveThinkingStep(playStepId, 'error', output);
+            }
+          } catch (e: any) {
+            output = `Workflow error: ${e.message}`;
+            commandResult = { output: '', error: output };
+            resolveThinkingStep(playStepId, 'error', e.message);
+          }
+          break;
+        }
+
         // ✅ WEB_SEARCH with JSON structured params or pipe-delimited
         // JSON: {"type": "WEB_SEARCH", "query": "AI news", "pages": 5, "url": 2}
         // JSON: {"type": "WEB_SEARCH", "query": "AI news", "url": "https://specific.url"}

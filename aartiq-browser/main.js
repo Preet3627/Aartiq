@@ -8388,14 +8388,20 @@ ${tabData}`;
   // WORKFLOW RECORDER — Record / Replay Action Sequences
   // ============================================================================
 
-  ipcMain.handle('workflow-start', async () => {
+  ipcMain.handle('workflow-start', async (event, { name } = {}) => {
     if (!workflowRecorder) return { success: false, error: 'Workflow recorder not initialized' };
-    return { success: true, ...workflowRecorder.start() };
+    return { success: true, ...workflowRecorder.start(name) };
   });
 
   ipcMain.handle('workflow-record', async (event, { type, action }) => {
     if (!workflowRecorder) return { success: false, error: 'Workflow recorder not initialized' };
     const recorded = workflowRecorder.record(type, action);
+    return { success: recorded };
+  });
+
+  ipcMain.handle('workflow-record-dom-step', async (event, step) => {
+    if (!workflowRecorder) return { success: false, error: 'Workflow recorder not initialized' };
+    const recorded = workflowRecorder.recordDomStep(step);
     return { success: recorded };
   });
 
@@ -8421,21 +8427,62 @@ ${tabData}`;
   });
 
   ipcMain.handle('workflow-replay', async (event, name) => {
-    if (!workflowRecorder || !robotService) {
-      return { success: false, error: 'Workflow recorder or robot service not initialized' };
-    }
+    if (!workflowRecorder) return { success: false, error: 'Workflow recorder not initialized' };
     try {
-      const results = await workflowRecorder.replay(name, async (step) => {
+      const view = tabViews.get(activeTabId);
+      const webContents = view?.webContents;
+
+      const results = await workflowRecorder.replay(name, async (step, index) => {
+        // DOM-aware steps: use dom-engine
+        if (['fill', 'click', 'scroll', 'type'].includes(step.type) && webContents) {
+          if (step.type === 'fill' || step.type === 'type') {
+            return await domEngine.fillField(webContents, {
+              selector: step.selector,
+              text: step.text,
+              value: step.value,
+              retry: 2,
+              verify: true,
+              clearFirst: true,
+            });
+          }
+          if (step.type === 'click') {
+            return await domEngine.clickElement(webContents, {
+              selector: step.selector,
+              text: step.text,
+              'aria-label': step.ariaLabel,
+              retry: 3,
+              verify: true,
+            });
+          }
+          if (step.type === 'scroll' && step.selector) {
+            await webContents.executeJavaScript(
+              `document.querySelector(${JSON.stringify(step.selector)})?.scrollIntoView({ behavior: 'smooth', block: 'center' })`
+            );
+            return { success: true };
+          }
+        }
+
+        // Navigation step
+        if (step.type === 'navigate' && step.url && webContents) {
+          await webContents.loadURL(step.url);
+          await new Promise(r => setTimeout(r, 2000));
+          return { success: true };
+        }
+
+        // Legacy steps: robot/ocr/ai
         if (step.type === 'robot' && robotService) {
           return await robotService.execute(step.action, { skipConfirm: false });
-        } else if (step.type === 'ocr' && tesseractOcrService) {
-          return await tesseractOcrService.ocrClick(step.action.target, cometAiEngine, robotService, permissionStore);
-        } else if (step.type === 'ai' && cometAiEngine) {
+        }
+        if (step.type === 'ocr' && tesseractOcrService) {
+          return await tesseractOcrService.ocrClick(step.action?.target, cometAiEngine, robotService, permissionStore);
+        }
+        if (step.type === 'ai' && cometAiEngine) {
           return await cometAiEngine.chat(step.action);
         }
+
         return { skipped: true, type: step.type };
       });
-      return { success: true, results };
+      return { success: true, ...results };
     } catch (e) { return { success: false, error: e.message }; }
   });
 

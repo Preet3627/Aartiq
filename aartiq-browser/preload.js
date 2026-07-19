@@ -617,6 +617,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installService: (options) => ipcRenderer.invoke('automation:install-background-service', options),
   uninstallService: (options) => ipcRenderer.invoke('automation:uninstall-background-service', options),
 
+  // Workflow Recording/Playback
+  workflowStartRecording: (opts) => ipcRenderer.invoke('workflow-start', opts),
+  workflowRecordStep: (step) => ipcRenderer.invoke('workflow-record', step),
+  workflowRecordDomStep: (step) => ipcRenderer.invoke('workflow-record-dom-step', step),
+  workflowStopRecording: () => ipcRenderer.invoke('workflow-stop'),
+  workflowSave: (opts) => ipcRenderer.invoke('workflow-save', opts),
+  workflowList: () => ipcRenderer.invoke('workflow-list'),
+  workflowReplay: (name) => ipcRenderer.invoke('workflow-replay', name),
+  workflowDelete: (name) => ipcRenderer.invoke('workflow-delete', name),
+  workflowStatus: () => ipcRenderer.invoke('workflow-status'),
+
   // Unified App Icon API
   getAppIcon: (appPath) => {
     if (appPath) return ipcRenderer.invoke('get-app-icon', appPath);
