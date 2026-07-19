@@ -7585,9 +7585,10 @@ if (isPackaged && process.platform === 'darwin') {
 
   // --- DOM Click Handler with multi-strategy, retry, and verify ---
   // Accepts: { selector, text, aria-label, retry, verify, tabId }
-  // Supports CSS selector, text content, aria-label, placeholder, role strategies
+  // Enhanced DOM Click Element with multi-strategy fallback chain:
+  // dom-engine → iframe traversal → CDP sendInputEvent → AI resolution → browser-navigation-service
   ipcMain.handle('dom-click-element', async (event, opts) => {
-    const { tabId, selector, text, 'aria-label': ariaLabel, retry = 2, verify = false } = opts || {};
+    const { tabId, selector, text, 'aria-label': ariaLabel, retry = 3, verify = false } = opts || {};
     const targetTabId = tabId || activeTabId;
     const view = tabViews.get(targetTabId);
 
@@ -7595,6 +7596,40 @@ if (isPackaged && process.platform === 'darwin') {
       return { success: false, error: 'Browser view not found' };
     }
 
+    // Strategy 1: dom-engine (smart resolution + iframe traversal)
+    try {
+      const engineResult = await domEngine.clickElement(view.webContents, { selector, text, 'aria-label': ariaLabel, retry, verify });
+      if (engineResult.success) return engineResult;
+    } catch (_) {}
+
+    // Strategy 2: existing browser-navigation-service (text-matching + AI resolution)
+    try {
+      const target = text || selector || ariaLabel || '';
+      if (target) {
+        const navResult = await resolveAndClickWithAi(view.webContents, target, null);
+        if (navResult?.success) {
+          return { success: true, method: 'browser-navigation', ...navResult };
+        }
+      }
+    } catch (_) {}
+
+    // Strategy 3: CDP trusted click via sendInputEvent (if we can find coordinates)
+    try {
+      if (selector) {
+        const info = await domEngine.findElement(view.webContents, { selector, text, 'aria-label': ariaLabel });
+        if (info?.success && info.element?.rect) {
+          const { x, y } = info.element.rect;
+          const cx = x + Math.round(info.element.rect.w / 2);
+          const cy = y + Math.round(info.element.rect.h / 2);
+          const cdpResult = await domEngine.cdpClick(view.webContents, { x: cx, y: cy });
+          if (cdpResult.success) {
+            return { success: true, method: 'cdp-sendInputEvent', element: info.element };
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Strategy 4: original inline JS fallback (preserves backward compatibility)
     try {
       const clickCode = `
         (async () => {
@@ -7602,10 +7637,7 @@ if (isPackaged && process.platform === 'darwin') {
           const RETRY_DELAY = 200;
           const strategies = [];
 
-          // Strategy 1: CSS selector
           ${selector ? `strategies.push(() => document.querySelector(${JSON.stringify(selector)}));` : ''}
-          
-          // Strategy 2: Text content (exact or contains)
           ${text ? `strategies.push(() => {
             const t = ${JSON.stringify(text)}.toLowerCase();
             const clickables = document.querySelectorAll('button, a, input[type="submit"], input[type="button"], [role="button"], [role="link"], [role="option"], [role="tab"], [role="menuitem"], [onclick], .btn, .button');
@@ -7613,7 +7645,6 @@ if (isPackaged && process.platform === 'darwin') {
               const elText = (el.textContent || el.value || '').toLowerCase().trim();
               if (elText === t || elText.includes(t)) return el;
             }
-            // Fallback: any leaf element matching text
             const all = document.querySelectorAll('*');
             for (const el of all) {
               if (el.children.length === 0 || el.tagName === 'BUTTON' || el.tagName === 'A') {
@@ -7623,84 +7654,57 @@ if (isPackaged && process.platform === 'darwin') {
             }
             return null;
           });` : ''}
-          
-          // Strategy 3: aria-label
           ${ariaLabel ? `strategies.push(() => document.querySelector([aria-label="${ariaLabel.replace(/"/g, '\\"')}"]));` : ''}
-          
-          // Strategy 4: placeholder (for inputs)
           ${text ? `strategies.push(() => {
             const t = ${JSON.stringify(text)}.toLowerCase();
             return document.querySelector([placeholder*="\${t}"], [title*="\${t}"], [aria-label*="\${t}"]);
           });` : ''}
 
-          async function findAndClick() {
-            for (let retry = 0; retry < MAX_RETRIES; retry++) {
-              for (let si = 0; si < strategies.length; si++) {
-                try {
-                  const element = strategies[si]();
-                  if (!element) continue;
-
-                  // Verify it's visible and clickable
-                  const rect = element.getBoundingClientRect();
-                  if (rect.width === 0 || rect.height === 0) {
-                    // Try parent clickable
-                    const parent = element.closest('button, a, [role="button"], input, select, textarea, label, [onclick]');
-                    if (parent) {
-                      const pr = parent.getBoundingClientRect();
-                      if (pr.width > 0 && pr.height > 0) {
-                        parent.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        await new Promise(r => setTimeout(r, 150));
-                        parent.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                        parent.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                        parent.click();
-                        return { success: true, method: 'parent', tag: parent.tagName, text: (parent.textContent || '').trim().substring(0, 100) };
-                      }
+          for (let retry = 0; retry < MAX_RETRIES; retry++) {
+            for (let si = 0; si < strategies.length; si++) {
+              try {
+                const element = strategies[si]();
+                if (!element) continue;
+                const rect = element.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) {
+                  const parent = element.closest('button, a, [role="button"], input, select, textarea, label, [onclick]');
+                  if (parent) {
+                    const pr = parent.getBoundingClientRect();
+                    if (pr.width > 0 && pr.height > 0) {
+                      parent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      await new Promise(r => setTimeout(r, 150));
+                      parent.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                      parent.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                      parent.click();
+                      return { success: true, method: 'parent', tag: parent.tagName, text: (parent.textContent || '').trim().substring(0, 100) };
                     }
-                    continue;
                   }
-
-                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  await new Promise(r => setTimeout(r, 150));
-
-                  const centerX = rect.left + rect.width / 2;
-                  const centerY = rect.top + rect.height / 2;
-
-                  element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
-                  element.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window, clientX: centerX, clientY: centerY }));
-                  element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                  element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                  element.click();
-
-                  return {
-                    success: true,
-                    method: 'strategy_' + si,
-                    tag: element.tagName,
-                    text: (element.textContent || element.value || '').trim().substring(0, 100),
-                    rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }
-                  };
-                } catch (e) { continue; }
-              }
-              if (retry < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, RETRY_DELAY));
+                  continue;
+                }
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await new Promise(r => setTimeout(r, 150));
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
+                element.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window, clientX: centerX, clientY: centerY }));
+                element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+                element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+                element.click();
+                return { success: true, method: 'strategy_' + si, tag: element.tagName, text: (element.textContent || element.value || '').trim().substring(0, 100), rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) } };
+              } catch (e) { continue; }
             }
-            return { success: false, error: 'Element not found after ' + MAX_RETRIES + ' retries with ' + strategies.length + ' strategies' };
+            if (retry < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, RETRY_DELAY));
           }
-
-          return await findAndClick();
+          return { success: false, error: 'Element not found after ' + MAX_RETRIES + ' retries with ' + strategies.length + ' strategies' };
         })()
       `;
-
       const result = await view.webContents.executeJavaScript(clickCode);
-
-      // Optional verification: wait briefly and check for page changes
-      if (result.success && verify) {
-        await new Promise(r => setTimeout(r, 500));
-      }
-
-      return result;
+      if (result?.success) return result;
     } catch (e) {
       console.error('[Main] DOM click failed:', e);
-      return { success: false, error: e.message };
     }
+
+    return { success: false, error: 'Click failed: element not found via any strategy' };
   });
 
   // --- DOM Fill Form Handler with wait, clear, verify, retry ---
@@ -7847,10 +7851,22 @@ if (isPackaged && process.platform === 'darwin') {
       `;
 
       const result = await view.webContents.executeJavaScript(fillCode);
+      // Fallback to domEngine if inline JS failed
+      if (!result?.success) {
+        try {
+          const engineResult = await domEngine.fillField(view.webContents, { selector, value, retry, verify, clearFirst });
+          if (engineResult?.success) return engineResult;
+        } catch (_) {}
+      }
       return result;
     } catch (e) {
       console.error('[Main] DOM fill form failed:', e);
-      return { success: false, error: e.message };
+      // Final fallback: domEngine
+      try {
+        return await domEngine.fillField(view.webContents, { selector, value, retry, verify, clearFirst });
+      } catch (e2) {
+        return { success: false, error: e.message };
+      }
     }
   });
 
