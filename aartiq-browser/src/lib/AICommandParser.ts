@@ -105,6 +105,12 @@ export const COMMAND_REGISTRY = {
     SEARCH_VIDEO: { desc: 'Search YouTube and auto-play top result', example: '{"type": "SEARCH_VIDEO", "query": "music", "count": 5}' },
     SWITCH_TAB: { desc: 'Switch to a browser tab by ID or index', example: '{"type": "SWITCH_TAB", "id": "tab-123"}' },
     SEARCH_RESULTS: { desc: 'Get Google search result URLs directly (no tab opened)', example: '{"type": "SEARCH_RESULTS", "query": "latest AI news", "count": 5}' },
+    FILL_FORM: { desc: 'Fill a form field by selector with value', example: '[FILL_FORM: #email | user@example.com]' },
+    CLICK_AT: { desc: 'Click at screen coordinates (x, y)', example: '[CLICK_AT: 500, 300]' },
+    SCROLL_TO: { desc: 'Scroll to a DOM element', example: '[SCROLL_TO: #footer]' },
+    MULTI_FILL_FORM: { desc: 'Fill multiple form fields atomically from JSON map', example: '[MULTI_FILL_FORM: {"#name":"John","#email":"a@b.com"}]' },
+    RECORD_WORKFLOW: { desc: 'Start or stop workflow recording', example: '[RECORD_WORKFLOW: start]' },
+    PLAY_WORKFLOW: { desc: 'Replay a previously recorded workflow', example: '[PLAY_WORKFLOW: my-workflow]' },
 } as const;
 
 export const SUPPORTED_COMMANDS = Object.keys(COMMAND_REGISTRY) as Array<keyof typeof COMMAND_REGISTRY>;
@@ -123,6 +129,8 @@ function getCategoryForType(type: string): string {
         NAVIGATE: 'navigation', SEARCH: 'navigation', WEB_SEARCH: 'navigation', SEARCH_RESULTS: 'navigation',
         READ_PAGE_CONTENT: 'browser', SCREENSHOT_ANALYZE: 'browser', EXTRACT_DATA: 'browser',
         CLICK_ELEMENT: 'automation', FIND_AND_CLICK: 'automation', FILL_FORM: 'automation',
+        MULTI_FILL_FORM: 'automation', CLICK_AT: 'automation', SCROLL_TO: 'automation',
+        RECORD_WORKFLOW: 'automation', PLAY_WORKFLOW: 'automation',
         SHELL_COMMAND: 'system', OPEN_APP: 'system', SET_VOLUME: 'system', SET_BRIGHTNESS: 'system',
         GENERATE_PDF: 'pdf', CREATE_PDF_JSON: 'pdf', CREATE_FILE_JSON: 'pdf', GENERATE_DIAGRAM: 'pdf', OPEN_PDF: 'pdf',
         SHOW_IMAGE: 'media', SHOW_VIDEO: 'media', PLAY_VIDEO: 'media', SEARCH_VIDEO: 'media', GENERATE_IMAGE: 'media', APPLE_INTELLIGENCE_IMAGE: 'media', APPLE_INTELLIGENCE_SUMMARY: 'utility',
@@ -583,6 +591,45 @@ export function validateCommand(command: ParsedCommand): { valid: boolean; error
             break;
         }
 
+        case 'MULTI_FILL_FORM': {
+            if (!value.trim()) {
+                return { valid: false, error: 'MULTI_FILL_FORM requires a JSON object mapping selectors to values' };
+            }
+            try {
+                const parsed = JSON.parse(value);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    return { valid: false, error: 'MULTI_FILL_FORM value must be a JSON object {selector: value}' };
+                }
+            } catch {
+                return { valid: false, error: 'MULTI_FILL_FORM value must be valid JSON' };
+            }
+            break;
+        }
+
+        case 'CLICK_AT': {
+            const coords = value.split('|')[0].trim();
+            const parts = coords.split(',').map(s => parseInt(s.trim()));
+            if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+                return { valid: false, error: 'CLICK_AT requires coordinates as "x, y"' };
+            }
+            break;
+        }
+
+        case 'RECORD_WORKFLOW': {
+            const action = value.trim().toLowerCase();
+            if (action && !['start', 'stop', 'save'].includes(action) && !action.startsWith('save:')) {
+                return { valid: false, error: 'RECORD_WORKFLOW requires: start, stop, or save:name' };
+            }
+            break;
+        }
+
+        case 'PLAY_WORKFLOW': {
+            if (!value.trim()) {
+                return { valid: false, error: 'PLAY_WORKFLOW requires a workflow name' };
+            }
+            break;
+        }
+
         // Commands that don't require values
         case 'RELOAD':
         case 'GO_BACK':
@@ -603,6 +650,10 @@ export function validateCommand(command: ParsedCommand): { valid: boolean; error
         case 'DOM_READ_FILTERED':
         case 'SHOW_IMAGE':
         case 'SHOW_VIDEO':
+        case 'RECORD_WORKFLOW':
+        case 'MULTI_FILL_FORM':
+        case 'CLICK_AT':
+        case 'PLAY_WORKFLOW':
             // These are valid without values (params are in JSON body)
             break;
 
@@ -703,6 +754,10 @@ export function getCommandDescription(command: ParsedCommand): string {
         SEARCH_VIDEO: (v) => `Search YouTube: ${v}`,
         SWITCH_TAB: (v) => `Switch to tab: ${v}`,
         SEARCH_RESULTS: (v) => `Get search result URLs for "${v}"`,
+        MULTI_FILL_FORM: (v) => `Fill multiple form fields`,
+        CLICK_AT: (v) => `Click at coordinates (${v.split('|')[0]})`,
+        RECORD_WORKFLOW: (v) => `Workflow recording: ${v || 'toggle'}`,
+        PLAY_WORKFLOW: (v) => `Play workflow: ${v}`,
     };
 
     const descFn = descriptions[type];
