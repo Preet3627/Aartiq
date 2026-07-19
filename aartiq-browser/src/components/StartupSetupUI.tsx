@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   Cloud,
   Cpu,
+  Copy,
   ExternalLink,
   Key,
   Loader2,
@@ -15,12 +16,15 @@ import {
   Monitor,
   MoonStar,
   Palette,
+  RefreshCw,
+  Server,
   ShieldCheck,
   Sparkles,
   Square,
   SunMedium,
   Wifi,
   X,
+  CheckCircle2,
 } from 'lucide-react';
 
 import { useAppVersion } from '@/lib/useAppVersion';
@@ -136,6 +140,15 @@ const providerCards = [
     link: 'https://azure.microsoft.com/en-us/products/ai-services/openai-service',
     type: 'cloud'
   },
+  {
+    id: 'claude-mcp',
+    title: 'Claude Desktop (MCP)',
+    description: 'Connect Claude Desktop to control Aartiq via MCP — 64+ tools for browsing, automation, and system control.',
+    cta: 'Connect Claude MCP',
+    accent: 'from-violet-400/18 to-violet-400/5',
+    link: 'https://claude.ai/download',
+    type: 'mcp'
+  },
 ];
 
 
@@ -188,6 +201,26 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
   const [verificationSuccess, setVerificationSuccess] = useState<string | null>(null);
   const [fetchedModels, setFetchedModels] = useState<string[]>([]);
   const [verifiedProvider, setVerifiedProvider] = useState<string | null>(null);
+
+  // Claude MCP state
+  const [mcpAutoStatus, setMcpAutoStatus] = useState<'idle'|'writing'|'done'|'error'>('idle');
+  const [mcpAutoResult, setMcpAutoResult] = useState('');
+  const [mcpToken, setMcpToken] = useState<string>('');
+  const [mcpPhase, setMcpPhase] = useState<'idle'|'copy'|'wait'|'done'>('idle');
+
+  useEffect(() => {
+    if (mcpPhase !== 'wait') return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:3001/pairing/status');
+        const d = await res.json();
+        if (d.paired) { setMcpPhase('done'); return clearInterval(interval); }
+        if (d.expired) setMcpPhase('idle');
+      } catch (e) {}
+    }, 2000);
+    const timer = setTimeout(() => { clearInterval(interval); }, 600000);
+    return () => { clearInterval(interval); clearTimeout(timer); };
+  }, [mcpPhase]);
 
   const testChatCompletion = async (
     url: string,
@@ -311,6 +344,14 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
         setVerifiedProvider(providerId);
         store.setAIProvider(providerId);
         setVerificationSuccess('Azure OpenAI key verified and passed the math test!');
+      } else if (providerId === 'claude-mcp') {
+        if (mcpPhase === 'done') {
+          setVerifiedProvider(providerId);
+          store.setAIProvider(providerId);
+          setVerificationSuccess('Claude Desktop MCP connected!');
+        } else {
+          setVerificationError('Click "Auto-Configure" then paste the prompt to Claude Desktop to connect.');
+        }
       } else {
         setVerificationSuccess('Configuration saved!');
       }
@@ -517,7 +558,7 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                     <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em]">Choose how you want to power the assistant.</h3>
                   </div>
                   <div className="rounded-2xl border border-sky-300/18 bg-sky-300/10 px-4 py-3 text-sm leading-6 text-sky-50/82">
-                    Aartiq supports Ollama (local) or API keys for reasoning. Your settings are synced across devices securely.
+                    Aartiq supports Ollama (local), API keys for reasoning, or Claude Desktop via MCP. Your settings are synced across devices securely.
                   </div>
                 </div>
 
@@ -527,7 +568,7 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                       <div key={provider.id} className={`relative flex flex-col rounded-[28px] border border-white/10 bg-gradient-to-br ${provider.accent} p-6 transition-all`}>
                         <div className="flex items-start justify-between">
                           <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-black/10 text-white">
-                            {provider.id === 'ollama' ? <Monitor size={20} /> : <Cloud size={20} />}
+                            {provider.id === 'ollama' ? <Monitor size={20} /> : provider.id === 'claude-mcp' ? <Server size={20} /> : <Cloud size={20} />}
                           </div>
                           {store.aiProvider === provider.id && (
                             <span className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white shadow-sm ring-1 ring-white/20">
@@ -553,54 +594,169 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                                 </button>
                               </div>
 
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-bold uppercase tracking-widest text-white/30">
-                                  {provider.id === 'ollama' ? 'Ollama URL' :
-                                   provider.id === 'azure-openai' ? 'Azure Endpoint' : 'API Key'}
-                                </label>
-                                <div className="relative">
-                                  <input
-                                    type={provider.id === 'ollama' || provider.id === 'azure-openai' ? 'text' : 'password'}
-                                    value={
-                                      provider.id === 'ollama' ? store.ollamaBaseUrl :
-                                        provider.id === 'openai' ? store.openaiApiKey :
-                                          provider.id === 'google' ? store.geminiApiKey :
-                                            provider.id === 'anthropic' ? store.anthropicApiKey :
-                                              provider.id === 'groq' ? store.groqApiKey :
-                                                provider.id === 'xai' ? store.xaiApiKey :
-                                                  provider.id === 'azure-openai' ? store.azureOpenaiEndpoint : ''
-                                    }
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      if (provider.id === 'ollama') store.setOllamaBaseUrl(val);
-                                      if (provider.id === 'openai') store.setOpenaiApiKey(val);
-                                      if (provider.id === 'google') store.setGeminiApiKey(val);
-                                      if (provider.id === 'anthropic') store.setAnthropicApiKey(val);
-                                      if (provider.id === 'groq') store.setGroqApiKey(val);
-                                      if (provider.id === 'xai') store.setXaiApiKey(val);
-                                      if (provider.id === 'azure-openai') store.setAzureOpenaiEndpoint(val);
-                                    }}
-                                    placeholder={
-                                      provider.id === 'ollama' ? 'http://127.0.0.1:11434' :
-                                      provider.id === 'azure-openai' ? 'https://my-resource.openai.azure.com' : 'sk-...'
-                                    }
-                                    className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:border-sky-400/40 focus:ring-0"
-                                  />
-                                  <Key size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20" />
-                                </div>
-                                {provider.id === 'azure-openai' && (
-                                  <div className="relative mt-2">
-                                    <label className="text-[10px] font-bold uppercase tracking-widest text-white/30">API Key</label>
-                                    <input
-                                      type="password"
-                                      value={store.azureOpenaiApiKey}
-                                      onChange={(e) => store.setAzureOpenaiApiKey(e.target.value)}
-                                      placeholder="sk-..."
-                                      className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:border-sky-400/40 focus:ring-0"
-                                    />
+                              {provider.id === 'claude-mcp' ? (
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <Server size={12} className="text-violet-400" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">MCP Bridge Setup</span>
                                   </div>
-                                )}
-                              </div>
+                                  <p className="text-[10px] leading-5 text-white/40">
+                                    Aartiq will configure Claude Desktop to connect via MCP. After writing the config, restart Claude Desktop and Aartiq will auto-detect the connection.
+                                  </p>
+<button
+                                      onClick={async () => {
+                                        setMcpAutoStatus('writing');
+                                        setMcpAutoResult('');
+                                        try {
+                                          if (window.electronAPI?.autoConfigureClaudeMcp) {
+                                            const res = await window.electronAPI.autoConfigureClaudeMcp();
+                                            if (res.success) {
+                                              setMcpAutoStatus('done');
+                                              setMcpAutoResult(res.path || 'Config written');
+                                              const token = 'aart' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 10);
+                                              setMcpToken(token);
+                                              setMcpPhase('copy');
+                                              try {
+                                                await fetch('http://127.0.0.1:3001/pairing/token', {
+                                                  method: 'POST',
+                                                  headers: {'Content-Type': 'application/json'},
+                                                  body: JSON.stringify({ token })
+                                                });
+                                              } catch (e) {
+                                                console.warn('[MCP] Failed to send token to server');
+                                              }
+                                            } else {
+                                              setMcpAutoStatus('error');
+                                              setMcpAutoResult(res.error || 'Unknown error');
+                                            }
+                                          } else {
+                                            setMcpAutoStatus('error');
+                                            setMcpAutoResult('electronAPI not available');
+                                          }
+                                        } catch (e: any) {
+                                          setMcpAutoStatus('error');
+                                          setMcpAutoResult(e.message || 'Failed');
+                                        }
+                                      }}
+                                    disabled={mcpAutoStatus === 'writing'}
+                                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] transition-all hover:bg-white/8 disabled:opacity-70"
+                                  >
+                                    {mcpAutoStatus === 'writing' ? (
+                                      <><Loader2 size={14} className="animate-spin" /> Writing config...</>
+                                    ) : mcpAutoStatus === 'done' ? (
+                                      <><CheckCircle2 size={14} className="text-emerald-400" /> Config installed</>
+                                    ) : mcpAutoStatus === 'error' ? (
+                                      <><AlertCircle size={14} className="text-rose-400" /> Failed</>
+                                    ) : (
+                                      <><Sparkles size={14} /> Auto-Configure Now</>
+                                    )}
+                                  </button>
+                                  {mcpAutoStatus === 'error' && (
+                                    <p className="text-[9px] text-rose-400/80">{mcpAutoResult}</p>
+                                  )}
+                                  {mcpAutoStatus === 'done' && mcpToken && (
+                                    <div className="space-y-2 rounded-xl bg-black/30 border border-white/5 p-3">
+                                      {mcpPhase === 'copy' && (
+                                        <>
+                                          <div className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Step 2: Copy prompt (optional)</div>
+                                          <p className="text-[9px] text-white/20 mb-2">Paste into Claude Desktop after restart — or just click "Restarted" below to auto-verify</p>
+                                          <button
+                                            onClick={() => {
+                                              const prompt = `Hi! I'm connecting to Aartiq Browser running as a **local MCP server** on this machine. Here's what you need to know:
+
+**About Aartiq Browser (Local MCP Server):**
+Aartiq is an AI-native browser with OS automation running locally via MCP. You have access to 64+ tools including:
+- Browser control (tabs, navigation, form filling, screenshots, PDF generation)
+- System automation (shell commands, AppleScript, file operations)
+- Clipboard management (view/copy/clear clipboard history, specify how many items to retrieve)
+- Scheduling & automation (create cron/interval/one-time tasks, run shell commands, HTTP requests)
+- AI features (send prompts, translate, summarize, generate documents)
+- Settings control (open any settings section)
+- App search & launch, volume/brightness control, alarms
+- Web search and content extraction
+
+**Security Model:**
+- **Biometric approval** required for high-risk actions (Touch ID on macOS, Windows Hello on Windows)
+- **Per-action approval prompts** for medium-risk operations (shell commands, file writes, clipboard access)
+- **Low-risk actions** (reading tabs, navigation, search) auto-approved based on your preferences
+- **Native OS integration** — approvals appear as native system dialogs, not web popups
+- **Encrypted local vault** — API keys and tokens stored with 256-bit encryption, never leave this machine
+
+**Connection Token:** ${mcpToken}
+
+Please call the confirm_pairing tool with the following token to verify the Aartiq Browser MCP connection.`;
+                                              navigator.clipboard.writeText(prompt);
+                                              setMcpPhase('wait');
+                                            }}
+                                            className="w-full flex items-center justify-center gap-2 rounded-xl border border-violet-400/30 bg-violet-400/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-violet-300 transition-all hover:bg-violet-400/20"
+                                          >
+                                            <Copy size={14} /> Copy Prompt to Clipboard
+                                          </button>
+                                        </>
+                                      )}
+                                      {mcpPhase === 'wait' && (
+                                        <div className="flex items-center gap-2 text-[10px] text-violet-300">
+                                          <Loader2 size={12} className="animate-spin" /> Checking for connection...
+                                        </div>
+                                      )}
+                                      {mcpPhase === 'done' && (
+                                        <div className="flex items-center gap-2 text-[10px] text-emerald-400 font-bold">
+                                          <CheckCircle2 size={14} /> Claude Desktop connected!
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  <label className="text-[10px] font-bold uppercase tracking-widest text-white/30">
+                                    {provider.id === 'ollama' ? 'Ollama URL' :
+                                     provider.id === 'azure-openai' ? 'Azure Endpoint' : 'API Key'}
+                                  </label>
+                                  <div className="relative">
+                                    <input
+                                      type={provider.id === 'ollama' || provider.id === 'azure-openai' ? 'text' : 'password'}
+                                      value={
+                                        provider.id === 'ollama' ? store.ollamaBaseUrl :
+                                          provider.id === 'openai' ? store.openaiApiKey :
+                                            provider.id === 'google' ? store.geminiApiKey :
+                                              provider.id === 'anthropic' ? store.anthropicApiKey :
+                                                provider.id === 'groq' ? store.groqApiKey :
+                                                  provider.id === 'xai' ? store.xaiApiKey :
+                                                    provider.id === 'azure-openai' ? store.azureOpenaiEndpoint : ''
+                                      }
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (provider.id === 'ollama') store.setOllamaBaseUrl(val);
+                                        if (provider.id === 'openai') store.setOpenaiApiKey(val);
+                                        if (provider.id === 'google') store.setGeminiApiKey(val);
+                                        if (provider.id === 'anthropic') store.setAnthropicApiKey(val);
+                                        if (provider.id === 'groq') store.setGroqApiKey(val);
+                                        if (provider.id === 'xai') store.setXaiApiKey(val);
+                                        if (provider.id === 'azure-openai') store.setAzureOpenaiEndpoint(val);
+                                      }}
+                                      placeholder={
+                                        provider.id === 'ollama' ? 'http://127.0.0.1:11434' :
+                                        provider.id === 'azure-openai' ? 'https://my-resource.openai.azure.com' : 'sk-...'
+                                      }
+                                      className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:border-sky-400/40 focus:ring-0"
+                                    />
+                                    <Key size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20" />
+                                  </div>
+                                  {provider.id === 'azure-openai' && (
+                                    <div className="relative mt-2">
+                                      <label className="text-[10px] font-bold uppercase tracking-widest text-white/30">API Key</label>
+                                      <input
+                                        type="password"
+                                        value={store.azureOpenaiApiKey}
+                                        onChange={(e) => store.setAzureOpenaiApiKey(e.target.value)}
+                                        placeholder="sk-..."
+                                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white placeholder-white/20 focus:border-sky-400/40 focus:ring-0"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {verificationError && (
                                 <div className="flex items-start gap-2 text-[10px] text-rose-400 font-bold uppercase tracking-tighter leading-tight">
@@ -644,14 +800,25 @@ export const StartupSetupUI = ({ onComplete }: { onComplete: () => void }) => {
                                 </div>
                               )}
 
-                              <button
-                                onClick={() => handleVerifyProvider(provider.id)}
-                                disabled={verifying}
-                                className="w-full rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 transition-all hover:bg-slate-100 disabled:opacity-50 flex items-center justify-center gap-2"
-                              >
-                                {verifying ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />}
-                                {verifying ? 'Verifying...' : 'Verify & Connect'}
-                              </button>
+                              {provider.id === 'claude-mcp' ? (
+                                <button
+                                  onClick={() => handleVerifyProvider(provider.id)}
+                                  disabled={verifying || mcpAutoStatus !== 'done' || mcpPhase !== 'done'}
+                                  className="w-full rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 transition-all hover:bg-slate-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                  {verifying ? <Loader2 size={14} className="animate-spin" /> : mcpPhase === 'done' ? <CheckCircle2 size={14} /> : <Wifi size={14} />}
+                                  {verifying ? 'Verifying...' : mcpPhase === 'done' ? 'Connected' : 'Waiting for connection...'}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handleVerifyProvider(provider.id)}
+                                  disabled={verifying}
+                                  className="w-full rounded-xl bg-white px-4 py-2.5 text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 transition-all hover:bg-slate-100 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                  {verifying ? <Loader2 size={14} className="animate-spin" /> : <Wifi size={14} />}
+                                  {verifying ? 'Verifying...' : 'Verify & Connect'}
+                                </button>
+                              )}
                             </motion.div>
                           ) : (
                             <div className="flex gap-2">

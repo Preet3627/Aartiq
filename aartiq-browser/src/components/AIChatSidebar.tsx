@@ -458,11 +458,36 @@ function ThinkingStatus({ state }: { state: AgentState }) {
 
 type ComposerIconKey = 'attachments' | 'voice' | 'history' | 'automation' | 'neuralCache';
 
+type GlowMode = 'gradient' | 'rgb' | 'off';
+type GlowPreset = 'purple-cosmos' | 'ocean-blue' | 'emerald-forest' | 'sunset-fire' | 'rose-gold' | 'arctic-ice' | 'custom';
+
+interface GlowPresetScheme {
+  label: string;
+  primary: string;
+  secondary: string;
+  tertiary: string;
+}
+
+const GLOW_PRESETS: Record<GlowPreset, GlowPresetScheme> = {
+  'purple-cosmos': { label: 'Purple Cosmos', primary: '#a855f7', secondary: '#6366f1', tertiary: '#ec4899' },
+  'ocean-blue':    { label: 'Ocean Blue',    primary: '#3b82f6', secondary: '#06b6d4', tertiary: '#818cf8' },
+  'emerald-forest':{ label: 'Emerald Forest', primary: '#10b981', secondary: '#06b6d4', tertiary: '#34d399' },
+  'sunset-fire':   { label: 'Sunset Fire',   primary: '#f97316', secondary: '#ef4444', tertiary: '#f59e0b' },
+  'rose-gold':     { label: 'Rose Gold',     primary: '#f43f5e', secondary: '#ec4899', tertiary: '#fb7185' },
+  'arctic-ice':    { label: 'Arctic Ice',    primary: '#06b6d4', secondary: '#818cf8', tertiary: '#e0f2fe' },
+  'custom':        { label: 'Custom',        primary: '#a855f7', secondary: '#6366f1', tertiary: '#ec4899' },
+};
+
 interface SidebarWorkspacePreferences {
   fontFamily: string;
   fontSize: number;
   soundsEnabled: boolean;
   gradientEffectsEnabled: boolean;
+  glowMode: GlowMode;
+  glowPreset: GlowPreset;
+  glowColorPrimary: string;
+  glowColorSecondary: string;
+  glowColorTertiary: string;
   visibleComposerIcons: Record<ComposerIconKey, boolean>;
   modelNicknames: Record<string, string>;
 }
@@ -472,6 +497,11 @@ const DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES: SidebarWorkspacePreferences = {
   fontSize: 15,
   soundsEnabled: false,
   gradientEffectsEnabled: false,
+  glowMode: 'off',
+  glowPreset: 'purple-cosmos',
+  glowColorPrimary: '#a855f7',
+  glowColorSecondary: '#6366f1',
+  glowColorTertiary: '#ec4899',
   visibleComposerIcons: {
     attachments: true,
     voice: true,
@@ -490,9 +520,19 @@ const loadSidebarWorkspacePreferences = (): SidebarWorkspacePreferences => {
     const stored = window.localStorage.getItem(SIDEBAR_WORKSPACE_PREFS_KEY);
     if (!stored) return DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES;
     const parsed = JSON.parse(stored) as Partial<SidebarWorkspacePreferences>;
+    const migratedGlowMode: GlowMode = parsed.glowMode
+      || (parsed.gradientEffectsEnabled ? 'gradient' : 'off');
+    const migratedColors = parsed.glowColorPrimary
+      ? { primary: parsed.glowColorPrimary, secondary: parsed.glowColorSecondary || '#6366f1', tertiary: parsed.glowColorTertiary || '#ec4899' }
+      : GLOW_PRESETS['purple-cosmos'];
     return {
       ...DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES,
       ...parsed,
+      glowMode: migratedGlowMode,
+      glowPreset: parsed.glowPreset || 'purple-cosmos',
+      glowColorPrimary: migratedColors.primary,
+      glowColorSecondary: migratedColors.secondary,
+      glowColorTertiary: migratedColors.tertiary,
       visibleComposerIcons: {
         ...DEFAULT_SIDEBAR_WORKSPACE_PREFERENCES.visibleComposerIcons,
         ...(parsed.visibleComposerIcons || {}),
@@ -515,6 +555,14 @@ const blobToBase64 = (blob: Blob): Promise<string> => (
     reader.readAsDataURL(blob);
   })
 );
+
+const hexToRgba = (hex: string, alpha: number): string => {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+};
 
 // ---------------------------------------------------------------------------
 // Main Component
@@ -760,6 +808,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [shiftTabGlow, setShiftTabGlow] = useState(false);
+  const [composerFocused, setComposerFocused] = useState(false);
   const [workspacePrefs, setWorkspacePrefs] = useState<SidebarWorkspacePreferences>(() => loadSidebarWorkspacePreferences());
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [terminalLogs, setTerminalLogs] = useState<Array<{ id: string; command: string; output: string; success: boolean; timestamp: number }>>([]);
@@ -5764,6 +5813,12 @@ I've successfully executed the following real tasks:
 
   const effectiveSidebarWidth = sidebarWidth;
 
+  const glowActive = workspacePrefs.glowMode !== 'off';
+  const isRgbGlow = workspacePrefs.glowMode === 'rgb';
+  const glowPrimary = workspacePrefs.glowColorPrimary;
+  const glowSecondary = workspacePrefs.glowColorSecondary;
+  const glowTertiary = workspacePrefs.glowColorTertiary;
+
   return (
     <div
       className={`ai-sidebar-theme adaptive-theme-surface flex flex-col h-full overflow-hidden relative transition-[width,box-shadow,border-radius] duration-500 backdrop-blur-xl ${isFullScreen ? 'fixed inset-0 z-[9999]' : ''}`}
@@ -6455,17 +6510,19 @@ I've successfully executed the following real tasks:
 
       {/* Input Area */}
       <footer className="sticky bottom-0 px-4 pb-4 pt-3" suppressHydrationWarning style={{ background: 'linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary-bg) 88%, transparent) 34%, var(--primary-bg) 100%)', backdropFilter: 'blur(18px)' }}>
-        <div className={`mx-auto max-w-[650px] rounded-2xl border p-2.5 transition-all ${workspacePrefs.gradientEffectsEnabled ? 'shadow-[0_14px_42px_rgba(124,58,237,0.14)]' : 'shadow-[0_14px_36px_rgba(0,0,0,0.18)]'} ${shiftTabGlow
+        <div className={`mx-auto max-w-[650px] rounded-2xl border p-2.5 transition-all duration-500 ${glowActive && composerFocused ? (isRgbGlow ? 'rgb-glow-animate' : 'ai-glow-shift') : ''} ${shiftTabGlow
           ? 'border-purple-500/70 shadow-[0_0_22px_rgba(168,85,247,0.26)]'
           : 'focus-within:border-[color-mix(in_srgb,var(--accent)_35%,var(--border-color))]'
           }`} suppressHydrationWarning style={{
             ...softPanelStyle,
-            ...(workspacePrefs.gradientEffectsEnabled
+            ...(glowActive && composerFocused
               ? {
                 borderColor: 'color-mix(in srgb, var(--accent) 36%, var(--border-color))',
-                boxShadow: '0 12px 34px rgba(124,58,237,0.14), inset 0 0 0 1px rgba(255,255,255,0.04)',
+                boxShadow: `0 12px 34px ${hexToRgba(glowPrimary, 0.18)}, 0 0 40px ${hexToRgba(glowSecondary, 0.10)}, inset 0 0 0 1px rgba(255,255,255,0.04)`,
               }
-              : {}),
+              : {
+                boxShadow: '0 14px 36px rgba(0,0,0,0.18)',
+              }),
           }}>
 
           {attachments.length > 0 && (
@@ -6546,10 +6603,79 @@ I've successfully executed the following real tasks:
                     Click sounds
                     <input type="checkbox" checked={workspacePrefs.soundsEnabled} onChange={(event) => updateWorkspacePrefs({ soundsEnabled: event.target.checked })} />
                   </label>
-                  <label className="flex items-center justify-between rounded-lg border border-border-color/70 px-3 py-2 text-[13px] text-secondary-text">
-                    Purple glow
-                    <input type="checkbox" checked={workspacePrefs.gradientEffectsEnabled} onChange={(event) => updateWorkspacePrefs({ gradientEffectsEnabled: event.target.checked })} />
-                  </label>
+                  <div className="rounded-lg border border-border-color/70 px-3 py-2 space-y-2">
+                    <span className="text-[13px] text-secondary-text">Glow effect</span>
+                    <div className="flex gap-1">
+                      {(['off', 'gradient', 'rgb'] as GlowMode[]).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => {
+                            updateWorkspacePrefs({
+                              glowMode: mode,
+                              gradientEffectsEnabled: mode !== 'off',
+                            });
+                          }}
+                          className={`flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all ${
+                            workspacePrefs.glowMode === mode
+                              ? 'bg-[var(--accent)] text-white'
+                              : 'bg-white/5 text-secondary-text hover:bg-white/10'
+                          }`}
+                        >
+                          {mode === 'off' ? 'Off' : mode === 'gradient' ? 'Gradient' : 'RGB'}
+                        </button>
+                      ))}
+                    </div>
+                    {workspacePrefs.glowMode !== 'off' && (
+                      <div className="space-y-2 pt-1">
+                        <select
+                          value={workspacePrefs.glowPreset}
+                          onChange={(e) => {
+                            const preset = e.target.value as GlowPreset;
+                            const scheme = GLOW_PRESETS[preset];
+                            updateWorkspacePrefs({
+                              glowPreset: preset,
+                              glowColorPrimary: scheme.primary,
+                              glowColorSecondary: scheme.secondary,
+                              glowColorTertiary: scheme.tertiary,
+                            });
+                          }}
+                          className="w-full rounded-md border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] text-primary-text outline-none"
+                        >
+                          {(Object.keys(GLOW_PRESETS) as GlowPreset[]).filter(p => p !== 'custom').map((preset) => (
+                            <option key={preset} value={preset}>{GLOW_PRESETS[preset].label}</option>
+                          ))}
+                          <option value="custom">Custom colors...</option>
+                        </select>
+                        {workspacePrefs.glowPreset === 'custom' && (
+                          <div className="space-y-1.5">
+                            {([
+                              { key: 'glowColorPrimary', label: 'Primary' },
+                              { key: 'glowColorSecondary', label: 'Secondary' },
+                              { key: 'glowColorTertiary', label: 'Tertiary' },
+                            ] as const).map(({ key, label }) => (
+                              <div key={key} className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  value={workspacePrefs[key]}
+                                  onChange={(e) => updateWorkspacePrefs({ [key]: e.target.value })}
+                                  className="h-6 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+                                />
+                                <span className="text-[11px] text-secondary-text">{label}</span>
+                                <span className="ml-auto font-mono text-[10px] text-secondary-text/60">{workspacePrefs[key]}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {workspacePrefs.glowPreset !== 'custom' && (
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            <div className="h-3 w-3 rounded-full" style={{ background: GLOW_PRESETS[workspacePrefs.glowPreset].primary }} />
+                            <div className="h-3 w-3 rounded-full" style={{ background: GLOW_PRESETS[workspacePrefs.glowPreset].secondary }} />
+                            <div className="h-3 w-3 rounded-full" style={{ background: GLOW_PRESETS[workspacePrefs.glowPreset].tertiary }} />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   {(['attachments', 'voice', 'neuralCache', 'history', 'automation'] as ComposerIconKey[]).map((key) => (
                     <label key={key} className="flex items-center justify-between rounded-lg border border-border-color/70 px-3 py-2 text-[13px] text-secondary-text">
                       {key === 'neuralCache' ? 'Neural cache' : key.charAt(0).toUpperCase() + key.slice(1)}
@@ -6605,7 +6731,8 @@ I've successfully executed the following real tasks:
               setInputMessage(e.target.value);
             }}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSendMessage())}
-            onFocus={markSidebarInteraction}
+            onFocus={() => { markSidebarInteraction(); setComposerFocused(true); }}
+            onBlur={() => setComposerFocused(false)}
             placeholder="Ask Aartiq to browse, reason, or automate..."
             className="max-h-36 min-h-[48px] w-full resize-none bg-transparent px-2 py-2 text-[14px] text-primary-text outline-none placeholder:text-secondary-text modern-scrollbar"
           />
@@ -6619,7 +6746,7 @@ I've successfully executed the following real tasks:
                 <button onClick={handleVoiceInput} className={`rounded-lg p-2 transition-colors ${isRecordingVoice ? 'bg-red-500/10 text-red-500' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'}`} title={isRecordingVoice ? 'Stop recording' : 'Voice input'}><Mic size={18} /></button>
               )}
               {workspacePrefs.visibleComposerIcons.neuralCache && (
-                <button onClick={() => { playClickSound('toggle'); setShowRagPanel((value) => !value); }} className={`rounded-lg p-2 transition-colors ${showRagPanel ? 'bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-primary-text' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'} ${workspacePrefs.gradientEffectsEnabled ? 'shadow-[0_0_16px_rgba(124,58,237,0.18)]' : ''}`} title="Neural cache"><Database size={18} /></button>
+                <button onClick={() => { playClickSound('toggle'); setShowRagPanel((value) => !value); }} className={`rounded-lg p-2 transition-colors ${showRagPanel ? 'bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] text-primary-text' : 'text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text'} ${glowActive && composerFocused ? `shadow-[0_0_16px_${hexToRgba(glowPrimary, 0.18)}]` : ''}`} suppressHydrationWarning title="Neural cache"><Database size={18} /></button>
               )}
               {workspacePrefs.visibleComposerIcons.history && (
                 <button
@@ -6646,11 +6773,12 @@ I've successfully executed the following real tasks:
               suppressHydrationWarning
               style={{
                 color: 'var(--primary-text)',
-                background: workspacePrefs.gradientEffectsEnabled
-                  ? 'radial-gradient(circle at 35% 25%, rgba(168,85,247,0.18), rgba(99,102,241,0.06) 54%, transparent 78%)'
+                borderColor: glowActive && composerFocused ? hexToRgba(glowPrimary, 0.25) : undefined,
+                background: glowActive && composerFocused
+                  ? `radial-gradient(circle at 35% 25%, ${hexToRgba(glowPrimary, 0.20)}, ${hexToRgba(glowSecondary, 0.08)} 54%, transparent 78%)`
                   : 'transparent',
-                boxShadow: workspacePrefs.gradientEffectsEnabled
-                  ? '0 0 18px rgba(168,85,247,0.28)'
+                boxShadow: glowActive && composerFocused
+                  ? `0 0 18px ${hexToRgba(glowPrimary, 0.30)}`
                   : '0 4px 14px color-mix(in srgb, var(--shadow-color) 18%, transparent)'
               }}
             >

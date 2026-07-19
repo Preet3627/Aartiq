@@ -1235,7 +1235,7 @@ const startNativeMacUiBridge = () => {
     bridgeApp.post('/native-mac-ui/settings/open', (req, res) => {
       const { target } = req.body || {};
       try {
-        ipcMain.emit('open-settings-popup', { sender: { send: () => {} } }, target || 'profile');
+        openSettingsSection(target || 'profile');
       } catch (err) {
         console.error('[NativeMacBridge] settings/open error:', err);
       }
@@ -1607,13 +1607,7 @@ const startNativeMacUiBridge = () => {
       const task = req.body || {};
       if (!task.name) return res.status(400).json({ error: 'Missing task name' });
       try {
-        const target = getTopWindow();
-        if (!target || target.isDestroyed()) {
-          return res.status(500).json({ error: 'No browser window available' });
-        }
-        const result = await target.webContents.executeJavaScript(
-          `window.electronAPI?.scheduleTask?.(${JSON.stringify(task)})`
-        ).catch(e => ({ error: e.message }));
+        const result = automationManager.addTask(task);
         res.json({ created: true, result });
       } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1622,14 +1616,8 @@ const startNativeMacUiBridge = () => {
 
     bridgeApp.get('/native-mac-ui/automation/tasks', async (_req, res) => {
       try {
-        const target = getTopWindow();
-        if (!target || target.isDestroyed()) {
-          return res.json({ tasks: [] });
-        }
-        const result = await target.webContents.executeJavaScript(
-          'window.electronAPI?.getScheduledTasks?.()'
-        ).catch(() => null);
-        res.json({ tasks: result?.tasks || result || [] });
+        const tasks = automationManager.getAllTasks();
+        res.json({ tasks: tasks || [] });
       } catch (e) {
         res.json({ tasks: [], error: e.message });
       }
@@ -1639,13 +1627,7 @@ const startNativeMacUiBridge = () => {
       const { taskId, enabled } = req.body || {};
       if (!taskId) return res.status(400).json({ error: 'Missing taskId' });
       try {
-        const target = getTopWindow();
-        if (!target || target.isDestroyed()) {
-          return res.status(500).json({ error: 'No browser window available' });
-        }
-        await target.webContents.executeJavaScript(
-          `window.electronAPI?.toggleScheduledTask?.("${taskId}", ${!!enabled})`
-        ).catch(() => {});
+        automationManager.toggleTask(taskId);
         res.json({ toggled: taskId, enabled });
       } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1656,13 +1638,7 @@ const startNativeMacUiBridge = () => {
       const { taskId } = req.body || {};
       if (!taskId) return res.status(400).json({ error: 'Missing taskId' });
       try {
-        const target = getTopWindow();
-        if (!target || target.isDestroyed()) {
-          return res.status(500).json({ error: 'No browser window available' });
-        }
-        await target.webContents.executeJavaScript(
-          `window.electronAPI?.deleteScheduledTask?.("${taskId}")`
-        ).catch(() => {});
+        automationManager.deleteTask(taskId);
         res.json({ deleted: taskId });
       } catch (e) {
         res.status(500).json({ error: e.message });
@@ -1673,14 +1649,75 @@ const startNativeMacUiBridge = () => {
       const { taskId } = req.body || {};
       if (!taskId) return res.status(400).json({ error: 'Missing taskId' });
       try {
-        const target = getTopWindow();
-        if (!target || target.isDestroyed()) {
-          return res.status(500).json({ error: 'No browser window available' });
-        }
-        await target.webContents.executeJavaScript(
-          `window.electronAPI?.runScheduledTask?.("${taskId}")`
-        ).catch(() => {});
+        automationManager.runTask(taskId);
         res.json({ run: taskId });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ── Navigation (back/forward/reload) ──
+
+    bridgeApp.post('/native-mac-ui/navigate/back', (_req, res) => {
+      try {
+        ipcMain.emit('browser-view-go-back');
+        res.json({ navigated: 'back' });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/navigate/forward', (_req, res) => {
+      try {
+        ipcMain.emit('browser-view-go-forward');
+        res.json({ navigated: 'forward' });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/navigate/reload', (_req, res) => {
+      try {
+        ipcMain.emit('browser-view-reload');
+        res.json({ reloaded: true });
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    // ── Tab Control (switch/close by id) ──
+
+    bridgeApp.post('/native-mac-ui/tabs/switch', (req, res) => {
+      const { tabId } = req.body || {};
+      if (!tabId) return res.status(400).json({ error: 'Missing tabId' });
+      try {
+        const target = getTopWindow();
+        if (target && !target.isDestroyed()) {
+          target.webContents.executeJavaScript(
+            `window.__AARTIQ_STORE__?.getState()?.setActiveTab?.("${tabId}")`
+          ).catch(() => {});
+          res.json({ switched: tabId });
+        } else {
+          res.status(500).json({ error: 'No browser window' });
+        }
+      } catch (e) {
+        res.status(500).json({ error: e.message });
+      }
+    });
+
+    bridgeApp.post('/native-mac-ui/tabs/close', (req, res) => {
+      const { tabId } = req.body || {};
+      if (!tabId) return res.status(400).json({ error: 'Missing tabId' });
+      try {
+        const target = getTopWindow();
+        if (target && !target.isDestroyed()) {
+          target.webContents.executeJavaScript(
+            `window.__AARTIQ_STORE__?.getState()?.removeTab?.("${tabId}")`
+          ).catch(() => {});
+          res.json({ closed: tabId });
+        } else {
+          res.status(500).json({ error: 'No browser window' });
+        }
       } catch (e) {
         res.status(500).json({ error: e.message });
       }
@@ -2164,6 +2201,7 @@ const buildApplicationMenu = () => {
         { label: 'Spotlight Search', accelerator: menuAccelerator('toggle-spotlight', 'CmdOrCtrl+Shift+Space'), click: () => triggerShortcut('toggle-spotlight') },
         { label: 'Global Search', accelerator: menuAccelerator('spotlight-search', 'Alt+Space'), click: () => triggerShortcut('spotlight-search') },
         { label: 'Pop Search', accelerator: menuAccelerator('pop-search', 'CmdOrCtrl+Alt+S'), click: () => triggerShortcut('pop-search') },
+        { label: 'Focus AI Chat Input', accelerator: menuAccelerator('focus-ai-chat', 'CmdOrCtrl+Shift+C'), click: () => triggerShortcut('focus-ai-chat') },
         { label: 'Agent Task Input', accelerator: 'CmdOrCtrl+Option+Space', click: () => sendToActiveWindow('focus-ai-input') },
         { type: 'separator' },
         { label: 'Scheduling Center', click: () => openSettingsSection('automation', { preferElectron: true }) },

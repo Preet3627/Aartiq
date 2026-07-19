@@ -570,6 +570,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                                 { id: 'cart', label: 'Shopping Cart', state: store.showCartIcon, setter: store.setShowCartIcon },
                                                 { id: 'translate', label: 'Translate', state: store.showTranslateIcon, setter: store.setShowTranslateIcon },
                                                 { id: 'extensions', label: 'Extensions', state: store.showExtensionsIcon, setter: store.setShowExtensionsIcon },
+                                                { id: 'bookmark', label: 'Bookmark', state: store.showBookmarkIcon, setter: store.setShowBookmarkIcon },
                                             ].map((icon) => (
                                                 <div key={icon.id} className="flex items-center justify-between p-3 rounded-xl bg-black/20 border border-white/5">
                                                     <span className="text-xs text-white/70">{icon.label}</span>

@@ -182,6 +182,16 @@ export default function Home() {
     };
   }, []);
 
+  // Expose history getter for MCP bridge (called from main.js via executeJavaScript)
+  useEffect(() => {
+    (window as any).__GET_HISTORY__ = (limit = 50) => {
+      const state = useAppStore.getState();
+      return (state.history || []).slice(-limit).reverse();
+    };
+    // Expose store for bridge tab control
+    (window as any).__AARTIQ_STORE__ = useAppStore;
+  }, []);
+
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem('aartiq_ai_sidebar_workspace_preferences');
@@ -1391,6 +1401,7 @@ export default function Home() {
             window.dispatchEvent(new CustomEvent('aartiq:abort-action'));
             break;
           case 'focus-ai':
+          case 'focus-ai-chat':
             useAppStore.setState({ sidebarOpen: true });
             window.dispatchEvent(new CustomEvent('aartiq:focus-ai'));
             break;
@@ -2521,6 +2532,17 @@ export default function Home() {
                   )}
                 </div>
               </div>
+
+              {/* ── BOOKMARK BUTTON ── */}
+              {store.showBookmarkIcon && (
+                <button
+                  onClick={handleBookmark}
+                  className={`p-2 rounded-xl transition-all ${isBookmarked ? 'text-yellow-400 hover:text-yellow-300' : 'text-secondary-text hover:text-yellow-400'}`}
+                  title={isBookmarked ? 'Remove Bookmark' : 'Bookmark Page'}
+                >
+                  <Bookmark size={16} fill={isBookmarked ? 'currentColor' : 'none'} />
+                </button>
+              )}
 
               {/* ── RIGHT HEADER ACTIONS ── */}
               <div className="flex items-center gap-1">

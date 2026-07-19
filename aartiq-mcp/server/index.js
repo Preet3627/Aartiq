@@ -610,8 +610,13 @@ const TOOLS = [
   },
   {
     name: 'get_clipboard',
-    description: 'Get the current clipboard contents',
-    inputSchema: { type: 'object', properties: {} },
+    description: 'Get clipboard contents. Optionally specify how many recent items to return.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        count: { type: 'integer', description: 'Number of recent clipboard items to return (default 5, max 50)', default: 5 },
+      },
+    },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
   },
   {
@@ -1011,8 +1016,16 @@ async function handleToolCall(name, args) {
     }
     case 'update_security_settings':
       return jsonResult(await bridge.updateSettings(args.settings));
-    case 'get_network_security':
-      return jsonResult({ info: 'Network security config is managed via the Settings > Privacy & Security panel. Use open_settings with section "privacy" to view and modify.' });
+    case 'get_network_security': {
+      const settings = await bridge.getSettings();
+      const s = settings.settings || settings;
+      return jsonResult({
+        firewallLevel: s.firewallLevel || 'standard',
+        adBlockerEnabled: s.enableAdblocker || false,
+        showSiteWarnings: s.showSiteWarnings !== false,
+        info: 'Network security settings from Aartiq. Use update_security_settings to modify.',
+      });
+    }
 
     // Automation
     case 'create_scheduled_task':
@@ -1031,10 +1044,16 @@ async function handleToolCall(name, args) {
       const state = await bridge.getState();
       return jsonResult({ tabs: state.tabs || [], info: 'Tab list from bridge state. Use execute_shortcut with "new-tab" to open new tabs.' });
     }
-    case 'switch_tab':
-      return jsonResult(await bridge.executeShortcut('next-tab'));
-    case 'close_tab':
-      return jsonResult(await bridge.executeShortcut('close-tab'));
+    case 'switch_tab': {
+      const tabId = args.id || args.tabId || args.index;
+      if (!tabId) return jsonResult({ error: 'Provide tab id, tabId, or index' });
+      return jsonResult(await bridge.switchTab(String(tabId)));
+    }
+    case 'close_tab': {
+      const closeId = args.id || args.tabId;
+      if (!closeId) return jsonResult({ error: 'Provide tab id or tabId' });
+      return jsonResult(await bridge.closeTab(String(closeId)));
+    }
     case 'navigate': {
       if (args.newTab) {
         await bridge.sendPrompt(`Navigate to ${args.url}`, 'mcp-navigate');
@@ -1045,7 +1064,14 @@ async function handleToolCall(name, args) {
     }
     case 'get_active_tab_url': {
       const state = await bridge.getState();
-      return jsonResult({ info: 'Active tab info available via browser state. Use open_ai_sidebar and send_ai_prompt to interact with tabs.' });
+      const tabs = state.tabs || [];
+      const activeTab = tabs.find(t => t.active || t.id === state.activeTabId) || tabs[0] || null;
+      return jsonResult({
+        url: activeTab ? activeTab.url : state.currentUrl || null,
+        title: activeTab ? activeTab.title : null,
+        id: activeTab ? activeTab.id : state.activeTabId || null,
+        totalTabs: tabs.length,
+      });
     }
     case 'read_page_content': {
       await bridge.sendPrompt('Read and return the text content of the current page', 'mcp-read');
@@ -1053,11 +1079,11 @@ async function handleToolCall(name, args) {
       return { content: [{ type: 'text', text: result.response || 'Could not read page' }] };
     }
     case 'go_back':
-      return jsonResult(await bridge.executeShortcut('prev-tab'));
+      return jsonResult(await bridge.navigateBack());
     case 'go_forward':
-      return jsonResult(await bridge.executeShortcut('next-tab'));
+      return jsonResult(await bridge.navigateForward());
     case 'reload_page':
-      return jsonResult({ info: 'Page reload triggered. Use the browser directly for precise reload control.' });
+      return jsonResult(await bridge.reloadPage());
     case 'click_element':
       return jsonResult(await bridge.sendPrompt(`Click the element: ${args.selector || args.text}`, 'mcp-interact'));
     case 'fill_form':
@@ -1077,21 +1103,34 @@ async function handleToolCall(name, args) {
       return jsonResult(await bridge.sendPrompt(`Open and play this video in a new tab: ${args.url}`, 'mcp-video'));
 
     // System
-    case 'get_sync_status':
+    case 'get_sync_status': {
+      const syncSettings = await bridge.getSettings();
+      const ss = syncSettings.settings || syncSettings;
       return jsonResult({
-        wifiSync: 'WebSocket on port 3004, UDP discovery on port 3005',
-        cloudSync: 'Firebase-based, encrypted',
-        p2pSync: 'WebRTC peer-to-peer file transfer',
-        info: 'Open sync panel for detailed status.',
+        wifiSyncEnabled: ss.wifiSyncEnabled !== false,
+        cloudSyncEnabled: ss.cloudSyncEnabled !== false,
+        p2pEnabled: ss.p2pEnabled !== false,
+        cloudSyncConsent: ss.cloudSyncConsent || false,
+        info: 'Sync service status from Aartiq settings.',
       });
+    }
     case 'copy_to_clipboard':
       return jsonResult(await bridge.clipboardCopy(args.text));
     case 'get_clipboard': {
       const state = await bridge.getState();
-      return jsonResult({ clipboardItems: state.clipboardItems || [] });
+      const items = state.clipboardItems || [];
+      const count = Math.min(Math.max(args.count || 5, 1), 50);
+      const recent = items.slice(0, count);
+      return jsonResult({
+        currentClip: recent[0] || null,
+        recentClips: recent,
+        totalItems: items.length,
+      });
     }
-    case 'set_volume':
-      return jsonResult({ info: `Volume control available on macOS. Use system controls or AI sidebar for volume adjustment.` });
+    case 'set_volume': {
+      const level = Math.min(Math.max(args.level || 50, 0), 100);
+      return jsonResult(await bridge.sendPrompt(`Set system volume to ${level} percent`, 'mcp-volume'));
+    }
     case 'execute_shortcut':
       return jsonResult(await bridge.executeShortcut(args.action));
 

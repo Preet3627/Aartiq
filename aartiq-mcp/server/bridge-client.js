@@ -209,6 +209,26 @@ class BridgeClient {
     return this._request('POST', '/native-mac-ui/execute-shortcut', { action });
   }
 
+  async navigateBack() {
+    return this._request('POST', '/native-mac-ui/navigate/back');
+  }
+
+  async navigateForward() {
+    return this._request('POST', '/native-mac-ui/navigate/forward');
+  }
+
+  async reloadPage() {
+    return this._request('POST', '/native-mac-ui/navigate/reload');
+  }
+
+  async switchTab(tabId) {
+    return this._request('POST', '/native-mac-ui/tabs/switch', { tabId });
+  }
+
+  async closeTab(tabId) {
+    return this._request('POST', '/native-mac-ui/tabs/close', { tabId });
+  }
+
   async sendAiPromptAndWait(prompt, source = 'mcp', pollTimeout = AI_POLL_TIMEOUT_MS) {
     const preState = await this.getState();
     const preMsgCount = Array.isArray(preState.messages) ? preState.messages.length : 0;

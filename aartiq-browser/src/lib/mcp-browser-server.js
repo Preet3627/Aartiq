@@ -100,6 +100,15 @@ class BrowserMcpServer {
     this._approvalResolvers = new Map();
     this._pendingBiometricCall = null;
     this._nativeApprovalManager = null;
+    this._pairingToken = null;
+    this._pairingTokenExpiry = null;
+    this._pairingConfirmed = false;
+  }
+
+  setPairingToken(token) {
+    this._pairingToken = token;
+    this._pairingTokenExpiry = Date.now() + 600000; // 10 minutes
+    this._pairingConfirmed = false;
   }
 
   _getNativeApprovalManager() {
@@ -1240,6 +1249,37 @@ class BrowserMcpServer {
           }
         },
       },
+      {
+        name: 'confirm_pairing',
+        description: 'Confirm the Aartiq connection via a one-time token. Call this when asked to verify or pair with Aartiq Browser.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            token: {
+              type: 'string',
+              description: 'The exact pairing token provided by the Aartiq setup guide.'
+            }
+          },
+          required: ['token']
+        },
+        execute: async (args) => {
+          const token = args && args.token;
+          if (!token || typeof token !== 'string') {
+            return { content: [{ type: 'text', text: 'Error: token is required.' }], isError: true };
+          }
+          if (!this._pairingToken || !this._pairingTokenExpiry) {
+            return { content: [{ type: 'text', text: 'No active pairing expecting from Aartiq. Ensure you have the latest Aartiq setup, or the token may have expired.' }], isError: true };
+          }
+          if (Date.now() > this._pairingTokenExpiry) {
+            return { content: [{ type: 'text', text: 'The pairing token has expired. Please generate a new one from the Aartiq setup.' }], isError: true };
+          }
+          if (this._pairingToken !== token) {
+            return { content: [{ type: 'text', text: 'Token mismatch. Please check that you copied the exact token from the Aartiq setup.' }], isError: true };
+          }
+          this._pairingConfirmed = true;
+          return { content: [{ type: 'text', text: 'Success! Aartiq Browser is now connected to Claude.' }], isError: false };
+        }
+      }
     ];
   }
 
@@ -1468,6 +1508,7 @@ class BrowserMcpServer {
   }
 
   async start(port) {
+    this._clientConnected = false;
     const toolDefinitions = this.getToolDefinitions();
 
     this.server = new Server(
@@ -1529,11 +1570,50 @@ class BrowserMcpServer {
     );
 
     this.httpServer = http.createServer(async (req, res) => {
+      // CORS for renderer polling
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
       const pathname = req.url ? req.url.split('?')[0] : '';
 
       if (req.method === 'GET' && pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok', tabs: this._getTabs().length }));
+        return;
+      }
+
+      if (req.method === 'GET' && pathname === '/pairing/status') {
+        const paired = this._pairingConfirmed;
+        const expired = this._pairingTokenExpiry && Date.now() > this._pairingTokenExpiry;
+        console.log(`[MCP-Browser] /pairing/status: paired=${paired}, expired=${expired}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ paired, expired: !!expired }));
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/pairing/token') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            if (!data || !data.token) throw new Error('token required');
+            this.setPairingToken(data.token);
+            console.log(`[MCP-Browser] Pairing token set`);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
+          } catch (e) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
         return;
       }
 
@@ -1545,6 +1625,13 @@ class BrowserMcpServer {
         }
         const transport = new SSEServerTransport('/messages', res);
         this.transport = transport;
+        
+        // Auto-confirm pairing when SSE client connects (local mcp-remote)
+        if (this._pairingToken && !this._pairingConfirmed) {
+          this._pairingConfirmed = true;
+          console.log('[MCP-Browser] SSE client connected — pairing auto-confirmed');
+        }
+        
         res.on('close', () => {
           if (this.transport === transport) {
             this.transport = null;

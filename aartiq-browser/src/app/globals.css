@@ -1200,6 +1200,27 @@ body {
   }
 }
 
+/* RGB glow cycling for AI chat composer */
+@keyframes rgb-glow-cycling {
+  0%   { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+.rgb-glow-animate {
+  animation: rgb-glow-cycling 3s linear infinite;
+}
+
+/* Smooth AI-native color shift for glow */
+@keyframes ai-glow-shift {
+  0%   { filter: hue-rotate(0deg) brightness(1); }
+  25%  { filter: hue-rotate(30deg) brightness(1.05); }
+  50%  { filter: hue-rotate(-20deg) brightness(1); }
+  75%  { filter: hue-rotate(15deg) brightness(1.03); }
+  100% { filter: hue-rotate(0deg) brightness(1); }
+}
+.ai-glow-shift {
+  animation: ai-glow-shift 6s ease-in-out infinite;
+}
+
 /* Typing cursor classes */
 .typing-cursor {
   display: inline-block;

@@ -504,17 +504,16 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
 
               {/* ── Section: AI Provider ────────────────────────────── */}
               <CollapsibleSection icon={<Cloud size={12} />} label="AI Provider" defaultOpen={true}>
-                <div className="space-y-3">
-                  <select
-                    id="ai-orchestration-select"
-                    aria-label="AI Orchestration Provider Selection"
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-deep-space-accent-neon/50 transition-all font-bold"
-                    value={activeProviderId || ''}
-                    onChange={handleProviderChange}
-                  >
-                    {providers.map((p: { id: string; name: string }) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
+<div className="space-y-3">
+                          <p className="text-[9px] text-white/30 leading-relaxed">
+                            Use Apple Intelligence for on-device summarization, writing, and image generation on macOS.
+                          </p>
+                          <button
+                            className="w-full py-2 bg-white/5 border border-white/10 rounded-lg text-white/60 text-[9px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                          >
+                            Open Apple Intelligence Settings
+                          </button>
+                        </div>
               </CollapsibleSection>
 
               {/* ── Section: Provider Configuration ─────────────────── */}
@@ -662,40 +661,46 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                               defaultValue="gpt-oss-cloud:120b"
                             />
                             <button
-                              onClick={() => {
-                                const input = document.getElementById('ollama-pull-input') as HTMLInputElement;
-                                const model = input.value.trim();
-                                if (!model || !window.electronAPI) return;
-                                setFeedback(`Pulling ${model}...`);
-                                window.electronAPI.ollamaPullModel(model).then((res) => {
-                                  if (res.success) {
-                                    setFeedback(`Installed: ${model}`);
-                                  } else {
-                                    setFeedback(`Failed: ${res.error}`);
-                                  }
-                                  setTimeout(() => setFeedback(null), 3000);
-                                });
-                              }}
+onClick={() => {
+                                  const input = document.getElementById('ollama-pull-input') as HTMLInputElement;
+                                  const model = input.value.trim();
+                                  if (!model || !window.electronAPI) return;
+                                  setFeedback(`Pulling ${model}...`);
+                                  const cleanup = window.electronAPI.pullOllamaModel(model, (data) => {
+                                    if (data.done) {
+                                      if (data.success) {
+                                        setFeedback(`Installed: ${model}`);
+                                      } else {
+                                        setFeedback(`Failed: ${data.output}`);
+                                      }
+                                      setTimeout(() => setFeedback(null), 3000);
+                                    }
+                                  });
+                                  // Auto-cleanup after 5 minutes
+                                  setTimeout(cleanup, 300000);
+                                }}
                               className="px-3 py-2 bg-deep-space-accent-neon/10 border border-deep-space-accent-neon/20 rounded-lg text-deep-space-accent-neon text-[9px] font-bold uppercase hover:bg-deep-space-accent-neon/20 transition-all"
                             >
                               Pull
                             </button>
                           </div>
                           <div className="flex gap-2 mt-1">
-                            <label className="flex-1 flex items-center gap-2 px-3 py-2 bg-black/20 border border-white/5 rounded-lg text-[9px] text-white/40 cursor-pointer hover:bg-white/[0.03] transition-all">
-                              <input type="file" accept=".gguf" className="hidden" onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file && window.electronAPI) {
-                                  setFeedback(`Importing ${file.name}...`);
-                                  window.electronAPI.ollamaImportModel?.(file.path).then((res: any) => {
-                                    setFeedback(res?.success ? `Imported: ${file.name}` : `Failed: ${res?.error}`);
-                                    setTimeout(() => setFeedback(null), 3000);
-                                  });
-                                }
-                              }} />
+                            <button
+                              className="flex-1 flex items-center gap-2 px-3 py-2 bg-black/20 border border-white/5 rounded-lg text-[9px] text-white/40 hover:bg-white/[0.03] transition-all"
+                              onClick={async () => {
+                                if (!window.electronAPI) return;
+                                setFeedback('Selecting file...');
+                                const filePath = await window.electronAPI.selectLocalFile({ filters: [{ name: 'GGUF Models', extensions: ['gguf'] }], properties: ['openFile'] });
+                                if (!filePath) return;
+                                setFeedback(`Importing ${filePath.split('/').pop() || filePath}...`);
+                                const res = await window.electronAPI.importOllamaModel({ filePath });
+                                setFeedback(res?.success ? `Imported: ${filePath.split('/').pop()}` : `Failed: ${res?.error}`);
+                                setTimeout(() => setFeedback(null), 3000);
+                              }}
+                            >
                               <FolderOpen size={10} />
                               Import .GGUF
-                            </label>
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -758,10 +763,10 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                         <div className="flex items-center justify-between">
                           <span className="text-[9px] text-white/30 uppercase font-bold">Auto-Update Models</span>
                           <button
-                            onClick={() => store.setGeminiAutoUpdate(!store.geminiAutoUpdate)}
-                            className={`w-8 h-4 rounded-full transition-all ${store.geminiAutoUpdate ? 'bg-deep-space-accent-neon' : 'bg-white/10'}`}
+                            onClick={() => store.setAutoGeminiModelUpdates(!store.autoGeminiModelUpdates)}
+                            className={`w-8 h-4 rounded-full transition-all ${store.autoGeminiModelUpdates ? 'bg-deep-space-accent-neon' : 'bg-white/10'}`}
                           >
-                            <span className={`block w-3 h-3 rounded-full bg-white shadow transition-transform ${store.geminiAutoUpdate ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                            <span className={`block w-3 h-3 rounded-full bg-white shadow transition-transform ${store.autoGeminiModelUpdates ? 'translate-x-4' : 'translate-x-0.5'}`} />
                           </button>
                         </div>
                       </div>
@@ -1005,8 +1010,8 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                             type="password"
                             placeholder="Enter Azure API Key"
                             className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
-                            value={store.azureApiKey || ''}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureApiKey(e.target.value)}
+                            value={store.azureOpenaiApiKey || ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureOpenaiApiKey(e.target.value)}
                           />
                         </div>
                         <div className="space-y-1">
@@ -1015,8 +1020,8 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                             type="text"
                             placeholder="https://your-resource.openai.azure.com"
                             className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
-                            value={store.azureBaseUrl || ''}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureBaseUrl(e.target.value)}
+                            value={store.azureOpenaiEndpoint || ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureOpenaiEndpoint(e.target.value)}
                           />
                         </div>
                         <div className="space-y-1">
@@ -1025,8 +1030,8 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                             type="text"
                             placeholder="e.g. gpt-4o"
                             className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none"
-                            value={store.azureModel || ''}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureModel(e.target.value)}
+                            value={store.azureOpenaiModel || ''}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => store.setAzureOpenaiModel(e.target.value)}
                           />
                         </div>
                       </div>
@@ -1042,10 +1047,9 @@ const LLMProviderSettings: React.FC<LLMProviderSettingsProps> = (props: LLMProvi
                           Use Apple Intelligence for on-device summarization, writing, and image generation on macOS.
                         </p>
                         <button
-                          onClick={() => window.electronAPI?.openAppleIntelligence?.()}
                           className="w-full py-2 bg-white/5 border border-white/10 rounded-lg text-white/60 text-[9px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
                         >
-                          Open Apple Intelligence
+                          Open Apple Intelligence Settings
                         </button>
                       </div>
                     )}

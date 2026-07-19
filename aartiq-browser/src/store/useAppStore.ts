@@ -315,11 +315,13 @@ export interface BrowserState {
     showCartIcon: boolean;
     showTranslateIcon: boolean;
     showExtensionsIcon: boolean;
+    showBookmarkIcon: boolean;
     setShowDownloadsIcon: (show: boolean) => void;
     setShowClipboardIcon: (show: boolean) => void;
     setShowCartIcon: (show: boolean) => void;
     setShowTranslateIcon: (show: boolean) => void;
     setShowExtensionsIcon: (show: boolean) => void;
+    setShowBookmarkIcon: (show: boolean) => void;
 
     // Advanced Theme customization
     themeOpacity: number;
@@ -549,11 +551,13 @@ export const useAppStore = create<BrowserState>()(
             showCartIcon: true,
             showTranslateIcon: true,
             showExtensionsIcon: true,
+            showBookmarkIcon: true,
             setShowDownloadsIcon: (show: boolean) => set({ showDownloadsIcon: show }),
             setShowClipboardIcon: (show: boolean) => set({ showClipboardIcon: show }),
             setShowCartIcon: (show: boolean) => set({ showCartIcon: show }),
             setShowTranslateIcon: (show: boolean) => set({ showTranslateIcon: show }),
             setShowExtensionsIcon: (show: boolean) => set({ showExtensionsIcon: show }),
+            setShowBookmarkIcon: (show: boolean) => set({ showBookmarkIcon: show }),
 
             // Advanced Theme customization
             themeOpacity: 100,
@@ -1285,6 +1289,7 @@ export const useAppStore = create<BrowserState>()(
                 showCartIcon: state.showCartIcon,
                 showTranslateIcon: state.showTranslateIcon,
                 showExtensionsIcon: state.showExtensionsIcon,
+                showBookmarkIcon: state.showBookmarkIcon,
                 themeOpacity: state.themeOpacity,
                 themeBlur: state.themeBlur,
             }),

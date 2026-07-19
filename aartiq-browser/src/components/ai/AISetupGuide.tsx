@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Sparkles, Cloud, Cpu, Shield, Key, 
   ChevronRight, ChevronLeft, ExternalLink, 
-  Check, Wifi, Info, Globe, AlertCircle, Download, X, Monitor
+  Check, Wifi, Info, Globe, AlertCircle, Download, X, Monitor,
+  Server, Copy, Loader2, CheckCircle2, RefreshCw
 } from 'lucide-react';
 
 import { useAppStore } from '@/store/useAppStore';
@@ -73,6 +74,26 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
   const [selectedProviderForSetup, setSelectedProviderForSetup] = useState<string | null>(null);
   const [verifyingProvider, setVerifyingProvider] = useState<string | null>(null);
   const [providerVerification, setProviderVerification] = useState<Record<string, { success: boolean; message: string }>>({});
+
+  // Claude MCP token-based state
+  const [claudeMcpAutoStatus, setClaudeMcpAutoStatus] = useState<'idle'|'writing'|'done'|'error'>('idle');
+  const [claudeMcpAutoResult, setClaudeMcpAutoResult] = useState<string>('');
+  const [claudeMcpToken, setClaudeMcpToken] = useState<string>('');
+  const [claudeMcpPhase, setClaudeMcpPhase] = useState<'idle'|'copy'|'wait'|'done'>('idle');
+
+  useEffect(() => {
+    if (claudeMcpPhase !== 'wait') return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('http://127.0.0.1:3001/pairing/status');
+        const d = await res.json();
+        if (d.paired) { setClaudeMcpPhase('done'); return clearInterval(interval); }
+        if (d.expired) setClaudeMcpPhase('idle');
+      } catch (e) {}
+    }, 2000);
+    const timer = setTimeout(() => { clearInterval(interval); }, 600000);
+    return () => { clearInterval(interval); clearTimeout(timer); };
+  }, [claudeMcpPhase]);
 
   const isWindows = useMemo(() => {
     if (typeof navigator === 'undefined') return false;
@@ -173,6 +194,16 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
         'Recommended: gemini-2.5-flash (fast & free tier available)'
       ]
     },
+    'claude-mcp': {
+      url: 'https://claude.ai/download',
+      steps: [
+        'Download Claude Desktop from claude.ai/download',
+        'Click "Auto-Configure" below to write the config file',
+        'Restart Claude Desktop after configuration',
+        'Claude will connect to Aartiq via MCP bridge',
+        'Verify the connection with the PIN code shown here'
+      ]
+    },
 
   };
 
@@ -233,6 +264,13 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
       } else if (providerId === 'azure-openai') {
         success = true;
         message = 'Azure OpenAI configured!';
+      } else if (providerId === 'claude-mcp') {
+        if (claudeMcpPhase === 'done') {
+          success = true;
+          message = 'Claude Desktop MCP connected!';
+        } else {
+          message = 'Auto-configure Claude Desktop first.';
+        }
       }
       
       setProviderVerification(prev => ({ ...prev, [providerId]: { success, message } }));
@@ -264,6 +302,9 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
     if (providerId === 'azure-openai') {
       return 'configured';
     }
+    if (providerId === 'claude-mcp') {
+      return claudeMcpPhase === 'done' ? 'configured' : 'missing';
+    }
     return 'missing';
   };
 
@@ -275,10 +316,11 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
     if (aiProvider === 'anthropic') return !!anthropicApiKey && anthropicApiKey.length > 5;
     if (aiProvider === 'groq') return !!groqApiKey && groqApiKey.length > 5;
     if (aiProvider === 'xai') return !!xaiApiKey && xaiApiKey.length > 5;
+    if (aiProvider === 'claude-mcp') return claudeMcpPhase === 'done';
     
     // Fallback: is anything at all configured?
-    return !!(openaiApiKey || geminiApiKey || anthropicApiKey || groqApiKey || xaiApiKey || ollamaBaseUrl);
-  }, [aiProvider, openaiApiKey, geminiApiKey, anthropicApiKey, groqApiKey, xaiApiKey, ollamaBaseUrl]);
+    return !!(openaiApiKey || geminiApiKey || anthropicApiKey || groqApiKey || xaiApiKey || ollamaBaseUrl || claudeMcpPhase === 'done');
+  }, [aiProvider, openaiApiKey, geminiApiKey, anthropicApiKey, groqApiKey, xaiApiKey, ollamaBaseUrl, claudeMcpPhase]);
 
   const loadAutomationTasks = useCallback(async () => {
     if (!window.electronAPI?.getScheduledTasks) return;
@@ -408,6 +450,14 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
       icon: <Cloud size={16} className="text-blue-400" />, 
       desc: 'Enterprise + compliance features',
       recommended: 'gpt-4.1-mini'
+    },
+    { 
+      id: 'claude-mcp', 
+      name: 'Claude Desktop (MCP)', 
+      url: 'https://claude.ai/download', 
+      icon: <Server size={16} className="text-violet-400" />, 
+      desc: 'Connect Claude Desktop to control Aartiq via MCP',
+      recommended: 'One-time PIN setup'
     },
   ];
 
@@ -632,6 +682,152 @@ const AISetupGuide: React.FC<AISetupGuideProps> = ({ onClose, onComplete }) => {
                               </li>
                             ))}
                           </ol>
+
+                          {/* Claude MCP: Auto-Configure + PIN */}
+                          {p.id === 'claude-mcp' && (
+                            <div className="mt-4 space-y-3">
+                              <p className="text-[10px] text-white/40 leading-relaxed">
+                                Auto-configure Claude Desktop to connect via MCP. After installing, restart Claude Desktop and Aartiq will auto-detect the connection.
+                              </p>
+                              <button
+                                onClick={async () => {
+                                  setClaudeMcpAutoStatus('writing');
+                                  setClaudeMcpAutoResult('');
+                                  try {
+                                    if (window.electronAPI?.autoConfigureClaudeMcp) {
+                                      const res = await window.electronAPI.autoConfigureClaudeMcp();
+                                      if (res.success) {
+                                        setClaudeMcpAutoStatus('done');
+                                        setClaudeMcpAutoResult(res.path || 'Config written');
+                                        const token = 'aart' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 10);
+                                        setClaudeMcpToken(token);
+                                        setClaudeMcpPhase('copy');
+                                        try {
+                                          await fetch('http://127.0.0.1:3001/pairing/token', {
+                                            method: 'POST',
+                                            headers: {'Content-Type': 'application/json'},
+                                            body: JSON.stringify({ token })
+                                          });
+                                        } catch (e) {
+                                          console.warn('[MCP] Failed to send token to server');
+                                        }
+                                      } else {
+                                        setClaudeMcpAutoStatus('error');
+                                        setClaudeMcpAutoResult(res.error || 'Unknown error');
+                                      }
+                                    } else {
+                                      setClaudeMcpAutoStatus('error');
+                                      setClaudeMcpAutoResult('electronAPI not available');
+                                    }
+                                  } catch (e: any) {
+                                    setClaudeMcpAutoStatus('error');
+                                    setClaudeMcpAutoResult(e.message || 'Failed');
+                                  }
+                                }}
+                                disabled={claudeMcpAutoStatus === 'writing'}
+                                className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border text-[10px] font-black uppercase tracking-[0.2em] transition-all disabled:opacity-70"
+                                style={{
+                                  background: claudeMcpAutoStatus === 'done' ? 'rgba(34,197,94,0.1)' : claudeMcpAutoStatus === 'error' ? 'rgba(239,68,68,0.1)' : 'var(--accent)',
+                                  borderColor: claudeMcpAutoStatus === 'done' ? 'rgba(34,197,94,0.3)' : claudeMcpAutoStatus === 'error' ? 'rgba(239,68,68,0.3)' : 'transparent',
+                                  color: claudeMcpAutoStatus === 'done' ? '#22c55e' : claudeMcpAutoStatus === 'error' ? '#ef4444' : 'var(--primary-bg)',
+                                }}
+                              >
+                                {claudeMcpAutoStatus === 'writing' ? (
+                                  <><Loader2 size={14} className="animate-spin" /> Writing config...</>
+                                ) : claudeMcpAutoStatus === 'done' ? (
+                                  <><CheckCircle2 size={14} /> Config installed! Restart Claude Desktop</>
+                                ) : claudeMcpAutoStatus === 'error' ? (
+                                  <><AlertCircle size={14} /> Failed: {claudeMcpAutoResult || 'Retry'}</>
+                                ) : (
+                                  <><Sparkles size={14} /> Auto-Configure Now</>
+                                )}
+                              </button>
+
+                              {claudeMcpAutoStatus === 'error' && (
+                                <button
+                                  onClick={() => navigator.clipboard.writeText(JSON.stringify({
+                                    mcpServers: { "aartiq-browser": { command: "npx", args: ["-y", "mcp-remote@0.1.17", "http://127.0.0.1:3001/sse"] } }
+                                  }, null, 2))}
+                                  className="w-full flex items-center justify-center gap-1.5 p-2 rounded-xl border text-[9px] font-bold text-white/60 hover:text-white/80 transition-all"
+                                  style={{ borderColor: 'var(--border-color)' }}
+                                >
+                                  <Copy size={12} /> Copy Config Manually
+                                </button>
+                              )}
+
+                              {claudeMcpAutoStatus === 'done' && claudeMcpToken && (
+                                <div className="p-3 rounded-xl bg-black/30 border border-white/5 space-y-3">
+                                  {claudeMcpPhase === 'copy' && (
+                                    <>
+                                      <div className="text-xs font-bold uppercase tracking-wider text-white/40 mb-1">Step 2: Copy prompt</div>
+                                      <p className="text-[9px] text-white/20 mb-2">Paste this into Claude Desktop after restart</p>
+                                      <button
+                                        onClick={() => {
+                                          const prompt = `Hi! I'm connecting to Aartiq Browser running as a **local MCP server** on this machine. Here's what you need to know:
+
+**About Aartiq Browser (Local MCP Server):**
+Aartiq is an AI-native browser with OS automation running locally via MCP. You have access to 64+ tools including:
+- Browser control (tabs, navigation, form filling, screenshots, PDF generation)
+- System automation (shell commands, AppleScript, file operations)
+- Clipboard management (view/copy/clear clipboard history, specify how many items to retrieve)
+- Scheduling & automation (create cron/interval/one-time tasks, run shell commands, HTTP requests)
+- AI features (send prompts, translate, summarize, generate documents)
+- Settings control (open any settings section)
+- App search & launch, volume/brightness control, alarms
+- Web search and content extraction
+
+**Security Model:**
+- **Biometric approval** required for high-risk actions (Touch ID on macOS, Windows Hello on Windows)
+- **Per-action approval prompts** for medium-risk operations (shell commands, file writes, clipboard access)
+- **Low-risk actions** (reading tabs, navigation, search) auto-approved based on your preferences
+- **Native OS integration** — approvals appear as native system dialogs, not web popups
+- **Encrypted local vault** — API keys and tokens stored with 256-bit encryption, never leave this machine
+
+**Connection Token:** ${claudeMcpToken}
+
+Please call the confirm_pairing tool with the following token to verify the Aartiq Browser MCP connection.`;
+                                          navigator.clipboard.writeText(prompt);
+                                          setClaudeMcpPhase('wait');
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border text-[10px] font-black uppercase tracking-[0.2em] transition-all hover:opacity-90"
+                                        style={{
+                                          background: 'rgba(139,92,246,0.15)',
+                                          borderColor: 'rgba(139,92,246,0.3)',
+                                          color: '#a78bfa',
+                                        }}
+                                      >
+                                        <Copy size={14} /> Copy Prompt to Clipboard
+                                      </button>
+                                    </>
+                                  )}
+                                  {claudeMcpPhase === 'wait' && (
+                                    <div className="flex items-center gap-2 text-[10px] text-violet-300">
+                                      <Loader2 size={12} className="animate-spin" /> Waiting for Claude to confirm...
+                                    </div>
+                                  )}
+                                  {claudeMcpPhase === 'done' && (
+                                    <div className="py-4 text-center space-y-3">
+                                      <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ type: 'spring', damping: 15, stiffness: 200 }}
+                                        className="w-14 h-14 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center mx-auto"
+                                      >
+                                        <CheckCircle2 size={28} className="text-green-400" />
+                                      </motion.div>
+                                      <div>
+                                        <p className="text-sm font-black text-green-400 uppercase tracking-wider">Successfully Connected!</p>
+                                        <p className="text-[10px] text-white/40 mt-1">Claude Desktop is now connected to Aartiq Browser via MCP.</p>
+                                      </div>
+                                      <div className="flex items-center justify-center gap-2 text-[9px] text-white/30">
+                                        <Server size={10} /> 64+ tools available to Claude
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </motion.div>

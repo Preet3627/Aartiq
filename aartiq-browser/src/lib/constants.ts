@@ -18,6 +18,7 @@ export const shortcutDefinitions = [
     { action: 'abort-action', label: 'Abort Current Action', category: 'AI', accelerator: 'Escape' },
     { action: 'focus-ai', label: 'Focus AI Sidebar', category: 'AI', accelerator: 'CommandOrControl+/' },
     { action: 'open-ai-chat', label: 'Open AI Chat', category: 'AI', accelerator: 'CommandOrControl+Alt+C' },
+    { action: 'focus-ai-chat', label: 'Focus AI Chat Input', category: 'AI', accelerator: 'CommandOrControl+Shift+C' },
     { action: 'toggle-ai-assist', label: 'Toggle AI Assist', category: 'AI', accelerator: 'CommandOrControl+Alt+A' },
     { action: 'toggle-ai-overview', label: 'Toggle AI Overview', category: 'AI', accelerator: 'CommandOrControl+Alt+O' },
     { action: 'toggle-spotlight', label: 'Toggle Spotlight Search', category: 'AI', accelerator: 'CommandOrControl+Shift+Space' },

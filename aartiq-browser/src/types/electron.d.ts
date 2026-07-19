@@ -238,7 +238,8 @@ declare global {
             // Element Control (deprecated - use performCrossAppClick instead)
             clickElement: (selector: string) => Promise<{ success: boolean; error?: string }>;
             typeText: (selector: string, text: string) => Promise<{ success: boolean; error?: string }>;
-            fillForm: (data: any) => Promise<{ success: boolean; error?: string }>;
+            fillForm: (data: { selector: string; value: string; delayBetweenFields?: number; retry?: number; verify?: boolean; clearFirst?: boolean }) => Promise<{ success: boolean; error?: string }>;
+            multiFillForm: (opts: { fields: Record<string, string>; delayBetweenFields?: number; retry?: number; verify?: boolean }) => Promise<{ success: boolean; results?: Array<{ selector: string; success: boolean; error?: string }>; error?: string }>;
             findAndClickText: (targetText: string) => Promise<{ success: boolean; x?: number; y?: number; error?: string; foundText?: string }>;
 
             // Gmail Integration
@@ -589,8 +590,9 @@ declare global {
             executeJavaScript: (code: string) => Promise<any>;
 
             // Ollama Model Management
-            pullOllamaModel: (model: string, callback: (data: any) => void) => () => void;
+            pullOllamaModel: (model: string, callback: (data: { model: string; output: string; done: boolean; success?: boolean }) => void) => () => void;
             importOllamaModel: (data: any) => Promise<{ success: boolean; error?: string }>;
+            ollamaListModels: () => Promise<{ models: { name: string; modified_at: string }[]; error?: string }>;
 
         };
     }
