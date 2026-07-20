@@ -130,7 +130,7 @@ Measured on a MacBook Pro M4 Pro (12-core, 24 GB), macOS 26.5:
 
 > Measures time to first visible window, not full initialization. Aartiq displays the Chromium window immediately while AI providers, MCP bridge, sync, and OCR continue loading asynchronously.
 
-For the full benchmark methodology, per-run data, and reproduction scripts, see [Performance Benchmarks](https://aartiq.vercel.app/docs/overview#performance-benchmarks).
+For the full benchmark methodology, per-run data, and reproduction scripts, see [Performance Benchmarks](https://aartiq.ponsrischool.in/docs/overview#performance-benchmarks).
 
 ---
 
@@ -144,7 +144,7 @@ Every non-trivial action requires explicit approval before execution:
 
 The MCP server binds to `127.0.0.1` only — no external network exposure. Pairing tokens expire after 10 minutes.
 
-For the full security model, see [Security Documentation](https://aartiq.vercel.app/docs/security).
+For the full security model, see [Security Documentation](https://aartiq.ponsrischool.in/docs/security).
 
 ---
 
@@ -152,16 +152,16 @@ For the full security model, see [Security Documentation](https://aartiq.vercel.
 
 | Topic | Link |
 |-------|------|
-| Features | [aartiq.vercel.app/features](https://aartiq.vercel.app/features) |
-| Architecture | [aartiq.vercel.app/docs/overview](https://aartiq.vercel.app/docs/overview) |
-| AI Commands | [aartiq.vercel.app/docs/ai-commands](https://aartiq.vercel.app/docs/ai-commands) |
-| Security Model | [aartiq.vercel.app/docs/security](https://aartiq.vercel.app/docs/security) |
-| MCP Server (64 tools) | [aartiq.vercel.app/docs/api-reference](https://aartiq.vercel.app/docs/api-reference) |
-| Components | [aartiq.vercel.app/docs/components](https://aartiq.vercel.app/docs/components) |
-| Automation | [aartiq.vercel.app/docs/automation](https://aartiq.vercel.app/docs/automation) |
-| Cloud Sync | [aartiq.vercel.app/docs/cloud-sync](https://aartiq.vercel.app/docs/cloud-sync) |
-| Troubleshooting | [aartiq.vercel.app/docs/troubleshooting](https://aartiq.vercel.app/docs/troubleshooting) |
-| Changelog | [aartiq.vercel.app/docs/changelog](https://aartiq.vercel.app/docs/changelog) |
+| Features | [aartiq.ponsrischool.in/features](https://aartiq.ponsrischool.in/features) |
+| Architecture | [aartiq.ponsrischool.in/docs/overview](https://aartiq.ponsrischool.in/docs/overview) |
+| AI Commands | [aartiq.ponsrischool.in/docs/ai-commands](https://aartiq.ponsrischool.in/docs/ai-commands) |
+| Security Model | [aartiq.ponsrischool.in/docs/security](https://aartiq.ponsrischool.in/docs/security) |
+| MCP Server (64 tools) | [aartiq.ponsrischool.in/docs/api-reference](https://aartiq.ponsrischool.in/docs/api-reference) |
+| Components | [aartiq.ponsrischool.in/docs/components](https://aartiq.ponsrischool.in/docs/components) |
+| Automation | [aartiq.ponsrischool.in/docs/automation](https://aartiq.ponsrischool.in/docs/automation) |
+| Cloud Sync | [aartiq.ponsrischool.in/docs/cloud-sync](https://aartiq.ponsrischool.in/docs/cloud-sync) |
+| Troubleshooting | [aartiq.ponsrischool.in/docs/troubleshooting](https://aartiq.ponsrischool.in/docs/troubleshooting) |
+| Changelog | [aartiq.ponsrischool.in/docs/changelog](https://aartiq.ponsrischool.in/docs/changelog) |
 
 ---
 
