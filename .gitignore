@@ -133,11 +133,21 @@ dist
 .yarn/unplugged
 .yarn/build-state.yml
 .yarn/install-state.gz
+
 # System files
 .DS_Store
 Thumbs.db
 
-# Test directories (root-level only)
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# AI agent working directories
+/AI/
+
+# Test directories
 /Tests/
 __tests__/
 
@@ -156,3 +166,25 @@ aartiq-browser/bin/
 # Firebase config (generated per-environment, stored in GitHub Secrets)
 flutter_browser_app/android/app/google-services.json
 flutter_browser_app/ios/Runner/GoogleService-Info.plist
+
+# Legacy / stale directories (tracked files removed, kept locally only)
+/update/
+/issues/
+/pop-search/
+/release_notes/
+/docs/
+/Store/
+
+# Build artifacts
+aartiq-mcp-extension.mcpb
+
+# One-time migration scripts
+rebrand.sh
+
+# Internal planning (use GitHub Issues instead)
+PLAN-mcp-server.md
+TODO.md
+
+# Duplicate assets (source copies live in aartiq-browser/assets/)
+/icon.ico
+/icon.png
