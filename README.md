@@ -125,7 +125,7 @@ flutter run
 |-----------|---------|
 | **AI Engine** | Chat sidebar, LLM provider management, structured command output |
 | **Command Parser** | Parses AI output into executable commands (JSON, bracket, HTML comment formats) |
-| **Security Layer** | Triple-lock: risk classification, approval dialogs, biometric gating, injection detection |
+| **Security Layer** | Three-layer defense: risk classification, approval dialogs, biometric gating, injection detection |
 | **MCP Server** | 64-tool Model Context Protocol server for Claude Desktop integration |
 | **Document Engine** | PDF/Excel/PPTX generation with templates, charts, Mermaid diagrams |
 | **OCR Service** | Tesseract.js-based screen reading for native app interaction |
@@ -138,7 +138,9 @@ flutter run
 
 ## Performance Benchmarks
 
-Verified benchmarks measured on real hardware. All tests conducted with `osascript` window-visibility polling and `ps` RSS sampling.
+Benchmarks measured on physical hardware using the methodology described below. Results may vary depending on hardware, operating system version, and installed extensions.
+
+All benchmark scripts are included in the repository and can be executed unchanged on supported macOS systems.
 
 ### Test Environment
 
@@ -152,31 +154,35 @@ Verified benchmarks measured on real hardware. All tests conducted with `osascri
 | **Date** | 2026-07-20 |
 | **Test Method** | `pkill` cold start → `open -a Aartiq` → `osascript` visible poll (100ms interval) |
 
-### Cold Launch (Process Start → Window Visible)
+### Cold Start (Window Visible)
 
-| Run | Time to Window | Main RSS | Total RSS | CPU (idle) |
-|-----|---------------|----------|-----------|------------|
-| 1   | **0.32s**     | 432 MB   | 1,712 MB  | 14.7%      |
-| 2   | **0.32s**     | 432 MB   | —         | —          |
-| 3   | **0.32s**     | 427 MB   | —         | —          |
-| **Avg** | **0.32s** | **430 MB** | **1,712 MB** | **14.7%** |
+> Measures the elapsed time from launching the application to the first visible application window. This is **not** a measurement of full renderer initialization, AI service readiness, or feature availability. Aartiq displays the Chromium window immediately while background services (AI providers, MCP bridge, sync, OCR, etc.) continue initializing asynchronously.
+
+| Run | Time to First Visible Window | Main RSS | Total RSS | CPU (at launch) |
+|-----|------------------------------|----------|-----------|------------------|
+| 1   | **0.32s**                    | 432 MB   | 1,712 MB  | 14.7%            |
+| 2   | **0.32s**                    | 432 MB   | —         | —                |
+| 3   | **0.32s**                    | 427 MB   | —         | —                |
+| **Avg** | **0.32s**                | **430 MB** | **1,712 MB** | **14.7%**    |
 
 ### Warm Start (From OS Cache)
 
 | Metric | Value |
 |--------|-------|
-| Time to Window | **0.31s** |
+| Time to First Visible Window | **0.31s** |
 
-### Resource Usage at Steady State
+### Resource Usage
 
-| Metric | Value |
-|--------|-------|
-| Main process RSS | 430–610 MB |
-| Total RSS (8 processes) | 1,712 MB |
-| CPU (idle, window visible) | 14.7% → <1% |
-| Memory (% of 24 GB) | ~1.7% (main), ~7.1% (total) |
-| Active ports | 3001 (MCP), 3004 (WiFi sync), 46203 (bridge) |
-| App bundle size | 1.2 GB |
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Main process RSS | 430–610 MB | Stabilizes higher after tab activity |
+| Total RSS (all processes) | 1,712 MB | Electron main, renderer, GPU, utility, and helper processes |
+| CPU (immediately after launch) | 14.7% | During initial window creation and first paint |
+| CPU (idle after initialization) | < 1% | After background services finish loading |
+| Memory (main process, % of 24 GB) | ~1.7% | — |
+| Memory (total, % of 24 GB) | ~7.1% | Including all Chromium subprocesses |
+| Active ports | 3001 (MCP), 3004 (WiFi sync), 46203 (bridge) | — |
+| App bundle size | 1.2 GB | Frameworks: 276 MB, Resources: 958 MB |
 
 ### How to Reproduce
 
@@ -184,7 +190,7 @@ Verified benchmarks measured on real hardware. All tests conducted with `osascri
 # Kill any running instance
 pkill -f "Aartiq" && sleep 4
 
-# Measure cold launch (osascript polls window visibility at 100ms)
+# Measure cold start (osascript polls window visibility at 100ms)
 START=$(python3 -c "import time; print(time.time())")
 open -a Aartiq
 for i in $(seq 1 40); do
@@ -204,6 +210,8 @@ ps -p $PID -o rss=,vsz=,%cpu=,%mem=
 ```
 
 ---
+
+## Repository Structure
 
 ```
 aartiq-browser/              Electron desktop app (main process + renderer)
