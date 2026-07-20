@@ -15,64 +15,64 @@ An Electron-based browser with an integrated AI chat that executes LLM-planned b
 
 ---
 
-## Overview
+## Table of Contents
 
-Aartiq is an Electron-based browser with an integrated AI chat sidebar. You describe a task in natural language, an LLM plans the steps, and the browser executes them. Every action is permission-gated before execution.
-
-**How it works:** Aartiq connects to LLM providers (Gemini, GPT, Claude, Groq, xAI, Ollama, Azure OpenAI, Apple Intelligence). You type a task like "search for React tutorials and save the top 3 results as a PDF". The AI returns structured commands (`NAVIGATE`, `CLICK_ELEMENT`, `SHELL_COMMAND`, `SEARCH_WEB`, etc.), Aartiq parses them, shows you a permission dialog for anything non-trivial, and then executes them in the browser.
-
-**What it can do:**
-
-- **Browse the web with AI** — navigate pages, click elements, fill forms, extract text, take screenshots. The AI can search DuckDuckGo/Google, read pages, and follow links without API keys.
-- **Run system commands** — launch apps, adjust volume/brightness, set alarms, execute shell commands. Works cross-platform: AppleScript on macOS, PowerShell on Windows, GNOME/KDE on Linux.
-- **Generate documents** — convert AI-written Markdown into PDF, Excel (XLSX), or PowerPoint (PPTX) with tables, charts, Mermaid diagrams, and watermarks.
-- **Read your screen** — OCR via Tesseract.js for interacting with native desktop apps the AI can't access through the DOM.
-- **Schedule tasks** — background task scheduling with natural language or cron expressions that runs even when the browser window is closed.
-- **Sync across devices** — WiFi P2P pairing between desktop and Android, plus Firebase E2EE cloud sync.
-- **Integrate with Claude Desktop** — MCP server exposing 64 tools for full browser control via Model Context Protocol.
-- **Work offline** — connect to Ollama for local LLM inference with no cloud dependency.
-
-For the full feature list, implementation details, and code references, see the [documentation site](https://aartiq.vercel.app/features).
+- [Why Aartiq?](#why-aartiq)
+- [How It Works](#how-it-works)
+- [Example Prompts](#example-prompts)
+- [Installation](#installation)
+- [Performance](#performance)
+- [Security](#security)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## Quick Start
+## Why Aartiq?
 
-1. [Download](https://github.com/Preet3627/Aartiq/releases) the latest release for your platform.
-2. Launch Aartiq.
-3. Go to **Settings → AI Providers** and add your preferred provider (Gemini, OpenAI, Claude, Ollama, etc.).
-4. Type a task in the AI chat sidebar in natural language (e.g. "search for Rust tutorials and summarize the top 3").
-5. Review the permission dialog before each non-trivial action executes.
+Most browsers answer questions. Aartiq **does the work**.
+
+Instead of opening 15 tabs yourself, you tell Aartiq what you need and it executes the steps — navigating pages, clicking elements, running commands, generating documents — then shows you exactly what it did before anything non-trivial runs.
+
+| | Chrome / Edge | Arc / Dia | Aartiq |
+|---|---|---|---|
+| AI chat | Extensions only | Built-in (answers questions) | Built-in (executes tasks) |
+| OS automation | None | None | Shell, apps, volume, brightness, alarms |
+| Document generation | None | None | PDF, Excel, PowerPoint from chat |
+| Local LLM | No | No | Ollama (fully offline) |
+| Permission gating | No | No | Every action requires approval |
+| Cross-platform sync | Via Google account | Limited | WiFi P2P + E2EE cloud |
+| MCP integration | No | No | 64 tools for Claude Desktop |
+| Open source | No | No | Apache 2.0 |
 
 ---
 
-## Architecture
+## How It Works
 
-```
-Claude Desktop / User
-        │
-        ▼
-┌─────────────────┐
-│   MCP Server    │  64 tools via stdio → HTTP bridge (port 46203)
-│   (Node.js)     │  AI, tabs, bookmarks, history, settings,
-│                 │  scheduling, permissions, security, PDF
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   HTTP Bridge   │  Cross-platform Express server (port 46203)
-│   (main.js)     │  Routes to renderer via IPC or native APIs
-└────────┬────────┘
-         │
-    ┌────┴────┐
-    ▼         ▼
-┌────────┐ ┌────────┐
-│Browser │ │  OS    │  Shell, AppleScript, PowerShell, apps
-│Engine  │ │ Bridge │  Volume, brightness, alarms, notifications
-└────────┘ └────────┘
-```
+1. You type a task in the AI chat sidebar (e.g. "search for Rust tutorials and save the top 3 as a PDF")
+2. The LLM returns structured commands (`NAVIGATE`, `CLICK_ELEMENT`, `SHELL_COMMAND`, etc.)
+3. Aartiq parses the commands and shows a permission dialog for anything non-trivial
+4. You approve, and Aartiq executes the actions in the browser
 
-For the full architecture documentation, component breakdown, and API reference, see [aartiq.vercel.app/docs/overview](https://aartiq.vercel.app/docs/overview).
+**Supported providers:** Gemini, GPT, Claude, Groq, xAI, Azure OpenAI, Ollama (offline), Apple Intelligence (macOS).
+
+---
+
+## Example Prompts
+
+Try these after installing:
+
+| Task | What Aartiq does |
+|------|------------------|
+| `"Search for React tutorials and open the top 3"` | Searches DuckDuckGo, opens results in new tabs |
+| `"Summarize this page and save as PDF"` | Reads page content, generates a formatted PDF |
+| `"Set brightness to 50% and open VS Code"` | Runs system commands via OS bridge |
+| `"Create a PowerPoint about climate change"` | Generates slides with charts from AI-written content |
+| `"Schedule a daily backup at 9 AM"` | Creates a cron-based background task |
+| `"Read the text in this screenshot"` | OCR via Tesseract.js on screen region |
+| `"Fill this form with my details"` | Detects fields, fills them atomically |
+| `"Search Google for 'electron performance' and extract results"` | Real browser search, extracts page text |
 
 ---
 
@@ -116,111 +116,52 @@ flutter run
 
 ---
 
-## Core Components
+## Performance
 
-The main subsystems: AI Engine, Command Parser, Security Layer (three-layer defense), MCP Server (64 tools), Document Engine (PDF/XLSX/PPTX), OCR Service (Tesseract.js), Background Scheduler, Native Bridge (macOS/Windows/Linux), Plugin SDK, and Sync Service (WiFi P2P + Firebase E2EE).
-
-See the [components documentation](https://aartiq.vercel.app/docs/components) for a full breakdown with file references and line counts.
-
----
-
-## Performance Benchmarks
-
-Benchmarks measured on physical hardware using the methodology described below. Results may vary depending on hardware, operating system version, and installed extensions.
-
-All benchmark scripts are included in the repository and can be executed unchanged on supported macOS systems.
-
-### Test Environment
-
-| Spec | Value |
-|------|-------|
-| **Device** | MacBook Pro (Mac16,8, MX2E3LL/A) |
-| **Chip** | Apple M4 Pro — 12 cores (8P + 4E) |
-| **RAM** | 24 GB |
-| **OS** | macOS 26.5 (Build 25F71) |
-| **App Version** | 0.3.4 |
-| **Date** | 2026-07-20 |
-| **Test Method** | `pkill` cold start → `open -a Aartiq` → `osascript` visible poll (100ms interval) |
-
-### Cold Start (Window Visible)
-
-> Measures the elapsed time from launching the application to the first visible application window. This is **not** a measurement of full renderer initialization, AI service readiness, or feature availability. Aartiq displays the Chromium window immediately while background services (AI providers, MCP bridge, sync, OCR, etc.) continue initializing asynchronously.
-
-| Run | Time to First Visible Window | Main RSS | Total RSS | CPU (at launch) |
-|-----|------------------------------|----------|-----------|------------------|
-| 1   | **0.32s**                    | 432 MB   | 1,712 MB  | 14.7%            |
-| 2   | **0.32s**                    | 432 MB   | —         | —                |
-| 3   | **0.32s**                    | 427 MB   | —         | —                |
-| **Avg** | **0.32s**                | **430 MB** | **1,712 MB** | **14.7%**    |
-
-### Warm Start (From OS Cache)
+Measured on a MacBook Pro M4 Pro (12-core, 24 GB), macOS 26.5:
 
 | Metric | Value |
 |--------|-------|
-| Time to First Visible Window | **0.31s** |
+| Cold start (window visible) | **0.32s** |
+| Warm start (OS cache) | **0.31s** |
+| CPU (idle after init) | **< 1%** |
+| Total memory (all processes) | **~1.7 GB** |
+| App bundle size | **1.2 GB** |
 
-### Resource Usage
+> Measures time to first visible window, not full initialization. Aartiq displays the Chromium window immediately while AI providers, MCP bridge, sync, and OCR continue loading asynchronously.
 
-| Metric | Value | Notes |
-|--------|-------|-------|
-| Main process RSS | 430–610 MB | Stabilizes higher after tab activity |
-| Total RSS (all processes) | 1,712 MB | Electron main, renderer, GPU, utility, and helper processes |
-| CPU (immediately after launch) | 14.7% | During initial window creation and first paint |
-| CPU (idle after initialization) | < 1% | After background services finish loading |
-| Memory (main process, % of 24 GB) | ~1.7% | — |
-| Memory (total, % of 24 GB) | ~7.1% | Including all Chromium subprocesses |
-| Active ports | 3001 (MCP), 3004 (WiFi sync), 46203 (bridge) | — |
-| App bundle size | 1.2 GB | Frameworks: 276 MB, Resources: 958 MB |
-
-### How to Reproduce
-
-```bash
-# Kill any running instance
-pkill -f "Aartiq" && sleep 4
-
-# Measure cold start (osascript polls window visibility at 100ms)
-START=$(python3 -c "import time; print(time.time())")
-open -a Aartiq
-for i in $(seq 1 40); do
-  sleep 0.1
-  VISIBLE=$(osascript -e 'tell application "System Events" to tell process "Aartiq" to get visible' 2>/dev/null)
-  if [ "$VISIBLE" = "true" ]; then
-    END=$(python3 -c "import time; print(time.time())")
-    echo "Window visible in: $(python3 -c "print(f'{$END - $START:.2f}')")s"
-    break
-  fi
-done
-
-# Measure memory at steady state
-sleep 3
-PID=$(pgrep -f "Aartiq.app/Contents/MacOS/Aartiq" | head -1)
-ps -p $PID -o rss=,vsz=,%cpu=,%mem=
-```
+For the full benchmark methodology, per-run data, and reproduction scripts, see [Performance Benchmarks](https://aartiq.vercel.app/docs/overview#performance-benchmarks).
 
 ---
 
-## Repository Structure
+## Security
 
-```
-aartiq-browser/              Electron desktop app (main process + renderer)
-├── src/components/          React UI (126 components, 38K lines)
-├── src/lib/                 Core services (AI, MCP, Security, Sync, OCR, Plugins)
-├── src/service/             Background task scheduler
-└── scripts/                 Build scripts, component scanner
+Every non-trivial action requires explicit approval before execution:
 
-flutter_browser_app/         Flutter mobile companion
-├── WiFi sync, remote desktop control
-├── PDF viewer, push notifications
-└── Automation dashboard
+- **Low risk** (read tabs, navigate, search) — auto-approved based on user preferences
+- **Medium risk** (shell commands, file writes, clipboard) — per-action approval dialog
+- **High risk** (destructive operations, `rm -rf`, `dd`) — biometric confirmation (Touch ID / Windows Hello)
 
-aartiq-mcp/                  Claude Desktop MCP server (64 tools)
-├── server/index.js          Stdio MCP server (Node.js)
-├── server/bridge-client.js  HTTP bridge client (talks to running browser)
-├── manifest.json            MCP manifest
-└── package.json
+The MCP server binds to `127.0.0.1` only — no external network exposure. Pairing tokens expire after 10 minutes.
 
-Landing_Page/                Documentation website (Next.js)
-```
+For the full security model, see [Security Documentation](https://aartiq.vercel.app/docs/security).
+
+---
+
+## Documentation
+
+| Topic | Link |
+|-------|------|
+| Features | [aartiq.vercel.app/features](https://aartiq.vercel.app/features) |
+| Architecture | [aartiq.vercel.app/docs/overview](https://aartiq.vercel.app/docs/overview) |
+| AI Commands | [aartiq.vercel.app/docs/ai-commands](https://aartiq.vercel.app/docs/ai-commands) |
+| Security Model | [aartiq.vercel.app/docs/security](https://aartiq.vercel.app/docs/security) |
+| MCP Server (64 tools) | [aartiq.vercel.app/docs/api-reference](https://aartiq.vercel.app/docs/api-reference) |
+| Components | [aartiq.vercel.app/docs/components](https://aartiq.vercel.app/docs/components) |
+| Automation | [aartiq.vercel.app/docs/automation](https://aartiq.vercel.app/docs/automation) |
+| Cloud Sync | [aartiq.vercel.app/docs/cloud-sync](https://aartiq.vercel.app/docs/cloud-sync) |
+| Troubleshooting | [aartiq.vercel.app/docs/troubleshooting](https://aartiq.vercel.app/docs/troubleshooting) |
+| Changelog | [aartiq.vercel.app/docs/changelog](https://aartiq.vercel.app/docs/changelog) |
 
 ---
 
