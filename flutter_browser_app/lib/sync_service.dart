@@ -1165,7 +1165,7 @@ class SyncService {
       final file = File(filePath);
       await file.writeAsBytes(bytes);
 
-      print('[Sync] File saved: $filePath (${(bytes.length / 1024).toFixed(1)} KB)');
+      print('[Sync] File saved: $filePath (${(bytes.length / 1024).toStringAsFixed(1)} KB)');
       return filePath;
     } catch (e) {
       print('[Sync] Failed to save file: $e');
