@@ -36,6 +36,16 @@ For the full feature list, implementation details, and code references, see the 
 
 ---
 
+## Quick Start
+
+1. [Download](https://github.com/Preet3627/Aartiq/releases) the latest release for your platform.
+2. Launch Aartiq.
+3. Go to **Settings → AI Providers** and add your preferred provider (Gemini, OpenAI, Claude, Ollama, etc.).
+4. Type a task in the AI chat sidebar in natural language (e.g. "search for Rust tutorials and summarize the top 3").
+5. Review the permission dialog before each non-trivial action executes.
+
+---
+
 ## Architecture
 
 ```
