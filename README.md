@@ -35,13 +35,13 @@ Most browsers answer questions. Aartiq **does the work**.
 
 Instead of opening 15 tabs yourself, you tell Aartiq what you need and it executes the steps — navigating pages, clicking elements, running commands, generating documents — then shows you exactly what it did before anything non-trivial runs.
 
-| | Chrome / Edge | Arc / Dia | Aartiq |
+| | Chrome / Edge | Modern AI Browsers | Aartiq |
 |---|---|---|---|
 | AI chat | Extensions only | Built-in (answers questions) | Built-in (executes tasks) |
 | OS automation | None | None | Shell, apps, volume, brightness, alarms |
 | Document generation | None | None | PDF, Excel, PowerPoint from chat |
 | Local LLM | No | No | Ollama (fully offline) |
-| Permission gating | No | No | Every action requires approval |
+| Permission gating | No | No | Permission-gated AI actions |
 | Cross-platform sync | Via Google account | Limited | WiFi P2P + E2EE cloud |
 | MCP integration | No | No | 64 tools for Claude Desktop |
 | Open source | No | No | Apache 2.0 |
