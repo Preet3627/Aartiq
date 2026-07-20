@@ -17,41 +17,26 @@ An Electron-based browser with an integrated AI chat that executes LLM-planned b
 
 ## Overview
 
-Aartiq embeds an AI chat sidebar in a Chromium browser. You describe a task in natural language, an LLM plans the steps, and the browser executes them — navigating pages, clicking elements, filling forms, running shell commands, or generating documents. Before any non-trivial action runs, a permission dialog shows you exactly what will happen.
+Aartiq is an Electron-based browser with an integrated AI chat sidebar. You describe a task in natural language, an LLM plans the steps, and the browser executes them. Every action is permission-gated before execution.
 
-> **One-sentence summary:** Uses LLMs to plan and execute browser actions, run system commands, and generate documents — with permission gating on every action.
+**How it works:** Aartiq connects to LLM providers (Gemini, GPT, Claude, Groq, xAI, Ollama, Azure OpenAI, Apple Intelligence). You type a task like "search for React tutorials and save the top 3 results as a PDF". The AI returns structured commands (`NAVIGATE`, `CLICK_ELEMENT`, `SHELL_COMMAND`, `SEARCH_WEB`, etc.), Aartiq parses them, shows you a permission dialog for anything non-trivial, and then executes them in the browser.
 
----
+**What it can do:**
 
-## Core Capabilities
+- **Browse the web with AI** — navigate pages, click elements, fill forms, extract text, take screenshots. The AI can search DuckDuckGo/Google, read pages, and follow links without API keys.
+- **Run system commands** — launch apps, adjust volume/brightness, set alarms, execute shell commands. Works cross-platform: AppleScript on macOS, PowerShell on Windows, GNOME/KDE on Linux.
+- **Generate documents** — convert AI-written Markdown into PDF, Excel (XLSX), or PowerPoint (PPTX) with tables, charts, Mermaid diagrams, and watermarks.
+- **Read your screen** — OCR via Tesseract.js for interacting with native desktop apps the AI can't access through the DOM.
+- **Schedule tasks** — background task scheduling with natural language or cron expressions that runs even when the browser window is closed.
+- **Sync across devices** — WiFi P2P pairing between desktop and Android, plus Firebase E2EE cloud sync.
+- **Integrate with Claude Desktop** — MCP server exposing 64 tools for full browser control via Model Context Protocol.
+- **Work offline** — connect to Ollama for local LLM inference with no cloud dependency.
 
-| Capability | Description |
-|-----------|-------------|
-| **AI Chat Sidebar** | Chat with any LLM (OpenAI, Anthropic, Gemini, Groq, xAI, Ollama). The AI returns structured commands (`NAVIGATE`, `CLICK_ELEMENT`, `SHELL_COMMAND`, etc.) that Aartiq parses and executes. |
-| **Web Search** | Opens a real browser, searches DuckDuckGo/Google, navigates to top results, extracts page text. No API keys required. |
-| **Document Generation** | Converts AI-generated Markdown into PDF, Excel (XLSX), or PowerPoint (PPTX). Supports tables, charts, Mermaid diagrams, watermarks. |
-| **Desktop Automation** | Launches applications, adjusts volume/brightness, sets alarms, runs shell commands. macOS: AppleScript + Siri Shortcuts. Windows: PowerShell + Windows Hello. Linux: GNOME/KDE + espeak. |
-| **OCR** | Reads text from screen regions via Tesseract.js. Used for interacting with native desktop apps the AI can't access through the DOM. |
-| **MCP Server** | Exposes 64 tools to Claude Desktop via Model Context Protocol. Full browser control: AI chat, tabs, bookmarks, history, settings, scheduling, PDF, permissions, security. Every tool call is risk-classified and permission-gated. |
-
----
-
-## AI Provider Support
-
-| Provider | Connection |
-|----------|-----------|
-| Google Gemini | Cloud API |
-| OpenAI GPT | Cloud API |
-| Anthropic Claude | Cloud API |
-| Groq | Cloud API |
-| xAI Grok | Cloud API |
-| Azure OpenAI | Cloud API |
-| Ollama | Local (offline) |
-| Apple Intelligence | Native macOS |
+For the full feature list, implementation details, and code references, see the [documentation site](https://aartiq.vercel.app/features).
 
 ---
 
-## Architecture Overview
+## Architecture
 
 ```
 Claude Desktop / User
@@ -76,6 +61,8 @@ Claude Desktop / User
 │Engine  │ │ Bridge │  Volume, brightness, alarms, notifications
 └────────┘ └────────┘
 ```
+
+For the full architecture documentation, component breakdown, and API reference, see [aartiq.vercel.app/docs/overview](https://aartiq.vercel.app/docs/overview).
 
 ---
 
@@ -121,18 +108,9 @@ flutter run
 
 ## Core Components
 
-| Component | Purpose |
-|-----------|---------|
-| **AI Engine** | Chat sidebar, LLM provider management, structured command output |
-| **Command Parser** | Parses AI output into executable commands (JSON, bracket, HTML comment formats) |
-| **Security Layer** | Three-layer defense: risk classification, approval dialogs, biometric gating, injection detection |
-| **MCP Server** | 64-tool Model Context Protocol server for Claude Desktop integration |
-| **Document Engine** | PDF/Excel/PPTX generation with templates, charts, Mermaid diagrams |
-| **OCR Service** | Tesseract.js-based screen reading for native app interaction |
-| **Background Scheduler** | Natural language and cron-based task scheduling |
-| **Native Bridge** | macOS Swift panels + Siri Shortcuts, Windows title bar + PowerShell, Linux desktop integration |
-| **Plugin SDK** | Dynamic plugin loading with manifest-based discovery |
-| **Sync Service** | WiFi P2P desktop↔mobile sync, Firebase E2EE cloud sync |
+The main subsystems: AI Engine, Command Parser, Security Layer (three-layer defense), MCP Server (64 tools), Document Engine (PDF/XLSX/PPTX), OCR Service (Tesseract.js), Background Scheduler, Native Bridge (macOS/Windows/Linux), Plugin SDK, and Sync Service (WiFi P2P + Firebase E2EE).
+
+See the [components documentation](https://aartiq.vercel.app/docs/components) for a full breakdown with file references and line counts.
 
 ---
 
