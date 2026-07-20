@@ -1,1 +1,0 @@
-Thank you so much for reporting this issue! 🙏 We've now fixed the launch problem in the latest version. Your feedback really helped us improve Aartiq. We truly appreciate your support!
