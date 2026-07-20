@@ -62,7 +62,7 @@ export const NOT_FOUND_SIGNALS = [
   "access denied", "403 forbidden",
 ];
 
-export const INTERNAL_TAG_RE = /\[\s*(?:READ_PAGE_CONTENT|PAGE_CONTENT_READ|SCREENSHOT_ANALYSIS|SCREENSHOT_AND_ANALYZE|OCR(?:_COORDINATES|_SCREEN)?|EXTRACTED|EXTRACT_DATA|OPEN_TABS|EMAILS|LIST_OPEN_TABS|ORGANIZE_TABS|CLOSE_TAB|SWITCH_TAB|NAVIGATE|SEARCH|WEB_SEARCH|GENERATE_IMAGE|FIND_AND_CLICK|CLICK_ELEMENT|CLICK_AT|CLICK_APP_ELEMENT|FILL_FORM|SCROLL_TO|SHELL_COMMAND|OPEN_APP|SET_THEME|SET_VOLUME|SET_BRIGHTNESS|RELOAD|GO_BACK|GO_FORWARD|WAIT|GUIDE_CLICK|GENERATE_PDF|GENERATE_DIAGRAM|OPEN_PRESENTON|EXPLAIN_CAPABILITIES|OPEN_PDF|OPEN_VIEW|GMAIL_\w+|CREATE_NEW_TAB_GROUP|SHOW_IMAGE|SHOW_VIDEO|PLAY_VIDEO|SEARCH_VIDEO|OPEN_MCP_SETTINGS|OPEN_AUTOMATION_SETTINGS|OPEN_SCHEDULING_MODAL|AI REASONING|ACTION_CHAIN_JSON|OCR_RESULT|MEDIA_ATTACHMENTS_JSON|SCHEDULE_TASK|APPLE_INTELLIGENCE_IMAGE|APPLE_INTELLIGENCE_SUMMARY|CREATE_XLSX_JSON|CROSS_APP_JSON(?:\s*\|\s*[^]]+)?)[^\]]*\]/gi;
+export const INTERNAL_TAG_RE = /\[\s*(?:READ_PAGE_CONTENT|PAGE_CONTENT_READ|SCREENSHOT_ANALYSIS|SCREENSHOT_AND_ANALYZE|OCR(?:_COORDINATES|_SCREEN)?|EXTRACTED|EXTRACT_DATA|OPEN_TABS|EMAILS|LIST_OPEN_TABS|ORGANIZE_TABS|CLOSE_TAB|SWITCH_TAB|NAVIGATE|SEARCH|WEB_SEARCH|GENERATE_IMAGE|FIND_AND_CLICK|CLICK_ELEMENT|CLICK_AT|CLICK_APP_ELEMENT|FILL_FORM|SCROLL_TO|SHELL_COMMAND|OPEN_APP|SET_THEME|SET_VOLUME|SET_BRIGHTNESS|RELOAD|GO_BACK|GO_FORWARD|WAIT|GUIDE_CLICK|GENERATE_PDF|GENERATE_DIAGRAM|OPEN_PRESENTON|EXPLAIN_CAPABILITIES|OPEN_PDF|OPEN_VIEW|GMAIL_\w+|CREATE_NEW_TAB_GROUP|SHOW_IMAGE|SHOW_VIDEO|PLAY_VIDEO|SEARCH_VIDEO|OPEN_MCP_SETTINGS|OPEN_AUTOMATION_SETTINGS|OPEN_SCHEDULING_MODAL|AI REASONING|ACTION_CHAIN_JSON|OCR_RESULT|MEDIA_ATTACHMENTS_JSON|SCHEDULE_TASK|APPLE_INTELLIGENCE_IMAGE|APPLE_INTELLIGENCE_SUMMARY|CREATE_FILE_JSON|CREATE_XLSX_JSON|STATUS|CROSS_APP_JSON(?:\s*\|\s*[^]]+)?)[^\]]*\]/gi;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Queries that ALWAYS require a web search before answering
@@ -136,6 +136,49 @@ DECISION ENGINE — EXECUTE SMARTLY
 CRITICAL: Opening apps (VS Code, Firefox, Chrome, Terminal, etc.) → ALWAYS use [OPEN_APP: name]. NEVER use SHELL_COMMAND for launching apps. The OPEN_APP command resolves app names automatically.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PDF GENERATION — FROM CONTEXT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DOCUMENT GENERATION — PDF, DOCX, PPTX, XLSX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When the user asks to create/export a document (PDF, Word, PowerPoint, Excel):
+
+1. Use the content from your OWN previous response as the document content. Do NOT re-search, OCR, or READ_PAGE_CONTENT.
+2. Emit a CREATE_FILE_JSON command with the appropriate format:
+
+   **PDF:** {"type":"CREATE_FILE_JSON","value":{"format":"pdf","title":"Title","content":"markdown content"}}
+   **DOCX:** {"type":"CREATE_FILE_JSON","value":{"format":"docx","title":"Title","content":"# Heading\\n\\nParagraph text with **bold** and *italic*.\\n\\n- List item 1\\n- List item 2"}}
+   **PPTX:** {"type":"CREATE_FILE_JSON","value":{"format":"pptx","title":"Title","slides":[{"title":"Slide 1 Title","content":"- Bullet point 1\\n- Bullet point 2"},{"title":"Slide 2 Title","content":"- More content"}]}}
+   **XLSX:** {"type":"CREATE_FILE_JSON","value":{"format":"xlsx","title":"Title","pages":[{"title":"Sheet1","content":"Name|Age|City\\nAlice|30|NYC\\nBob|25|LA"}]}}
+
+   - DOCX content: Markdown with headings (# ## ###), bold, italic, code, bullet lists, numbered lists. Each line becomes a paragraph.
+   - PPTX slides: Array of {title, content} where content is newline-separated bullet points (prefix with - for bullets).
+   - XLSX pages: Array of {title, content} where content uses | as column delimiter (first row = headers) or plain text lines (one cell per line).
+
+3. If the user says "create PDF" → use format: "pdf"
+4. If the user says "create docx" / "create Word doc" / "create document" → use format: "docx"
+5. If the user says "create PPT" / "create PowerPoint" → use format: "pptx"
+6. If the user says "create Excel" / "create spreadsheet" → use format: "xlsx"
+
+NEVER say "I cannot create .docx" or "that format isn't supported" — ALL formats are supported.
+NEVER do these when user asks to create a document from prior context:
+- Do NOT use OCR or READ_PAGE_CONTENT to grab unrelated page content
+- Do NOT use SEARCH_RESULTS or WEB_SEARCH — the content already exists in the conversation
+- Do NOT emit multiple steps — a single CREATE_FILE_JSON command is enough
+
+Only search/scrape if the user explicitly asks for a NEW document with data not yet in the conversation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STATUS INDICATORS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Optional: Emit [STATUS: text] to show a custom processing indicator to the user while you work. Examples:
+- [STATUS: Analyzing the search results...]
+- [STATUS: Reading page content...]
+- [STATUS: Generating your report...]
+These are stripped from the final output. Use them to keep the user informed during long operations.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CHAINED EXECUTION — CRITICAL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -152,6 +195,8 @@ LOOP PREVENTION
 - Never repeat same command more than 2 times
 - DOM_SEARCH returns 0 → STOP
 - Navigation fails → try alternative ONCE only
+- READ_PAGE_CONTENT returned substantial content → use it to answer, do NOT retry DOM_SEARCH for the same info
+- DOM_SEARCH results are all nav/menu items (short, high link density) → use READ_PAGE_CONTENT instead
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PERFORMANCE MODE
@@ -230,14 +275,19 @@ Supported command types with their JSON parameters:
 **SHOW_IMAGE** — { url: string, caption?: string }
 **SHOW_VIDEO** — { url: string, title?: string, description?: string }
 **GENERATE_DIAGRAM** — { code: string }
-**GENERATE_PDF** — { title: string, content: string }
-**CREATE_FILE_JSON** — { value: json_string }
+**CREATE_FILE_JSON** — { value: json_string } — Creates PDF, DOCX, PPTX, or XLSX files. Supported formats: "pdf", "docx", "pptx", "xlsx". ALWAYS use this instead of GENERATE_PDF for new documents. Examples:
+  PDF: {"type":"CREATE_FILE_JSON","value":{"format":"pdf","title":"Report","content":"# Heading\\nContent here"}}
+  DOCX: {"type":"CREATE_FILE_JSON","value":{"format":"docx","title":"Report","content":"# Heading\\n\\n**Bold** and *italic* text.\\n\\n- Item 1\\n- Item 2"}}
+  PPTX: {"type":"CREATE_FILE_JSON","value":{"format":"pptx","title":"Slides","slides":[{"title":"Slide 1","content":"- Point 1\\n- Point 2"},{"title":"Slide 2","content":"- More content"}]}}
+  XLSX: {"type":"CREATE_FILE_JSON","value":{"format":"xlsx","title":"Data","pages":[{"title":"Sheet1","content":"Name|Age\\nAlice|30\\nBob|25"}]}}
+**GENERATE_PDF** — { title: string, content: string } — LEGACY, prefer CREATE_FILE_JSON
 **SET_VOLUME** — { value: percentage }
 **SET_BRIGHTNESS** — { value: percentage }
 **OPEN_APP** — { value: app_name } ← ALWAYS use this for opening apps. Maps CLI names to proper names automatically (e.g., "code" → "Visual Studio Code", "firefox" → "Firefox", "chrome" → "Google Chrome", "cursor" → "Cursor"). Never use SHELL_COMMAND for app launching.
 **SET_THEME** — { value: dark|light|system }
 **OPEN_VIEW** — { value: browser|workspace|pdf|media|coding }
 **RELOAD** | **GO_BACK** | **GO_FORWARD** — (no params)
+**STATUS** — { text: string } — Show a custom processing indicator. Stripped from output. Optional.
 **SCROLL_TO** — { selector: string }
 **DOM_SEARCH** — { query: string }
 **DOM_READ_FILTERED** — { query?: string }

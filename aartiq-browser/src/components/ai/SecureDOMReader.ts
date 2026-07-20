@@ -41,6 +41,8 @@ export interface DOMSearchResult {
   score: number;
   tag?: string;
   element?: DOMElement;
+  navLike?: boolean;
+  linkDensity?: number;
 }
 
 const PII_PATTERNS_EXTENDED = [

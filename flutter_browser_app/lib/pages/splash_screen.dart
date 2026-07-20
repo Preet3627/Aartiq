@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../auth_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -50,7 +51,12 @@ class _SplashScreenState extends State<SplashScreen>
 
     _navigateTimer = Timer(const Duration(milliseconds: 3000), () {
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/home');
+        final authService = AuthService();
+        if (authService.isAuthenticated || authService.isGuest) {
+          Navigator.of(context).pushReplacementNamed('/home');
+        } else {
+          Navigator.of(context).pushReplacementNamed('/auth');
+        }
       }
     });
   }
@@ -110,16 +116,14 @@ class _SplashScreenState extends State<SplashScreen>
                               ),
                             ],
                           ),
-                          child: ClipOval(
-                            child: Image.asset(
-                              'assets/icon/icon.png',
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  const Icon(
-                                Icons.rocket_launch,
-                                size: 80,
-                                color: Color(0xFF00E5FF),
-                              ),
+                          child: Image.asset(
+                            'assets/icon/transparent-logo.png',
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(
+                              Icons.rocket_launch,
+                              size: 80,
+                              color: Color(0xFF00E5FF),
                             ),
                           ),
                         ),

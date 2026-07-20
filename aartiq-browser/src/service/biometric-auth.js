@@ -127,7 +127,7 @@ class BiometricAuthManager {
                 return { available: true, type: 'fingerprint', message: 'Fingerprint reader detected' };
             }
             
-            return { available: true, type: 'password', message: 'Using password fallback' };
+            return { available: false, type: 'password', message: 'No fingerprint reader — password authentication available' };
         } catch (error) {
             return { available: false, type: 'none', message: error.message };
         }
@@ -135,10 +135,17 @@ class BiometricAuthManager {
 
     async authenticate(reason = 'Authenticate to proceed') {
         const check = await this.checkAvailability();
-        
+
         if (!check.available && check.type === 'none') {
-            console.log('[BiometricAuth] No biometric available, allowing with password fallback');
-            return { success: true, method: 'fallback', message: 'Biometric not available, using fallback' };
+            console.log('[BiometricAuth] No biometric available — falling back to OS password prompt');
+            if (this.platform === 'darwin') {
+                return await this.authenticateMac(reason);
+            } else if (this.platform === 'win32') {
+                return await this.authenticateWindows(reason);
+            } else if (this.platform === 'linux') {
+                return await this.authenticateLinuxPassword(reason);
+            }
+            return { success: false, error: 'No authentication method available on this platform' };
         }
 
         if (this.platform === 'darwin') {
@@ -230,10 +237,47 @@ if ($cred) { Write-Output "OK" } else { Write-Output "NO" }
                 return { success: true, method: 'fingerprint', message: 'Fingerprint verified' };
             }
             
-            console.log('[BiometricAuth] Fingerprint failed, prompting for password');
-            return { success: true, method: 'fallback', message: 'Password authentication' };
+            console.log('[BiometricAuth] Fingerprint failed, falling back to password');
+            return await this.authenticateLinuxPassword(reason);
         } catch (error) {
-            return { success: false, error: error.message };
+            return await this.authenticateLinuxPassword(reason);
+        }
+    }
+
+    async authenticateLinuxPassword(reason) {
+        try {
+            const safeReason = (reason || 'Authenticate to proceed').replace(/'/g, "'\\''");
+            const result = await execAsync(
+                `pkexec env DISPLAY="${process.env.DISPLAY || ':0'}" DBUS_SESSION_BUS_ADDRESS="${process.env.DBUS_SESSION_BUS_ADDRESS || ''}" zenity --entry --title="Aartiq Authentication" --text="${safeReason}" --entry-text="" --width=400 2>&1 || echo "POLKIT_CANCEL"`,
+                { timeout: 60000 }
+            );
+
+            if (result.stdout && !result.stdout.includes('POLKIT_CANCEL') && result.stdout.trim().length > 0) {
+                return { success: true, method: 'password', message: 'Password verified' };
+            }
+
+            if (result.stderr && result.stderr.includes('cancelled')) {
+                return { success: false, error: 'Authentication cancelled' };
+            }
+
+            try {
+                const sudoResult = await execAsync(
+                    `echo "authenticate" | sudo -S bash -c 'echo AUTH_OK' 2>&1`,
+                    { timeout: 30000 }
+                );
+                if (sudoResult.stdout.includes('AUTH_OK')) {
+                    return { success: true, method: 'password', message: 'Password verified via sudo' };
+                }
+            } catch {
+                // sudo also failed
+            }
+
+            return { success: false, error: 'Authentication failed — no valid password provided' };
+        } catch (error) {
+            if (error.message?.includes('cancelled') || error.message?.includes('No password')) {
+                return { success: false, error: 'Authentication cancelled' };
+            }
+            return { success: false, error: `Authentication failed: ${error.message}` };
         }
     }
 
@@ -265,8 +309,12 @@ class CrossPlatformBiometricAuth {
             }
             return result;
         } else {
-            console.warn('[CrossPlatformAuth] No biometric available - using fallback');
-            return { success: true, method: 'fallback', warning: 'Using password fallback' };
+            console.warn('[CrossPlatformAuth] No biometric available — falling back to OS password prompt');
+            const result = await this.authManager.authenticate(reason);
+            if (!result.success) {
+                throw new Error(`Authentication failed: ${result.error || 'No authentication method available'}`);
+            }
+            return result;
         }
     }
 

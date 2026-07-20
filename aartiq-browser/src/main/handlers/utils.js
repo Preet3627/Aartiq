@@ -122,9 +122,10 @@ exports.deriveKey = async function(passphrase, salt) {
 };
 
 exports.validateCommand = function(script) {
-  const dangerous = /sudo|rm\s+-rf|shutdown|reboot|kill\s+-9|diskutil|dd\s+if/i;
-  if (dangerous.test(script)) {
-    throw new Error('Command contains dangerous operations');
+  const { validateCommand: securityValidate } = require('../../lib/SecurityValidator');
+  const result = securityValidate(script);
+  if (!result.valid) {
+    throw new Error(result.errors.join('; '));
   }
 };
 
@@ -167,29 +168,6 @@ exports.normalizeMacNativePanelMode = function(mode = 'sidebar') {
 // ============================================================================
 // SYNC & APPROVAL HELPERS
 // ============================================================================
-
-exports.streamPromptToMobile = async function(promptId, prompt, targetModel, provider, handlers) {
-  const { wifiSyncService, llmGenerateHandler } = handlers;
-  if (!wifiSyncService) return;
-
-  const streamEvent = {
-    sender: {
-      isDestroyed: () => false,
-      send: (_channel, data) => {
-        if (data?.type === 'text-delta') {
-          wifiSyncService.sendAIResponse(promptId, data.textDelta || '', true);
-        } else if (data?.type === 'finish') {
-          wifiSyncService.sendAIResponse(promptId, '', false);
-        }
-      }
-    }
-  };
-
-  await llmGenerateHandler([{ role: 'user', content: prompt }], {
-    model: targetModel,
-    provider: provider
-  }, streamEvent);
-};
 
 exports.generateShellApprovalQR = async function(command) {
   const QRCode = require('qrcode');

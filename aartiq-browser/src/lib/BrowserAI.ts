@@ -109,9 +109,9 @@ export class BrowserAI {
 
             this.vectorMemory.push({ text, vector: tf.tensor1d(vectorArray), metadata });
 
-            // Persist to Disk
-            if (window.electronAPI) {
-                // We save a lightweight version (vector array, not tensor)
+            const crossSessionEnabled = (window as any).__AARTIQ_STORE__?.getState?.()?.enableCrossSessionMemory;
+
+            if (crossSessionEnabled && window.electronAPI) {
                 const serializableData = this.vectorMemory.map(item => ({
                     text: item.text,
                     vector: item.vector.arraySync(),
@@ -120,8 +120,7 @@ export class BrowserAI {
                 window.electronAPI.saveVectorStore(serializableData);
             }
 
-            // Keep the vector memory size manageable, e.g., 2000 entries
-            if (this.vectorMemory.length > 2000) { // Increased from 300
+            if (this.vectorMemory.length > 2000) {
                 const old = this.vectorMemory.shift();
                 old?.vector.dispose();
             }

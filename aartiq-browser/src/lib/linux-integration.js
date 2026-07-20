@@ -282,17 +282,13 @@ async function getLinuxVoices() {
 async function startVoiceRecognition(options = {}) {
   const { language = 'en', timeout = 5000 } = options;
   
-  const desktop = await detectDesktop();
-  
-  try {
-    if (desktop === 'gnome') {
-      const output = await executeCommand('timeout', ['-s', 'SIGKILL', timeout / 1000, 'arecord', '-f', 'S16_LE', '-r', '16000', '-c', '1', '-t', 'raw', '/tmp/aartiq_voice.raw']);
-      return { success: false, message: 'Voice recording not available - use web-based STT' };
-    }
-    return { success: false, message: 'Voice recognition requires web service on Linux' };
-  } catch (error) {
-    return { success: false, message: error.message };
-  }
+  // Voice recognition on Linux requires a speech-to-text service.
+  // Options: Whisper (via whisper.cpp or OpenAI API), Vosk, or web-based STT.
+  // None of these are bundled — return a clear error so the model doesn't retry.
+  return {
+    success: false,
+    message: 'Voice recognition is not yet supported on Linux. Use the AI chat sidebar for text input, or install whisper.cpp (https://github.com/ggerganov/whisper.cpp) and configure it as a local STT service.',
+  };
 }
 
 function generateShortcutURL(action, params = {}) {

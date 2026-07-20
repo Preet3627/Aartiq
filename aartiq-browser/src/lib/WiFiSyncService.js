@@ -385,6 +385,11 @@ var WiFiSyncService = /** @class */ (function (_super) {
             timestamp: Date.now(),
         });
     };
+    WiFiSyncService.prototype.sendFileToMobile = function (filename, fileBuffer, mimeType, metadata) {
+        var base64Data = fileBuffer.toString('base64');
+        this.broadcast(__assign(__assign({ type: 'file-transfer', filename: filename, mimeType: mimeType, data: base64Data, size: fileBuffer.length }, metadata), { timestamp: Date.now() }));
+        console.log("[WiFi-Sync] Sent file to mobile: ".concat(filename, " (").concat((fileBuffer.length / 1024).toFixed(1), " KB)"));
+    };
     WiFiSyncService.prototype._handleDesktopControl = function (ws, msg) {
         return __awaiter(this, void 0, void 0, function () {
             var commandId, action, prompt, promptId, args;

@@ -561,11 +561,16 @@ export function validateCommand(command: ParsedCommand): { valid: boolean; error
             break;
         }
 
-        case 'GENERATE_PDF':
-            if (!value.includes('|')) {
+        case 'GENERATE_PDF': {
+            // Accept pipe-delimited (title | content) OR JSON params with title+content
+            const params = (command as any).params || {};
+            const hasPipe = value.includes('|');
+            const hasJsonParams = params.title || params.content;
+            if (!hasPipe && !hasJsonParams) {
                 return { valid: false, error: 'GENERATE_PDF requires format: title | content' };
             }
             break;
+        }
 
         case 'CREATE_PDF_JSON':
             // JSON commands should have valid JSON structure

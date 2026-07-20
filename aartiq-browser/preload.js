@@ -153,6 +153,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   webSearchConfigure: (keys) => ipcRenderer.invoke('web-search-configure', keys),
   fetchPageContent: (url, maxChars) => ipcRenderer.invoke('fetch-page-content', url, maxChars),
   webSearchYoutube: (query, count) => ipcRenderer.invoke('web-search-youtube', query, count),
+
+  // Research Pipeline
+  researchStart: (query, engine, options) => ipcRenderer.invoke('research:start', { query, engine, options }),
+  researchCancel: (pipelineId) => ipcRenderer.invoke('research:cancel', { pipelineId }),
+  researchGetStatus: (pipelineId) => ipcRenderer.invoke('research:get-status', { pipelineId }),
+  onResearchProgress: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('research:progress', subscription);
+    return () => ipcRenderer.removeListener('research:progress', subscription);
+  },
   domClickElement: (opts) => ipcRenderer.invoke('dom-click-element', opts),
   domFillForm: (opts) => ipcRenderer.invoke('dom-fill-form', opts),
   multiFillForm: (opts) => ipcRenderer.invoke('dom-multi-fill-form', opts),
@@ -211,7 +221,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   onLoadAuthSession: (callback) => {
     const subscription = (event, session) => callback(session);
-    ipcRenderer.on('load-auth-session', session); // Fix: passed session directly might be wrong but was in original
+    ipcRenderer.on('load-auth-session', subscription);
     return () => ipcRenderer.removeListener('load-auth-session', subscription);
   },
   saveAuthToken: (args) => ipcRenderer.send('save-auth-token', args),
@@ -492,6 +502,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   setVolume: (level) => ipcRenderer.invoke('set-volume', level),
   setBrightness: (level) => ipcRenderer.invoke('set-brightness', level),
+  setBrowserFont: (fontFamily, fontSize) => ipcRenderer.invoke('set-browser-font', { fontFamily, fontSize }),
 
   // System Settings
   openSystemSettings: (url) => ipcRenderer.invoke('open-system-settings', url),
@@ -582,6 +593,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   submitShellApprovalResponse: (requestId, allowed, deviceUnlockValidated = false) =>
     ipcRenderer.send('automation-shell-approval-response', { requestId, allowed, deviceUnlockValidated }),
+
+  forwardAiStream: (opts) => ipcRenderer.invoke('forward-ai-stream', opts),
 
   robotExecute: (action) => ipcRenderer.invoke('robot-execute', action),
   robotExecuteSequence: (actions, options) =>

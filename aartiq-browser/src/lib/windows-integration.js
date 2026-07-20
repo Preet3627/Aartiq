@@ -18,10 +18,14 @@ const WindowsIntegration = {
   isWindows: process.platform === 'win32',
 };
 
-async function executePowerShell(script) {
+async function executePowerShell(script, args = []) {
   return new Promise((resolve, reject) => {
     const psScript = Buffer.from(script, 'utf16le').toString('base64');
-    exec(`powershell -EncodedCommand ${psScript}`, { windowsHide: true }, (error, stdout, stderr) => {
+    const cmdArgs = ['-NoProfile', '-NonInteractive', '-EncodedCommand', psScript];
+    if (args.length > 0) {
+      cmdArgs.push('-Args', ...args);
+    }
+    exec(`powershell ${cmdArgs.map(a => `"${a}"`).join(' ')}`, { windowsHide: true }, (error, stdout, stderr) => {
       if (error) {
         reject(error);
       } else {
@@ -148,10 +152,54 @@ async function handleScreenshotAction(params) {
 
 async function handleVolumeAction(params) {
   const { level } = params;
-  const volumeLevel = Math.max(0, Math.min(100, parseInt(level) || 50));
+  const volumeLevel = Math.max(0, Math.min(100, parseInt(level, 10) || 50));
   try {
-    const script = `(New-Object -ComObject WScript.Shell).RegWrite('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Applets\\Sound Recorder', 'Volume', '${volumeLevel}', 'REG_DWORD')`;
-    await executePowerShell(script);
+    // Use CoreAudio API via PowerShell to set system volume.
+    const script = `
+      param([int]$Vol)
+      Add-Type -TypeDefinition '
+        using System;
+        using System.Runtime.InteropServices;
+
+        [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IAudioEndpointVolume {
+          int f(); int g(); int h(); int i();
+          int SetMasterVolumeLevelScalar(float fLevel, System.Guid pguidEventContext);
+          int j();
+          int GetMasterVolumeLevelScalar(out float pfLevel);
+        }
+
+        [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IMMDevice {
+          int Activate(ref System.Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
+        }
+
+        [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IMMDeviceEnumerator {
+          int EnumAudioEndpoints(int dataFlow, int dwStateMask, [MarshalAs(UnmanagedType.IUnknown)] out object ppDevices);
+          int GetDefaultAudioEndpoint(int dataFlow, int dwRole, [MarshalAs(UnmanagedType.IUnknown)] out object ppEndpoint);
+        }
+
+        [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+        public class MMDeviceEnumerator {}
+
+        public static class AudioHelper {
+          public static void SetVolume(int percent) {
+            var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumerator());
+            object dev;
+            enumerator.GetDefaultAudioEndpoint(0, 1, out dev);
+            var device = (IMMDevice)dev;
+            object iface;
+            var iid = typeof(IAudioEndpointVolume).GUID;
+            device.Activate(ref iid, 1, IntPtr.Zero, out iface);
+            var volume = (IAudioEndpointVolume)iface;
+            volume.SetMasterVolumeLevelScalar(percent / 100.0f, Guid.Empty);
+          }
+        }
+      '
+      [AudioHelper]::SetVolume($Vol)
+    `;
+    await executePowerShell(script, [String(volumeLevel)]);
     return { success: true, volume: volumeLevel };
   } catch (error) {
     return { error: error.message };
@@ -228,27 +276,30 @@ async function startVoiceRecognition(params = {}) {
 async function speakText(text, params = {}) {
   const { rate = 0, volume = 1, voice = '' } = params;
 
-  return new Promise(async (resolve, reject) => {
-    try {
-      let voiceSelection = '';
-      if (voice) {
-        voiceSelection = `-Voice "${voice}"`;
-      }
-
-      const script = `
-        Add-Type -AssemblyName System.Speech
-        $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
-        $synth.Rate = ${rate}
-        $synth.Volume = ${Math.round(volume * 100)}
-        $synth.Speak("${text.replace(/"/g, '`"')}")
-      `;
-
-      await executePowerShell(script);
-      resolve({ success: true });
-    } catch (error) {
-      reject(error);
+  // Use a param block so user text is never interpolated into the script source.
+  const script = `
+    param(
+      [string]$TextToSpeak,
+      [int]$Rate,
+      [int]$Vol,
+      [string]$VoiceName
+    )
+    Add-Type -AssemblyName System.Speech
+    $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+    $synth.Rate = $Rate
+    $synth.Volume = $Vol
+    if ($VoiceName) {
+      $synth.SelectVoice($VoiceName)
     }
-  });
+    $synth.Speak($TextToSpeak)
+  `;
+
+  return await executePowerShell(script, [
+    text,
+    String(parseInt(rate, 10) || 0),
+    String(Math.round((parseFloat(volume) || 1) * 100)),
+    voice || '',
+  ]);
 }
 
 async function getWindowsVoices() {

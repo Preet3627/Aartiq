@@ -5,7 +5,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 module.exports = function registerSystemHandlers(ipcMain, handlers) {
-  const { mainWindow, store, extensionsPath } = handlers;
+  const { mainWindow, store, extensionsPath, tabViews } = handlers;
 
   ipcMain.handle('execute-shell-command', async (event, { rawCommand, preApproved, reason, riskLevel }) => {
     const { execShellCommand } = require('./utils.js');
@@ -97,6 +97,25 @@ module.exports = function registerSystemHandlers(ipcMain, handlers) {
       exec(`brightness ${level}`);
     }
     return { success: true };
+  });
+
+  ipcMain.handle('set-browser-font', async (event, { fontFamily, fontSize }) => {
+    try {
+      const activeTabId = tabViews._activeTabId;
+      const view = activeTabId ? tabViews.get(activeTabId) : null;
+      if (!view || view.webContents.isDestroyed()) return { success: false, error: 'No active browser view' };
+
+      const css = `
+        *, *::before, *::after {
+          font-family: ${fontFamily} !important;
+        }
+        ${fontSize ? `body { font-size: ${fontSize}px !important; }` : ''}
+      `;
+      await view.webContents.insertCSS(css);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
   });
 
   ipcMain.handle('set-alarm', async (event, { time, message }) => {

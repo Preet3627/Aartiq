@@ -1,5 +1,6 @@
 const fetch = require('cross-fetch');
 const { JSDOM } = require('jsdom');
+const { fetchPageContent: sharedFetchPageContent, DEFAULT_UA } = require('./web-extractor');
 
 class WebSearchProvider {
   constructor() {
@@ -75,7 +76,7 @@ class WebSearchProvider {
         `https://www.google.com/search?q=${encodeURIComponent(query)}&num=${Math.min(count, 20)}&hl=en`,
         {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'User-Agent': DEFAULT_UA,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
@@ -295,7 +296,7 @@ class WebSearchProvider {
         `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
         {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'User-Agent': DEFAULT_UA,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
           },
@@ -398,33 +399,7 @@ class WebSearchProvider {
   }
 
   async fetchPageContent(url, maxChars = 8000) {
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
-        },
-        timeout: 10000,
-      });
-      if (!res.ok) return '';
-      const html = await res.text();
-      const dom = new JSDOM(html, { url });
-      const doc = dom.window.document;
-
-      // Remove non-content elements
-      const remove = doc.querySelectorAll('script, style, nav, footer, header, noscript, svg, iframe, form, .sidebar, .menu, .footer, .header, .nav, .ad, .advertisement, .cookie, .popup, .modal, .overlay');
-      for (const el of remove) el.remove();
-
-      // Prefer main content regions
-      const main = doc.querySelector('main, article, [role="main"], #content, #main, .content, .post, .entry, .article');
-      const text = main ? main.textContent : doc.body.textContent;
-
-      return text.replace(/\s+/g, ' ').trim().substring(0, maxChars);
-    } catch (e) {
-      console.warn(`[WebSearch] fetchPageContent failed for ${url}: ${e.message}`);
-      return '';
-    }
+    return sharedFetchPageContent(url, { maxChars });
   }
 
   async _searchYouTube(query, count) {
@@ -433,7 +408,7 @@ class WebSearchProvider {
         `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=en`,
         {
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'User-Agent': DEFAULT_UA,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
           },

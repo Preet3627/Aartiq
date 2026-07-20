@@ -12,6 +12,7 @@ const registerPluginHandlers = require('./plugin-handlers.js');
 const registerMemoryHandlers = require('./memory-handlers.js');
 const registerRagHandlers = require('./rag-handlers.js');
 const registerVoiceWorkflowHandlers = require('./voice-workflow-handlers.js');
+const registerResearchHandlers = require('./research-handlers.js');
 const utils = require('./utils.js');
 
 function registerAllHandlers(ipcMain, handlers) {
@@ -45,6 +46,7 @@ function registerAllHandlers(ipcMain, handlers) {
     'generate-high-risk-qr','login-to-cloud','logout-from-cloud','save-cloud-config',
     'get-cloud-devices','connect-to-cloud-device','disconnect-from-cloud-device',
     'sync-clipboard','sync-history','send-desktop-control','connect-to-remote-device',
+    'forward-ai-stream',
     'p2p-sync-history','p2p-get-device-id',
     'bridge-get-pairing-code','bridge-get-status','bridge-rotate-secret','bridge-broadcast',
     'read-file-buffer','select-local-file','open-file','scan-folder',
@@ -117,6 +119,7 @@ function registerAllHandlers(ipcMain, handlers) {
   registerMemoryHandlers(ipcMain, enrichedHandlers);
   registerRagHandlers(ipcMain, enrichedHandlers);
   registerVoiceWorkflowHandlers(ipcMain, enrichedHandlers);
+  registerResearchHandlers(ipcMain, enrichedHandlers);
 
   console.log('[Handlers] All IPC handlers registered');
 }

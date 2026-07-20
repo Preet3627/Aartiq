@@ -139,6 +139,8 @@ var CloudSyncService = /** @class */ (function (_super) {
                             case 1:
                                 _a.sent();
                                 this._startListeningForDevices();
+                                this._startPromptListener();
+                                this._startAIResponseListener();
                                 this.emit('connected', user.uid);
                                 return [3 /*break*/, 3];
                             case 2:

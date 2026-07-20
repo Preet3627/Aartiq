@@ -6,6 +6,7 @@ import {
   ChevronDown, ChevronRight, Search, Globe, FileText, Terminal,
   ExternalLink, Copy, Check, Folder, Eye, EyeOff
 } from 'lucide-react';
+import MoleculeRenderer from './MoleculeRenderer';
 
 // ─── URL Detection & Favicon Card ─────────────────────────────────────────────
 
@@ -250,13 +251,7 @@ const SearchResultCard = memo(function SearchResultCard({ item }: { item: Search
               {item.snippet && (
                 <p className="text-[12px] text-white/50 leading-relaxed mb-2">{item.snippet}</p>
               )}
-              <button
-                onClick={openURL}
-                className="inline-flex items-center gap-1.5 text-[11px] text-sky-400 hover:text-sky-300 transition-colors"
-              >
-                <ExternalLink size={11} />
-                <span className="truncate max-w-[250px]">{item.url}</span>
-              </button>
+              <URLCard url={item.url} title={item.title || domain} compact={false} />
             </div>
           </motion.div>
         )}
@@ -276,11 +271,19 @@ interface SearchResultsBlockProps {
 const SearchResultsBlock = memo(function SearchResultsBlock({ query, results, engine }: SearchResultsBlockProps) {
   const [collapsed, setCollapsed] = useState(true);
 
+  const topDomains = useMemo(() => {
+    const seen = new Set<string>();
+    return results
+      .map(r => extractDomain(r.url))
+      .filter(d => { if (seen.has(d)) return false; seen.add(d); return true; })
+      .slice(0, 3);
+  }, [results]);
+
   return (
     <div className="my-2 rounded-2xl border border-sky-500/10 bg-sky-500/[0.03] overflow-hidden">
       <button
         onClick={() => setCollapsed(v => !v)}
-        className="w-full flex items-center gap-2 px-3.5 py-2.5 hover:bg-sky-500/[0.05] transition-colors"
+        className="w-full flex items-center gap-2 px-3.5 py-2 hover:bg-sky-500/[0.05] transition-colors"
       >
         <Search size={13} className="text-sky-400 shrink-0" />
         <span className="text-[12px] font-medium text-sky-300">
@@ -288,6 +291,9 @@ const SearchResultsBlock = memo(function SearchResultsBlock({ query, results, en
         </span>
         {query && (
           <span className="text-[11px] text-white/30 truncate flex-1 text-left">for &ldquo;{query}&rdquo;</span>
+        )}
+        {topDomains.length > 0 && (
+          <span className="text-[9px] text-white/20 truncate max-w-[160px]">{topDomains.join(', ')}</span>
         )}
         {engine && (
           <span className="text-[9px] text-white/20 uppercase tracking-wider shrink-0">{engine}</span>
@@ -720,16 +726,53 @@ const SmartMessageContent = memo(function SmartMessageContent({
           );
         }
 
-        // Text segment - render via the provided renderer
+        // Text segment - render via the provided renderer, with molecule support
         if (segment.content) {
-          return (
-            <div key={`text-${idx}`}>
-              {renderText
-                ? renderText(segment.content, animate && idx === segments.length - 1)
-                : <span>{segment.content}</span>
-              }
-            </div>
-          );
+          const MOLECULE_RE = /\[MOLECULE:([A-Za-z0-9@+\-\[\]\(\)\\\/=#$%.:]+)\]/g;
+          const parts: React.ReactNode[] = [];
+          let lastIdx = 0;
+          let match;
+          const content = segment.content;
+
+          while ((match = MOLECULE_RE.exec(content)) !== null) {
+            if (match.index > lastIdx) {
+              const textBefore = content.substring(lastIdx, match.index);
+              parts.push(
+                <span key={`t-${lastIdx}`}>
+                  {renderText
+                    ? renderText(textBefore, false)
+                    : textBefore}
+                </span>
+              );
+            }
+            parts.push(
+              <MoleculeRenderer key={`m-${match.index}`} smiles={match[1]} />
+            );
+            lastIdx = match.index + match[0].length;
+          }
+
+          if (parts.length === 0) {
+            return (
+              <div key={`text-${idx}`}>
+                {renderText
+                  ? renderText(content, animate && idx === segments.length - 1)
+                  : <span>{content}</span>}
+              </div>
+            );
+          }
+
+          if (lastIdx < content.length) {
+            const textAfter = content.substring(lastIdx);
+            parts.push(
+              <span key={`t-${lastIdx}`}>
+                {renderText
+                  ? renderText(textAfter, animate && idx === segments.length - 1)
+                  : textAfter}
+              </span>
+            );
+          }
+
+          return <div key={`text-${idx}`}>{parts}</div>;
         }
 
         return null;

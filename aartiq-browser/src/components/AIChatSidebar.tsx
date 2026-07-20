@@ -21,12 +21,15 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import 'katex/contrib/mhchem';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import dracula from 'react-syntax-highlighter/dist/cjs/styles/prism/dracula';
 
 // Imported modular components
 import ThinkingPanel, { type ThinkingStep } from './ai/ThinkingPanel';
+import ActionChainTimeline, { type ActionChainStep } from './ai/ActionChainTimeline';
 import CollapsibleOCRMessage from './ai/CollapsibleOCRMessage';
+import ProcessingIndicator from './ai/ProcessingIndicator';
 import CollapsibleSkillMessage from './ai/CollapsibleSkillMessage';
 import MessageActions from './ai/MessageActions';
 import ConversationHistoryPanel, { type Conversation, type ChatMessage } from './ai/ConversationHistoryPanel';
@@ -218,10 +221,13 @@ function FilePathLink({ filePath }: { filePath: string }) {
 }
 
 function SourceLink({ href, children }: { href?: string; children: React.ReactNode }) {
-  const link = `${href || ''}`;
+  const [hovered, setHovered] = React.useState(false);
+  const rawLink = `${href || ''}`;
+  let link = rawLink;
   let hostname = '';
   let favicon = '';
   try {
+    if (link.startsWith('//')) link = 'https:' + link;
     const url = new URL(link);
     hostname = url.hostname.replace(/^www\./, '');
     favicon = `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
@@ -243,8 +249,23 @@ function SourceLink({ href, children }: { href?: string; children: React.ReactNo
     return <span>{children}</span>;
   }
 
+  const childText = typeof children === 'string' ? children.trim() : '';
+  const isBareUrl = childText && (
+    childText === link ||
+    childText === rawLink ||
+    childText === href ||
+    /^https?:\/\//.test(childText) ||
+    /^\/\//.test(childText) ||
+    childText.replace(/^www\./, '') === hostname
+  );
+  const displayText = isBareUrl ? hostname : children;
+
   return (
-    <span className="group/source relative inline-flex max-w-full align-baseline">
+    <span
+      className="relative inline-flex max-w-full align-baseline"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <button
         type="button"
         onClick={openLink}
@@ -259,9 +280,12 @@ function SourceLink({ href, children }: { href?: string; children: React.ReactNo
             (event.currentTarget as HTMLImageElement).style.display = 'none';
           }}
         />
-        <span className="min-w-0 truncate">{children}</span>
+        <span className="min-w-0 truncate">{displayText}</span>
       </button>
-      <span className="pointer-events-none absolute left-0 top-full z-20 mt-1 max-w-[320px] translate-y-1 rounded-lg border border-border-color bg-primary-bg/95 px-2.5 py-1.5 text-[11px] text-secondary-text opacity-0 shadow-xl backdrop-blur-xl transition-all duration-200 group-hover/source:translate-y-0 group-hover/source:opacity-100">
+      <span
+        className="pointer-events-none absolute left-0 top-full z-20 mt-1 max-w-[320px] rounded-lg border border-border-color bg-primary-bg/95 px-2.5 py-1.5 text-[11px] text-secondary-text shadow-xl backdrop-blur-xl transition-all duration-200"
+        style={{ opacity: hovered ? 1 : 0, transform: hovered ? 'translateY(0)' : 'translateY(4px)' }}
+      >
         <span className="block font-medium text-primary-text">{hostname}</span>
         <span className="block truncate">{link}</span>
       </span>
@@ -276,6 +300,33 @@ const renderMarkdownContent = (content: string) => (
     components={{
       a({ href, children }) {
         return <SourceLink href={href}>{children}</SourceLink>;
+      },
+      table({ children }) {
+        return (
+          <div className="my-4 overflow-x-auto rounded-xl border border-[color-mix(in_srgb,var(--primary-text)_12%,transparent)]">
+            <table className="aartiq-table w-full border-collapse text-[13px]">{children}</table>
+          </div>
+        );
+      },
+      thead({ children }) {
+        return <thead className="aartiq-table-head">{children}</thead>;
+      },
+      tbody({ children }) {
+        return <tbody className="aartiq-table-body">{children}</tbody>;
+      },
+      tr({ children, ...rest }) {
+        const isHeader = (rest as any)?.node?.parent?.tagName === 'thead';
+        return (
+          <tr className={`aartiq-table-row ${isHeader ? 'aartiq-table-row-header' : ''}`}>
+            {children}
+          </tr>
+        );
+      },
+      th({ children }) {
+        return <th className="aartiq-table-th">{children}</th>;
+      },
+      td({ children }) {
+        return <td className="aartiq-table-td">{children}</td>;
       },
       code({ className, children, ...rest }) {
         const match = /language-(\w+)/.exec(className || '');
@@ -419,6 +470,10 @@ const sanitizeVisibleMessage = (content: string): string => {
 
   // Strip empty ```json``` fences left behind
   cleaned = cleaned.replace(/```(?:json)?\s*```/g, '');
+
+  // Strip stray/unclosed ```json fences (model emits opening fence but the JSON
+  // payload was intercepted as a command, leaving the fence dangling in the text)
+  cleaned = cleaned.replace(/```(?:json)?\s*\n?$/gm, '');
 
   // Collapse raw search dumps
   cleaned = collapseRawSearchDump(cleaned);
@@ -655,6 +710,12 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     resolve: (result: { commands: AICommand[]; timedOut: boolean }) => void;
     timeoutId: number;
   } | null>(null);
+
+  const remotePromptContextRef = useRef<{
+    promptId: string;
+    fromDeviceId?: string;
+    mode?: string;
+  } | null>(null);
   const skipBatchRef = useRef(0);
   const processingBatchRef = useRef(false);
 
@@ -663,10 +724,15 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [thinkingText, setThinkingText] = useState<string>('');
   const [isThinking, setIsThinking] = useState(false);
 
+  // Action Chain Execution Timeline
+  const [actionChainSteps, setActionChainSteps] = useState<ActionChainStep[]>([]);
+  const actionChainStepIdCounter = useRef(0);
+
   // Agent State
   const [agentState, setAgentState] = useState<AgentState>('idle');
   const [planningSteps, setPlanningSteps] = useState<PlanningStep[]>([]);
   const [lastSidebarInteractionAt, setLastSidebarInteractionAt] = useState<number>(Date.now());
+  const [customStatusText, setCustomStatusText] = useState<string>('');
   const thinkingIdCounter = useRef(0);
 
   // Refs & Workers
@@ -675,6 +741,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const tesseractWorkerRef = useRef<Tesseract.Worker | null>(null);
   const refusedIntentsRef = useRef<RefusedIntentRecord[]>([]);
   const activeStreamingMessageIdRef = useRef<string | null>(null);
+  const currentActionChainStepIdRef = useRef<string | null>(null);
 
   // UI state
   const [showRagPanel, setShowRagPanel] = useState(false);
@@ -813,6 +880,8 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [terminalLogs, setTerminalLogs] = useState<Array<{ id: string; command: string; output: string; success: boolean; timestamp: number }>>([]);
   const [showTerminal, setShowTerminal] = useState(false);
+  const [showDevLogs, setShowDevLogs] = useState(false);
+  const [researchProgress, setResearchProgress] = useState<{ stage: string; message: string; [key: string]: any } | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const terminalLogIdCounter = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -834,6 +903,16 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
       setAgentState('executing');
     }
   }, [permissionPending]);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.onResearchProgress?.((progress: any) => {
+      setResearchProgress(progress);
+      if (progress.stage === 'complete') {
+        setTimeout(() => setResearchProgress(null), 3000);
+      }
+    });
+    return () => unsubscribe?.();
+  }, []);
 
   const markSidebarInteraction = useCallback(() => {
     setLastSidebarInteractionAt(Date.now());
@@ -998,23 +1077,31 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     try {
       window.localStorage.setItem(SIDEBAR_WORKSPACE_PREFS_KEY, JSON.stringify(workspacePrefs));
       window.dispatchEvent(new CustomEvent('aartiq-click-sound-preference', { detail: { enabled: workspacePrefs.soundsEnabled } }));
+      document.documentElement.style.setProperty('--chat-font', workspacePrefs.fontFamily);
     } catch {
     }
   }, [workspacePrefs]);
 
   const updateWorkspacePrefs = useCallback((partial: Partial<SidebarWorkspacePreferences>) => {
-    setWorkspacePrefs((previous) => ({
-      ...previous,
-      ...partial,
-      visibleComposerIcons: {
-        ...previous.visibleComposerIcons,
-        ...(partial.visibleComposerIcons || {}),
-      },
-      modelNicknames: {
-        ...previous.modelNicknames,
-        ...(partial.modelNicknames || {}),
-      },
-    }));
+    setWorkspacePrefs((previous) => {
+      const next = {
+        ...previous,
+        ...partial,
+        visibleComposerIcons: {
+          ...previous.visibleComposerIcons,
+          ...(partial.visibleComposerIcons || {}),
+        },
+        modelNicknames: {
+          ...previous.modelNicknames,
+          ...(partial.modelNicknames || {}),
+        },
+      };
+      if ((partial.fontFamily && partial.fontFamily !== previous.fontFamily) ||
+          (partial.fontSize && partial.fontSize !== previous.fontSize)) {
+        window.electronAPI?.setBrowserFont?.(next.fontFamily, next.fontSize);
+      }
+      return next;
+    });
   }, []);
 
   const playClickSound = useCallback((variant: 'tap' | 'confirm' | 'success' | 'error' | 'toggle' | 'drag' | 'navigate' | 'delete' = 'tap') => {
@@ -1138,6 +1225,21 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
 
   const updateThinkingStep = useCallback((id: string, detail: string) => {
     setThinkingSteps((prev) => prev.map((s) => s.id === id ? { ...s, detail } : s));
+  }, []);
+
+  const addActionChainStep = useCallback((label: string, detail?: string): string => {
+    const id = `acs-${Date.now()}-${actionChainStepIdCounter.current++}`;
+    setActionChainSteps((prev) => [...prev, { id, label, status: 'running', detail, timestamp: Date.now() }]);
+    return id;
+  }, []);
+
+  const resolveActionChainStep = useCallback((id: string, status: 'done' | 'error' | 'skipped', detail?: string) => {
+    setActionChainSteps((prev) => prev.map((s) => s.id === id ? { ...s, status, detail: detail ?? s.detail } : s));
+  }, []);
+
+  const resetActionChainSteps = useCallback(() => {
+    setActionChainSteps([]);
+    actionChainStepIdCounter.current = 0;
   }, []);
 
   const preloadAartiqIconLocal = useCallback(async (): Promise<void> => {
@@ -1360,10 +1462,22 @@ I couldn't schedule the task. The background service may not be running. Please 
           onFirstChunk?.();
         }
 
+        const remoteCtx = remotePromptContextRef.current;
+
         if (part.type === 'text-delta') {
-          fullText += (part.text || part.textDelta || '');
+          const chunk = part.text || part.textDelta || '';
+          fullText += chunk;
           if (animationFrame === null) {
             animationFrame = window.requestAnimationFrame(flushStreamText);
+          }
+          if (remoteCtx && window.electronAPI?.forwardAiStream) {
+            window.electronAPI.forwardAiStream({
+              promptId: remoteCtx.promptId,
+              response: chunk,
+              isStreaming: true,
+              fromDeviceId: remoteCtx.fromDeviceId,
+              mode: remoteCtx.mode,
+            });
           }
         } else if (part.type === 'reasoning-delta') {
           fullThought += (part.delta || part.reasoningDelta || '');
@@ -1373,6 +1487,15 @@ I couldn't schedule the task. The background service may not be running. Please 
             window.cancelAnimationFrame(animationFrame);
             flushStreamText();
           }
+          if (remoteCtx && window.electronAPI?.forwardAiStream) {
+            window.electronAPI.forwardAiStream({
+              promptId: remoteCtx.promptId,
+              response: `Error: ${part.error || 'Stream failed'}`,
+              isStreaming: false,
+              fromDeviceId: remoteCtx.fromDeviceId,
+              mode: remoteCtx.mode,
+            });
+          }
           cleanup();
           resolve({ error: part.error });
         } else if (part.type === 'finish') {
@@ -1380,6 +1503,16 @@ I couldn't schedule the task. The background service may not be running. Please 
             window.cancelAnimationFrame(animationFrame);
           }
           flushStreamText();
+          if (remoteCtx && window.electronAPI?.forwardAiStream) {
+            window.electronAPI.forwardAiStream({
+              promptId: remoteCtx.promptId,
+              response: '',
+              isStreaming: false,
+              fromDeviceId: remoteCtx.fromDeviceId,
+              mode: remoteCtx.mode,
+            });
+            remotePromptContextRef.current = null;
+          }
           cleanup();
           resolve({ 
             text: fullText, 
@@ -1418,6 +1551,7 @@ I couldn't schedule the task. The background service may not be running. Please 
     setIsThinking(true);
     setThinkingSteps([]);
     setThinkingText('');
+    setCustomStatusText('');
     setError(null);
     setAgentState('thinking');
 
@@ -1539,8 +1673,9 @@ I couldn't schedule the task. The background service may not be running. Please 
       ];
 
       // Run in parallel
+      const crossSessionEnabled = useAppStore.getState().enableCrossSessionMemory;
       const [contextItems, browserStateResult] = await Promise.all([
-        BrowserAI.retrieveContext(protectedContent).catch(() => []),
+        crossSessionEnabled ? BrowserAI.retrieveContext(protectedContent).catch(() => []) : Promise.resolve([]),
         (async () => {
           try {
             const tabs: any[] = await window.electronAPI.getOpenTabs();
@@ -1557,7 +1692,6 @@ I couldn't schedule the task. The background service may not be running. Please 
 
       // Update thinking steps
       setRagContextItems(contextItems);
-      if (contextItems.length > 0) setShowRagPanel(true);
       resolveThinkingStep(ragId, 'done', `${contextItems.length} memories recovered`);
       if (browserStateContext) resolveThinkingStep(browserId, 'done', `${browserStateContext.split('\n').length} lines`);
       else resolveThinkingStep(browserId, 'skipped', 'No browser state');
@@ -1663,6 +1797,18 @@ I couldn't schedule the task. The background service may not be running. Please 
 
         // Also strip any remaining command tags/JSON for display
         responseText = stripAllCommands(responseText);
+
+        // Parse [STATUS: text] tags for custom processing indicators
+        const statusTagRegex = /\[STATUS:\s*([^\]]+)\]/gi;
+        let lastStatus = '';
+        let statusMatch;
+        while ((statusMatch = statusTagRegex.exec(response.text)) !== null) {
+          lastStatus = statusMatch[1].trim();
+        }
+        if (lastStatus) {
+          setCustomStatusText(lastStatus);
+          responseText = responseText.replace(statusTagRegex, '');
+        }
 
         // Extract user preference commands (SAVE_PREFERENCE:key:value)
         if (useAppStore.getState().enableAiPreferenceLearning) {
@@ -1913,6 +2059,7 @@ I couldn't schedule the task. The background service may not be running. Please 
     } finally {
       setIsLoading(false);
       setIsThinking(false);
+      setCustomStatusText('');
       setAgentState('finished');
       setTimeout(() => setAgentState('idle'), 2000);
     }
@@ -1929,6 +2076,11 @@ I couldn't schedule the task. The background service may not be running. Please 
     const command = commandQueue[currentCommandIndex];
     const COMMAND_TIMEOUT = 10000;
 
+    const acsStepId = addActionChainStep(`${command.type.replace(/_/g, ' ').toLowerCase()}`, command.value?.slice(0, 60));
+    currentActionChainStepIdRef.current = acsStepId;
+
+    setCustomStatusText('');
+    setAgentState('executing');
     setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'executing', startTime: Date.now() } : cmd));
 
     let commandResult: { output: string; error?: string } = { output: '' };
@@ -2490,11 +2642,62 @@ I couldn't schedule the task. The background service may not be running. Please 
                 output = `✅ Found ${searchResults.length} results for "${originalQuery}" (via ${usedEngine}) — URL "${specificUrl}" not found in results`;
               }
             } else {
-              // Default: show all results with their content
-              const resultLines = searchResults.map((r, i) =>
-                `${i + 1}. [${r.title}](${r.url})\n   ${r.snippet}${r.content ? `\n   Content: ${r.content.substring(0, 500)}` : ''}`
-              );
-              output = `✅ Found ${searchResults.length} results for "${originalQuery}" via ${usedEngine}:\n\n${resultLines.join('\n\n')}`;
+              // Default: store results as collapsible message, show compact summary
+              const FAILED_CONTENT_PATTERNS = [
+                /access to this page is forbidden/i,
+                /there are no items to show/i,
+                /403 forbidden/i,
+                /access denied/i,
+                /captcha/i,
+                /please enable javascript/i,
+                /this page requires javascript/i,
+                /cloudflare/i,
+                /checking your browser/i,
+                /checking the site connection security/i,
+              ];
+              const resultLines = searchResults
+                .filter(r => r.title || r.snippet)
+                .map((r, i) => {
+                  // Strip content that contains known failure patterns
+                  let cleanContent = r.content || '';
+                  if (cleanContent && FAILED_CONTENT_PATTERNS.some(p => p.test(cleanContent))) {
+                    cleanContent = '';
+                  }
+                  // Also strip very short content that's likely a status message, not real content
+                  if (cleanContent.length > 0 && cleanContent.length < 60 && !cleanContent.includes('.')) {
+                    cleanContent = '';
+                  }
+                  const title = r.title || 'Untitled';
+                  const url = r.url || '';
+                  const snippet = r.snippet || '';
+                  return `${i + 1}. ${title}\n   ${url}\n   ${snippet}${cleanContent ? `\n\n   ${cleanContent.substring(0, 500)}` : ''}`;
+                });
+
+              const resultsText = resultLines.join('\n\n');
+              const resultCount = resultLines.length;
+
+              output = `✅ Found ${resultCount} result${resultCount !== 1 ? 's' : ''} for "${originalQuery}" via ${usedEngine}`;
+
+              // Store full results as collapsible message
+              setMessages(prev => {
+                const last = prev[prev.length - 1];
+                if (last && last.role === 'model') {
+                  return [...prev.slice(0, -1), {
+                    ...last,
+                    content: output,
+                    isOcr: true,
+                    ocrLabel: 'WEB_SEARCH_RESULTS',
+                    ocrText: resultsText,
+                  }];
+                }
+                return [...prev, {
+                  role: 'model',
+                  content: output,
+                  isOcr: true,
+                  ocrLabel: 'WEB_SEARCH_RESULTS',
+                  ocrText: resultsText,
+                } as ExtendedChatMessage];
+              });
             }
             resolveThinkingStep(searchStepId, 'done', `${searchResults.length} results via ${usedEngine}`);
           } else {
@@ -2601,6 +2804,47 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
+        // ✅ DEEP_RESEARCH — Comprehensive Perplexity-quality research report
+        // JSON: {"type": "DEEP_RESEARCH", "query": "AI news", "engine": "duckduckgo", "maxResults": 10}
+        case 'DEEP_RESEARCH': {
+          const drRawValue = command.value.trim().replace(/^["'](.*)["']$/, '$1') || '';
+          const drQuery = getCmdParam(command as any, 'query') || cleanCmdValue(command as any) || drRawValue;
+          const drEngine = getCmdParam(command as any, 'engine') || 'duckduckgo';
+          const drMaxResults = getCmdParamInt(command as any, 'maxResults') || 10;
+          const drConcurrency = getCmdParamInt(command as any, 'concurrency') || 4;
+
+          if (!drQuery) {
+            output = 'DEEP_RESEARCH requires a query parameter.';
+            break;
+          }
+
+          const drStepId = addThinkingStep(`Starting deep research on "${drQuery}"...`);
+          try {
+            const result = await (window.electronAPI as any).researchStart(drQuery, drEngine, {
+              maxResults: drMaxResults,
+              concurrency: drConcurrency,
+            });
+
+            if (result?.success && result.report) {
+              output = result.report;
+              await BrowserAI.addToVectorMemory(output, {
+                type: 'deep_research',
+                query: drQuery,
+                timestamp: Date.now(),
+              });
+              const clusterCount = result.stats?.clusters || result.clusters?.length || 0;
+              resolveThinkingStep(drStepId, 'done', `Research complete: ${clusterCount} stories`);
+            } else {
+              output = `Deep research failed: ${result?.error || 'Unknown error'}`;
+              resolveThinkingStep(drStepId, 'error', result?.error || 'Failed');
+            }
+          } catch (e: any) {
+            output = `Deep research error: ${e.message}`;
+            resolveThinkingStep(drStepId, 'error', e.message);
+          }
+          break;
+        }
+
         case 'READ_PAGE_CONTENT': {
           try {
             const settled = await waitForActiveTabToSettle(15000);
@@ -2640,10 +2884,10 @@ I couldn't schedule the task. The background service may not be running. Please 
                 const last = prev[prev.length - 1];
                 if (last && last.role === 'model') {
                   const updated = [...prev];
-                  updated[prev.length - 1] = { ...last, isOcr: true, ocrLabel: 'PAGE_CONTENT', ocrText: scrubbed };
+                  updated[prev.length - 1] = { ...last, isOcr: true, ocrLabel: 'DOM_CONTENT', ocrText: scrubbed };
                   return updated;
                 }
-                return [...prev, { role: 'model', content: '', isOcr: true, ocrLabel: 'PAGE_CONTENT', ocrText: scrubbed } as ExtendedChatMessage];
+                return [...prev, { role: 'model', content: '', isOcr: true, ocrLabel: 'DOM_CONTENT', ocrText: scrubbed } as ExtendedChatMessage];
               });
             } else {
               output = `Error reading page: ${res.error || 'No content'}`;
@@ -3247,7 +3491,7 @@ I couldn't schedule the task. The background service may not be running. Please 
                 : `$ ${cmd.value}\n${cmdOutput2}`);
             }
 
-            output = outputs.join('\n');
+            output = outputs.join('\n\n');
             commandResult = { output };
             processingBatchRef.current = true;
             skipBatchRef.current = batchCommands.length - 1;
@@ -3287,7 +3531,7 @@ I couldn't schedule the task. The background service may not be running. Please 
             ? `$ ${command.value}\n${cmdOutput}`
             : res.error === 'User blocked the command.'
               ? 'Command execution denied by user.'
-              : `$ ${command.value}\n${cmdOutput}`;
+              : `Command failed: ${res.error || 'unknown error'}`;
           break;
         }
 
@@ -4752,7 +4996,9 @@ I've successfully executed the following real tasks:
               context: r.context || '',
               xpath: r.xpath || '',
               score: r.score || 0,
-              tag: r.tag || 'element'
+              tag: r.tag || 'element',
+              navLike: r.navLike || false,
+              linkDensity: r.linkDensity || 0,
             }));
 
             // Fallback 1: If 0 results, try extractPageContent and do a text match
@@ -4774,34 +5020,25 @@ I've successfully executed the following real tasks:
               } catch { /* ignore fallback error */ }
             }
 
-            // Fallback 2: If still 0 results, try web search for the query
-            if (results.length === 0 && !res.error) {
-              try {
-                const mcpRes = await (window.electronAPI as any).aiWebSearch(query, 'duckduckgo', 2);
-                if (mcpRes?.results?.length > 0) {
-                  const webResults = mcpRes.results.slice(0, 3).map((r: any) => ({
-                    text: `${r.title} — ${r.snippet}`,
-                    context: `Web: ${r.url}`,
-                    xpath: '',
-                    score: 0.5,
-                    tag: 'web-fallback'
-                  }));
-                  results = webResults;
-                }
-              } catch { /* ignore */ }
-            }
-
             setDOMSearchResults(results);
-            const formattedResults = results.map((r, i) => `${i + 1}. ${r.context}: "${r.text}"`).join('\n');
+            const formattedResults = results.map((r, i) => {
+              const navTag = r.navLike ? ' [nav]' : '';
+              // When context and text are identical (e.g. "Science: Science"), show just the text
+              const label = r.context === r.text || r.context.startsWith(r.text.substring(0, 20))
+                ? `"${r.text}"${navTag}`
+                : `${r.context}: "${r.text}"${navTag}`;
+              return `${i + 1}. ${label}`;
+            }).join('\n');
             if (results.length > 0) {
-              output = `DOM search for "${query}" returned ${results.length} results:\n${formattedResults.substring(0, 4000)}`;
+              // Store full results in vector memory but keep output brief — full results display via DOMSearchDisplay
+              output = `Found ${results.length} result${results.length !== 1 ? 's' : ''} for "${query}"`;
             } else if (res.error) {
               const friendlyMsg = res.error === 'No active view'
                 ? 'No webpage is currently open. Open a page first to search its content.'
                 : `DOM search failed: ${res.error}`;
               output = friendlyMsg;
             } else {
-              output = `DOM search for "${query}" returned 0 results on this page. Try using [WEB_SEARCH: ${query}] instead.`;
+              output = `DOM search for "${query}" returned 0 results on this page. Try [READ_PAGE_CONTENT] to get the full page text, or [SCREENSHOT_AND_ANALYZE] to capture visual content.`;
             }
             await BrowserAI.addToVectorMemory(
               `DOM Search Results for "${query}":\n${formattedResults || 'No results'}`,
@@ -5005,8 +5242,8 @@ I've successfully executed the following real tasks:
           const updated = [...prev];
           const actionLogs = last.actionLogs || [];
           const logEntry = { type: command.type, output, success: !commandResult.error };
-          const contentAppend = output && !commandResult.error ? `\n\n[${command.type}]\n${output.substring(0, 4000)}` : '';
-          const newContent = last.content + contentAppend;
+          const contentAppend = '';
+          const newContent = last.content;
           updated[prev.length - 1] = { ...last, content: newContent, actionLogs: [...actionLogs, logEntry] };
           return updated;
         }
@@ -5017,11 +5254,19 @@ I've successfully executed the following real tasks:
       setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'failed', error: err.message, endTime: Date.now() } : cmd));
     } finally {
       processingQueueRef.current = false;
+      if (currentActionChainStepIdRef.current) {
+        resolveActionChainStep(
+          currentActionChainStepIdRef.current,
+          commandResult.error ? 'error' : 'done',
+          commandResult.error || 'Completed'
+        );
+        currentActionChainStepIdRef.current = null;
+      }
       const skip = skipBatchRef.current;
       skipBatchRef.current = 0;
       setCurrentCommandIndex(prev => prev + 1 + skip);
     }
-  }, [commandQueue, currentCommandIndex, activeTabId, router, storeSetTheme, setActiveView, currentUrl, requestActionPermission, requestBatchPermission, preloadAartiqIconLocal, addThinkingStep, resolveThinkingStep, fetchRealSearchContext, openTabAndWaitForLoad, waitForActiveTabToSettle]);
+  }, [commandQueue, currentCommandIndex, activeTabId, router, storeSetTheme, setActiveView, currentUrl, requestActionPermission, requestBatchPermission, preloadAartiqIconLocal, addThinkingStep, resolveThinkingStep, fetchRealSearchContext, openTabAndWaitForLoad, waitForActiveTabToSettle, resolveActionChainStep]);
 
   const formatMessageForExport = (m: ExtendedChatMessage) => {
     let result = `${m.role.toUpperCase()}:\n`;
@@ -5031,14 +5276,17 @@ I've successfully executed the following real tasks:
       result += `\n[AI REASONING]\n${m.thinkText.trim()}\n[/AI REASONING]\n`;
     }
 
-    // OCR Sources (Collapsible in UI, shown as structured data in export)
+    // Extracted content (OCR, DOM, etc. — collapsible in UI, structured in export)
     if (m.isOcr && m.ocrText) {
-      result += `\n[OCR_RESULT]\n${JSON.stringify({
-        type: 'OCR_EXTRACTION',
+      const isDomContent = m.ocrLabel === 'DOM_CONTENT' || m.ocrLabel === 'DOM_EXTRACTED';
+      const tag = isDomContent ? 'DOM_RESULT' : 'OCR_RESULT';
+      const type = isDomContent ? 'DOM_EXTRACTION' : 'OCR_EXTRACTION';
+      result += `\n[${tag}]\n${JSON.stringify({
+        type,
         label: m.ocrLabel || 'EXTRACTED_DATA',
         textLength: m.ocrText.length,
         content: m.ocrText.trim()
-      }, null, 2)}\n[/OCR_RESULT]\n`;
+      }, null, 2)}\n[/${tag}]\n`;
     }
 
     // Action Chain (Separate JSON format)
@@ -5287,17 +5535,19 @@ I've successfully executed the following real tasks:
       }).catch(() => {});
     }
 
-    BrowserAI.loadVectorMemory().then(() => {
-      savedConversations.forEach(conv => {
-        const convText = conv.messages
-          .filter((m: any) => m.content && m.content.length > 20)
-          .map((m: any) => `[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`)
-          .join('\n');
-        if (convText.length > 50) {
-          BrowserAI.addToVectorMemory(convText, { type: 'chat_conversation', conversationId: conv.id, timestamp: conv.updatedAt || conv.createdAt }).catch(() => {});
-        }
+    if (useAppStore.getState().enableCrossSessionMemory) {
+      BrowserAI.loadVectorMemory().then(() => {
+        savedConversations.forEach(conv => {
+          const convText = conv.messages
+            .filter((m: any) => m.content && m.content.length > 20)
+            .map((m: any) => `[${m.role === 'user' ? 'User' : 'Assistant'}]: ${m.content}`)
+            .join('\n');
+          if (convText.length > 50) {
+            BrowserAI.addToVectorMemory(convText, { type: 'chat_conversation', conversationId: conv.id, timestamp: conv.updatedAt || conv.createdAt }).catch(() => {});
+          }
+        });
       });
-    });
+    }
 
     return () => {
       window.removeEventListener('online', hOnline);
@@ -5436,11 +5686,19 @@ I've successfully executed the following real tasks:
         streamToMobile?: boolean;
       }) => {
         console.log('[Remote-Prompt] Received from mobile:', data.prompt);
+        if (data.streamToMobile && data.promptId) {
+          remotePromptContextRef.current = {
+            promptId: data.promptId,
+            fromDeviceId: data.fromDeviceId,
+            mode: data.fromDeviceId ? 'cloud' : 'wifi',
+          };
+        }
         handleSendMessage(data.prompt);
       });
     }
     return () => {
       if (remoteCleanup) remoteCleanup();
+      remotePromptContextRef.current = null;
     };
   }, [handleSendMessage]);
 
@@ -5701,16 +5959,6 @@ I've successfully executed the following real tasks:
   // Render
   // ---------------------------------------------------------------------------
 
-  if (props.isCollapsed) {
-    return (
-      <div className="flex flex-col items-center h-full py-6 space-y-6" style={sidebarShellStyle}>
-        <button onClick={props.toggleCollapse} className="w-10 h-10 flex items-center justify-center rounded-2xl transition-all text-secondary-text hover:text-primary-text" style={softPanelStyle}>
-          {props.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
-        </button>
-      </div>
-    );
-  }
-
   const currentActiveModel = selectedProviderModel;
   const activeModelKey = `${normalizedProvider}:${currentActiveModel}`;
   const activeModelDisplayName = workspacePrefs.modelNicknames[activeModelKey] || currentActiveModel;
@@ -5821,13 +6069,20 @@ I've successfully executed the following real tasks:
 
   return (
     <div
-      className={`ai-sidebar-theme adaptive-theme-surface flex flex-col h-full overflow-hidden relative transition-[width,box-shadow,border-radius] duration-500 backdrop-blur-xl ${isFullScreen ? 'fixed inset-0 z-[9999]' : ''}`}
+      className={`ai-sidebar-theme adaptive-theme-surface flex flex-col h-full overflow-hidden relative transition-[width,box-shadow,border-radius] duration-[180ms] ease-[var(--ease-spring)] backdrop-blur-xl ${isFullScreen ? 'fixed inset-0 z-[9999]' : ''}`}
       style={{ width: isFullScreen ? '100%' : typeof effectiveSidebarWidth === 'number' ? `${effectiveSidebarWidth}px` : effectiveSidebarWidth, ...sidebarShellStyle }}
       onMouseEnter={markSidebarInteraction}
       onMouseDown={markSidebarInteraction}
       onClick={markSidebarInteraction}
       onFocusCapture={markSidebarInteraction}
     >
+      {props.isCollapsed ? (
+        <div className="flex flex-col items-center h-full py-6 space-y-6">
+          <button onClick={props.toggleCollapse} className="w-10 h-10 flex items-center justify-center rounded-2xl transition-all text-secondary-text hover:text-primary-text" style={softPanelStyle}>
+            {props.side === 'right' ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+          </button>
+        </div>
+      ) : (<>
       {/* Overlays */}
       <ConversationHistoryPanel
         show={showConversationHistory}
@@ -5855,12 +6110,12 @@ I've successfully executed the following real tasks:
           <AICommandQueue
             commands={commandQueue}
             currentCommandIndex={currentCommandIndex}
-            onCancel={() => { setCommandQueue([]); setAgentState('idle'); setPlanningSteps([]); }}
+            onCancel={() => { setCommandQueue([]); setAgentState('idle'); setPlanningSteps([]); resetActionChainSteps(); }}
             onStopCurrent={() => {
               const remaining = commandQueue.slice(currentCommandIndex + 1);
               setCommandQueue(prev => prev.slice(0, currentCommandIndex + 1));
             }}
-            cancelImmediately={() => { setCommandQueue([]); setAgentState('idle'); setPlanningSteps([]); }}
+            cancelImmediately={() => { setCommandQueue([]); setAgentState('idle'); setPlanningSteps([]); resetActionChainSteps(); }}
           />
         )}
       </AnimatePresence>
@@ -6047,14 +6302,14 @@ I've successfully executed the following real tasks:
       </AnimatePresence>
 
       {/* Header */}
-      <header className={`px-4 flex flex-col justify-center border-b backdrop-blur-2xl sticky top-0 z-[50] transition-[height,padding] duration-500 h-[56px]`} style={{ ...sidebarShellStyle, borderColor: 'color-mix(in srgb, var(--border-color) 35%, transparent)' }}>
+      <header className={`px-4 flex flex-col justify-center border-b backdrop-blur-2xl sticky top-0 z-[50] transition-[height,padding] duration-[180ms] ease-[var(--ease-spring)] ${actionChainSteps.length > 0 ? 'min-h-[48px] h-auto' : 'h-[48px]'}`} style={{ ...sidebarShellStyle, borderColor: 'color-mix(in srgb, var(--border-color) 35%, transparent)' }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl p-1 border" style={softPanelStyle}>
+            <div className="w-7 h-7 rounded-lg p-0.5 border" style={softPanelStyle}>
               <img src="/logo-transparent.png" alt="Aartiq" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary-text leading-tight">Aartiq</h2>
+              <h2 className="text-[9px] font-black uppercase tracking-[0.2em] text-primary-text leading-tight">Aartiq</h2>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <div className={`w-1 h-1 rounded-full ${
                   agentState === 'executing' ? 'bg-sky-500 animate-pulse' :
@@ -6100,7 +6355,7 @@ I've successfully executed the following real tasks:
               <Sparkles size={18} />
             </button>
             <div className="relative group">
-              <button className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle}>
+              <button className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle} title="More options">
                 <MoreVertical size={18} />
               </button>
               <div className="absolute right-0 top-full mt-2 w-48 border rounded-2xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-[100] p-2 backdrop-blur-2xl" style={popoverStyle}>
@@ -6136,7 +6391,7 @@ I've successfully executed the following real tasks:
                 </button>
               </div>
             </div>
-            <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle}>
+            <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle} title={isFullScreen ? 'Exit full screen' : 'Full screen'}>
               {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
             </button>
             {store.tabs.some(t => t.groupId === 'ai-session') && (
@@ -6148,44 +6403,54 @@ I've successfully executed the following real tasks:
                 <Layers size={18} />
               </button>
             )}
-            <button onClick={props.toggleCollapse} className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle}>
+            <button onClick={props.toggleCollapse} className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle} title="Close sidebar">
               <X size={18} />
             </button>
           </div>
         </div>
+        {actionChainSteps.length > 0 && (
+          <div className="mt-1 -mb-1">
+            <ActionChainTimeline
+              steps={actionChainSteps}
+              title="Automation Steps"
+              initialOpen={false}
+              compact={true}
+            />
+          </div>
+        )}
       </header>
 
       {/* Chat Messages */}
-      <div className={`flex-1 overflow-y-auto modern-scrollbar transition-[padding] duration-500 backdrop-blur-sm px-4 py-5 pb-36 space-y-5`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 95%, transparent), color-mix(in srgb, var(--primary-bg) 99%, transparent))' }}>
+      <div className={`flex-1 overflow-y-auto modern-scrollbar transition-[padding] duration-[180ms] ease-[var(--ease-spring)] backdrop-blur-sm px-4 py-4 pb-32 space-y-3`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 95%, transparent), color-mix(in srgb, var(--primary-bg) 99%, transparent))' }}>
         <AnimatePresence mode="popLayout">
           {messages.length === 0 && (
-            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="mx-auto flex max-w-[650px] flex-col items-center justify-center py-14 text-center">
-              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border shadow-sm overflow-hidden" style={softPanelStyle}>
-                <img src="/logo-transparent.png" alt="Aartiq" className="h-9 w-9 object-contain" />
+            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }} className="mx-auto flex max-w-[650px] flex-col items-center justify-center py-8 text-center">
+              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl border shadow-sm overflow-hidden" style={softPanelStyle}>
+                <img src="/logo-transparent.png" alt="Aartiq" className="h-7 w-7 object-contain" />
               </div>
-              <div className="mb-6">
-                <h3 className="text-[16px] font-semibold text-primary-text">What should Aartiq handle?</h3>
-                <p className="mt-1 text-[13px] text-secondary-text">Navigate, read, organize, and automate from one calm workspace.</p>
+              <div className="mb-4">
+                <h3 className="text-[14px] font-semibold text-primary-text">What should Aartiq handle?</h3>
+                <p className="mt-0.5 text-[11px] text-secondary-text">Navigate, read, organize, and automate from one calm workspace.</p>
               </div>
-              <div className="grid w-full max-w-sm grid-cols-2 gap-2">
+              <div className="grid w-full max-w-sm grid-cols-2 gap-1.5">
                 {[
-                  { label: 'Organize Downloads', icon: <FileText size={14} />, cmd: 'Organize my Downloads folder' },
-                  { label: 'Generate PDF', icon: <Download size={14} />, cmd: 'Generate a PDF report' },
-                  { label: 'Research AI', icon: <Search size={14} />, cmd: 'Research latest AI news' },
-                  { label: 'Summarize Page', icon: <FileText size={14} />, cmd: 'Summarize the current page' },
-                  { label: 'Open App', icon: <Rocket size={14} />, cmd: 'Open VS Code' },
-                  { label: 'Find Duplicates', icon: <ScanLine size={14} />, cmd: 'Find duplicate files in Downloads' },
+                  { label: 'Organize Downloads', icon: <FileText size={13} />, cmd: 'Organize my Downloads folder' },
+                  { label: 'Generate PDF', icon: <Download size={13} />, cmd: 'Generate a PDF report' },
+                  { label: 'Research AI', icon: <Search size={13} />, cmd: 'Research latest AI news' },
+                  { label: 'Summarize Page', icon: <FileText size={13} />, cmd: 'Summarize the current page' },
+                  { label: 'Open App', icon: <Rocket size={13} />, cmd: 'Open VS Code' },
+                  { label: 'Find Duplicates', icon: <ScanLine size={13} />, cmd: 'Find duplicate files in Downloads' },
                 ].map((suggestion, i) => (
                   <motion.button
                     key={i}
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
+                    transition={{ duration: 0.18, delay: i * 0.03, ease: [0.32, 0.72, 0, 1] }}
                     onClick={() => { setInputMessage(suggestion.cmd); }}
-                    className="flex items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--border-color)_45%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_70%,transparent)] px-3 py-2.5 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--card-bg)_92%,transparent)]"
+                    className="flex items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--border-color)_45%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_70%,transparent)] px-2.5 py-1.5 text-left transition-all duration-[150ms] ease-[var(--ease-spring)] hover:bg-[color-mix(in_srgb,var(--card-bg)_92%,transparent)] hover:border-[color-mix(in_srgb,var(--border-color)_70%,transparent)]"
                   >
                     <span className="text-secondary-text">{suggestion.icon}</span>
-                    <span className="truncate text-[12px] font-medium text-secondary-text">{suggestion.label}</span>
+                    <span className="truncate text-[10px] font-medium text-secondary-text">{suggestion.label}</span>
                   </motion.button>
                 ))}
               </div>
@@ -6215,9 +6480,9 @@ I've successfully executed the following real tasks:
               <motion.div
                 key={msg.id || `${msg.role}-${i}`}
                 layout
-                initial={{ opacity: 0, y: 12, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.2 }}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
                 className={`mx-auto flex w-full max-w-[650px] flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
               >
                 {isDevMode && msg.role === 'model' && (msg.thinkingSteps || displayThought) && (
@@ -6227,7 +6492,7 @@ I've successfully executed the following real tasks:
                 )}
 
                 <div
-                  className={`group relative leading-relaxed transition-all duration-300 ${msg.role === 'user' ? 'max-w-[78%] rounded-2xl rounded-tr-md px-3.5 py-2.5 text-[14px] shadow-sm' : 'w-full max-w-full px-0 py-1'}`}
+                  className={`group relative leading-relaxed transition-all duration-[180ms] ease-[var(--ease-spring)] ${msg.role === 'user' ? 'max-w-[78%] rounded-2xl rounded-tr-md px-3.5 py-2.5 text-[14px] shadow-sm' : 'w-full max-w-full px-0 py-1'}`}
                   style={{
                     ...(msg.role === 'user' ? userBubbleStyle : { color: 'var(--primary-text)' }),
                     fontFamily: workspacePrefs.fontFamily,
@@ -6235,12 +6500,12 @@ I've successfully executed the following real tasks:
                   }}
                 >
                   {msg.role === 'model' && (
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]">
-                          <img src="/logo-transparent.png" alt="Aartiq" className="h-4 w-4 object-contain" />
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex h-5 w-5 items-center justify-center rounded-md bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]">
+                          <img src="/logo-transparent.png" alt="Aartiq" className="h-3.5 w-3.5 object-contain" />
                         </div>
-                        <span className="text-[12px] font-medium text-secondary-text">Aartiq</span>
+                        <span className="text-[11px] font-medium text-secondary-text">Aartiq</span>
                       </div>
                       <button
                         onClick={() => { navigator.clipboard.writeText(displayContent); playClickSound('confirm'); }}
@@ -6301,8 +6566,9 @@ I've successfully executed the following real tasks:
                           return (
                             <motion.div
                               key={midx}
-                              initial={{ opacity: 0, scale: 0.95 }}
-                              animate={{ opacity: 1, scale: 1 }}
+                              initial={{ opacity: 0, y: 4 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
                               className="rounded-2xl overflow-hidden border border-white/10 shadow-xl group relative"
                             >
                               <img
@@ -6348,8 +6614,9 @@ I've successfully executed the following real tasks:
                             return (
                               <motion.div
                                 key={midx}
-                                initial={{ opacity: 0, y: 10 }}
+                                initial={{ opacity: 0, y: 6 }}
                                 animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
                                 className="my-2"
                               >
                                 <YouTubePlayer
@@ -6367,9 +6634,10 @@ I've successfully executed the following real tasks:
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => { e.preventDefault(); window.electronAPI?.createView?.({ tabId: `yt-${Date.now()}`, url: item.videoUrl }); store.addTab(item.videoUrl); }}
-                              initial={{ opacity: 0, y: 10 }}
+                              initial={{ opacity: 0, y: 6 }}
                               animate={{ opacity: 1, y: 0 }}
-                              className="block rounded-2xl overflow-hidden border border-white/10 shadow-xl bg-black/40 hover:border-sky-500/40 transition-all group cursor-pointer"
+                              transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                              className="block rounded-2xl overflow-hidden border border-white/10 shadow-xl bg-black/40 hover:border-sky-500/40 transition-all duration-[150ms] ease-[var(--ease-spring)] group cursor-pointer"
                             >
                               {/* Thumbnail */}
                               <div className="relative">
@@ -6392,7 +6660,7 @@ I've successfully executed the following real tasks:
                                 )}
                                 {/* Play button overlay */}
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-transform group-hover:scale-110 ${isYt ? 'bg-red-600' : 'bg-sky-500'}`}>
+                                  <div className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-[150ms] ease-[var(--ease-spring)] group-hover:brightness-110 ${isYt ? 'bg-red-600' : 'bg-sky-500'}`}>
                                     <Play size={22} className="text-white ml-1" fill="white" />
                                   </div>
                                 </div>
@@ -6432,8 +6700,17 @@ I've successfully executed the following real tasks:
                     </div>
                   )}
                   {isDevMode && msg.actionLogs && msg.actionLogs.length > 0 && (
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      {msg.actionLogs.map((log, idx) => {
+                    <div className="mt-3">
+                      <button
+                        onClick={() => setShowDevLogs(v => !v)}
+                        className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-secondary-text/50 hover:text-secondary-text transition-colors mb-1.5"
+                      >
+                        <ChevronDown size={10} className={`transition-transform duration-[150ms] ${showDevLogs ? 'rotate-180' : ''}`} />
+                        {msg.actionLogs.length} action{msg.actionLogs.length !== 1 ? 's' : ''}
+                      </button>
+                      {showDevLogs && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {msg.actionLogs.map((log, idx) => {
                         const isSearch = log.type.includes('SEARCH');
                         const isRead = log.type.includes('READ') || log.type.includes('EXTRACT');
                         const isClick = log.type.includes('CLICK');
@@ -6453,7 +6730,7 @@ I've successfully executed the following real tasks:
                           <div
                             key={idx}
                             onClick={() => isPdf && window.electronAPI.openPDF(log.output)}
-                            className={`px-3 py-1.5 rounded-full flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest border transition-all duration-300 hover:scale-105 shadow-sm active:scale-95 ${colorClass}`}
+                            className={`px-3 py-1.5 rounded-full flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest border transition-all duration-[150ms] ease-[var(--ease-spring)] hover:brightness-110 shadow-sm active:opacity-80 ${colorClass}`}
                             title={isPdf ? 'Click to open PDF' : log.output}
                           >
                             {isSearch && <Search size={12} />}
@@ -6466,12 +6743,13 @@ I've successfully executed the following real tasks:
                           </div>
                         );
                       })}
-
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* DOM Search Results Display */}
-                  {i === messages.length - 1 && (domSearchResults.length > 0 || domSearchLoading || domMeta) && (
+                  {/* DOM Search Results Display — handled via ActionChainTimeline now */}
+                  {false && i === messages.length - 1 && (domSearchResults.length > 0 || domSearchLoading || domMeta) && (
                     <DOMSearchDisplay
                       results={domSearchResults}
                       query={domSearchQuery}
@@ -6501,16 +6779,24 @@ I've successfully executed the following real tasks:
             )
           })}
           {isLoading && messages.length === 0 && <ThinkingStatus state={agentState} />}
-          {isLoading && messages.length > 0 && messages[messages.length - 1].role === 'model' && (
-            <ThinkingStatus state={agentState} />
+          {isLoading && messages.length > 0 && (
+            <ProcessingIndicator
+              agentState={agentState}
+              customStatus={customStatusText || undefined}
+              currentCommand={
+                commandQueue.length > 0 && currentCommandIndex < commandQueue.length
+                  ? commandQueue[currentCommandIndex]
+                  : null
+              }
+            />
           )}
         </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input Area */}
-      <footer className="sticky bottom-0 px-4 pb-4 pt-3" suppressHydrationWarning style={{ background: 'linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary-bg) 88%, transparent) 34%, var(--primary-bg) 100%)', backdropFilter: 'blur(18px)' }}>
-        <div className={`mx-auto max-w-[650px] rounded-2xl border p-2.5 transition-all duration-500 ${glowActive && composerFocused ? (isRgbGlow ? 'rgb-glow-animate' : 'ai-glow-shift') : ''} ${shiftTabGlow
+      <footer className="sticky bottom-0 px-4 pb-3 pt-2" suppressHydrationWarning style={{ background: 'linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary-bg) 88%, transparent) 34%, var(--primary-bg) 100%)', backdropFilter: 'blur(18px)' }}>
+        <div className={`mx-auto max-w-[650px] rounded-2xl border p-2 transition-all duration-[180ms] ease-[var(--ease-spring)] ${glowActive && composerFocused ? (isRgbGlow ? 'rgb-glow-animate' : 'ai-glow-shift') : ''} ${shiftTabGlow
           ? 'border-purple-500/70 shadow-[0_0_22px_rgba(168,85,247,0.26)]'
           : 'focus-within:border-[color-mix(in_srgb,var(--accent)_35%,var(--border-color))]'
           }`} suppressHydrationWarning style={{
@@ -6528,7 +6814,7 @@ I've successfully executed the following real tasks:
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2">
               {attachments.map((a, i) => (
-                <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} key={i} className="flex max-w-full items-center gap-2 rounded-lg bg-[color-mix(in_srgb,var(--accent)_9%,transparent)] px-2.5 py-1.5 text-[12px] text-secondary-text">
+                <motion.div initial={{ opacity: 0, y: 2 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.15, ease: [0.32, 0.72, 0, 1] }} key={i} className="flex max-w-full items-center gap-2 rounded-lg bg-[color-mix(in_srgb,var(--accent)_9%,transparent)] px-2.5 py-1.5 text-[12px] text-secondary-text">
                   {a.type === 'image' ? <ImageIcon size={12} /> : <FileText size={12} />}
                   <span className="max-w-[160px] truncate">{a.filename}</span>
                   <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="rounded p-0.5 hover:text-red-500" title="Remove attachment"><X size={12} /></button>
@@ -6540,9 +6826,10 @@ I've successfully executed the following real tasks:
           <AnimatePresence>
             {showActionsMenu && (
               <motion.div
-                initial={{ opacity: 0, y: 15, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
                 className="absolute bottom-24 left-4 z-[60] w-52 overflow-hidden rounded-xl border p-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.28)] backdrop-blur-3xl"
                 style={popoverStyle}
               >
@@ -6559,10 +6846,11 @@ I've successfully executed the following real tasks:
           <AnimatePresence>
             {showSidebarCustomize && (
               <motion.div
-                initial={{ opacity: 0, y: 12, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 12, scale: 0.97 }}
-                className="absolute bottom-24 left-0 right-0 z-[70] mx-auto w-[min(560px,calc(100vw-32px))] rounded-2xl border p-4 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-3xl"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+                className="absolute bottom-24 left-0 right-0 z-[70] mx-auto w-full max-w-full rounded-2xl border p-4 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-3xl"
                 style={popoverStyle}
               >
                 <div className="mb-4 flex items-center justify-between">
@@ -6699,9 +6987,10 @@ I've successfully executed the following real tasks:
           <AnimatePresence>
             {showModelPicker && (
               <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.97 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.97 }}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
                 className="absolute bottom-20 right-2 z-[65] max-h-80 w-72 overflow-y-auto rounded-xl border p-2 shadow-[0_18px_50px_rgba(0,0,0,0.28)] backdrop-blur-3xl"
                 style={popoverStyle}
               >
@@ -6734,11 +7023,11 @@ I've successfully executed the following real tasks:
             onFocus={() => { markSidebarInteraction(); setComposerFocused(true); }}
             onBlur={() => setComposerFocused(false)}
             placeholder="Ask Aartiq to browse, reason, or automate..."
-            className="max-h-36 min-h-[48px] w-full resize-none bg-transparent px-2 py-2 text-[14px] text-primary-text outline-none placeholder:text-secondary-text modern-scrollbar"
+            className="max-h-32 min-h-[40px] w-full resize-none bg-transparent px-2 py-1.5 text-[14px] text-primary-text outline-none placeholder:text-secondary-text modern-scrollbar"
           />
 
           <div className="mt-1 flex items-center justify-between">
-            <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
               {workspacePrefs.visibleComposerIcons.attachments && (
                 <button onClick={() => { playClickSound(); fileInputRef.current?.click(); }} className="rounded-lg p-2 text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text" title="Attach file"><Paperclip size={18} /></button>
               )}
@@ -6769,8 +7058,9 @@ I've successfully executed the following real tasks:
             <button
               onClick={() => { playClickSound('confirm'); handleSendMessage(); }}
               disabled={isLoading || (!inputMessage.trim() && attachments.length === 0)}
-              className="group flex h-9 w-9 items-center justify-center rounded-lg border border-purple-400/20 bg-transparent transition-all hover:scale-[1.03] active:scale-95 disabled:opacity-25 disabled:grayscale"
+              className="group flex h-9 w-9 items-center justify-center rounded-lg border border-purple-400/20 bg-transparent transition-all duration-[150ms] ease-[var(--ease-spring)] hover:brightness-110 active:opacity-80 disabled:opacity-25 disabled:grayscale"
               suppressHydrationWarning
+              title="Send message (Enter)"
               style={{
                 color: 'var(--primary-text)',
                 borderColor: glowActive && composerFocused ? hexToRgba(glowPrimary, 0.25) : undefined,
@@ -6782,7 +7072,7 @@ I've successfully executed the following real tasks:
                   : '0 4px 14px color-mix(in srgb, var(--shadow-color) 18%, transparent)'
               }}
             >
-              <Send size={17} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              <Send size={17} className="transition-transform duration-[150ms] ease-[var(--ease-spring)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </button>
           </div>
         </div>
@@ -6833,6 +7123,7 @@ I've successfully executed the following real tasks:
           }}
         />
       )}
+      </>)}
     </div>
   );
 };

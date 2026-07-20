@@ -344,14 +344,7 @@ export function useAIActionSecurityManager() {
             onAllow={async (alwaysAllow) => {
               const context = pendingPermission.context;
 
-              if (context.risk === 'high' && window.electronAPI?.authenticateBiometric) {
-                const authResult = await window.electronAPI.authenticateBiometric(
-                  `Verify identity for high-risk action: ${context.action}`
-                );
-                if (!authResult?.success) {
-                  return;
-                }
-              } else if (context.requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
+              if (context.risk !== 'high' && context.requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
                 const authResult = await window.electronAPI.authenticateBiometric(
                   `Approve action: ${context.action}`
                 );

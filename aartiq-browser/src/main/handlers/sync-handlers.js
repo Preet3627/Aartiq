@@ -117,6 +117,15 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
     p2pSyncService.sendSignal(signal, remoteDeviceId);
   });
 
+  ipcMain.handle('forward-ai-stream', (event, { promptId, response, isStreaming, fromDeviceId, mode }) => {
+    if (mode === 'cloud' && cloudSyncService && fromDeviceId) {
+      cloudSyncService.sendAIResponse(fromDeviceId, promptId, response, isStreaming);
+    } else if (wifiSyncService) {
+      wifiSyncService.sendAIResponse(promptId, response, isStreaming);
+    }
+    return { success: true };
+  });
+
   ipcMain.on('wifi-sync-set-last-clipboard', (event, text) => {
     if (wifiSyncService) wifiSyncService._lastReceivedClipboard = text;
   });
@@ -159,6 +168,7 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
   if (wifiSyncService) {
     wifiSyncService.on('command', async (data) => {
       const { command, args, sendResponse } = data;
+
       if (command === 'approve-high-risk') {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('mobile-approve-high-risk', {
@@ -167,57 +177,52 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
           });
         }
         sendResponse({ success: true });
+        return;
       }
-    });
 
-    wifiSyncService.on('desktop-control', async (data, sendResponse) => {
-      const { action, prompt, promptId, args = {} } = data;
-      const { streamPromptToMobile, generateShellApprovalQR } = handlers;
-      
-      if (action === 'send-prompt') {
-        if (mainWindow) mainWindow.webContents.send('remote-ai-prompt', { prompt, commandId: promptId, streamToMobile: true });
-        const targetModel = args.model || store.get('ollama_model') || '';
-        const provider = (targetModel.includes('gemini') || targetModel.includes('google')) ? 'google-flash' : 'ollama';
-        try {
-          if (streamPromptToMobile) await streamPromptToMobile(promptId, prompt, targetModel, provider);
+      if (command === 'desktop-control') {
+        const { action, prompt, promptId, ...restArgs } = args || {};
+        const { generateShellApprovalQR } = handlers;
+        const actionArgs = restArgs;
+
+        if (action === 'send-prompt') {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('remote-ai-prompt', { prompt, promptId, streamToMobile: true });
+          }
           sendResponse({ success: true, promptId });
-        } catch (err) {
-          const errMsg = err?.message || String(err);
-          wifiSyncService.sendAIResponse(promptId, `Error: ${errMsg}`, false);
-          sendResponse({ success: false, error: errMsg });
-        }
-      } else if (action === 'get-status') {
-        const { screen } = require('electron');
-        sendResponse({ success: true, desktopName: os.hostname(), platform: os.platform() });
-      } else if (action === 'shell-command') {
-        const { exec } = require('child_process');
-        exec(args.command, { timeout: 30000 }, (err, stdout, stderr) => {
-          sendResponse(err ? { success: false, error: err.message } : { success: true, output: stdout || stderr });
-        });
-      } else if (action === 'high-risk-approve') {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('mobile-approve-high-risk', {
-            pin: args.pin,
-            id: args.id || args.token,
+        } else if (action === 'get-status') {
+          sendResponse({ success: true, desktopName: os.hostname(), platform: os.platform() });
+        } else if (action === 'shell-command') {
+          const { exec } = require('child_process');
+          exec(actionArgs.command || args.command, { timeout: 30000 }, (err, stdout, stderr) => {
+            sendResponse(err ? { success: false, error: err.message } : { success: true, output: stdout || stderr });
           });
+        } else if (action === 'high-risk-approve') {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('mobile-approve-high-risk', {
+              pin: actionArgs.pin || args.pin,
+              id: actionArgs.id || actionArgs.token || args.id || args.token,
+            });
+          }
+          sendResponse({ success: true });
+        } else if (action === 'get-clipboard') {
+          const { clipboard } = require('electron');
+          sendResponse({ success: true, clipboard: clipboard.readText() });
+        } else if (action === 'update-setting') {
+          const { key, value } = actionArgs;
+          if (key === 'theme') { require('electron').nativeTheme.themeSource = value; }
+          else { const keyMap = { 'llm_provider': 'ai_provider', 'llm_model': 'gemini_model' }; store.set(keyMap[key] || key, value); }
+          sendResponse({ success: true });
+        } else if (action === 'shutdown' || action === 'restart' || action === 'sleep' || action === 'lock') {
+          const powerAction = action;
+          const descriptions = { shutdown: 'Shutdown', restart: 'Restart', sleep: 'Sleep', lock: 'Lock' };
+          const { qrImage, pin, token } = await generateShellApprovalQR(descriptions[powerAction] || powerAction);
+          wifiSyncService.sendToMobile({ action: 'power-approval-qr', commandId: token, pin, powerAction, qrData: qrImage });
+          sendResponse({ success: true, awaiting_approval: true });
+        } else {
+          sendResponse({ success: false, error: `Unknown action: ${action}` });
         }
-        sendResponse({ success: true });
-      } else if (action === 'get-clipboard') {
-        const { clipboard } = require('electron');
-        sendResponse({ success: true, clipboard: clipboard.readText() });
-      } else if (action === 'update-setting') {
-        const { key, value } = args;
-        if (key === 'theme') { require('electron').nativeTheme.themeSource = value; }
-        else { const keyMap = { 'llm_provider': 'ai_provider', 'llm_model': 'gemini_model' }; store.set(keyMap[key] || key, value); }
-        sendResponse({ success: true });
-      } else if (action === 'shutdown' || action === 'restart' || action === 'sleep' || action === 'lock') {
-        const powerAction = action;
-        const descriptions = { shutdown: 'Shutdown', restart: 'Restart', sleep: 'Sleep', lock: 'Lock' };
-        const { qrImage, pin, token } = await generateShellApprovalQR(descriptions[powerAction] || powerAction);
-        wifiSyncService.sendToMobile({ action: 'power-approval-qr', commandId: token, pin, powerAction, qrData: qrImage });
-        sendResponse({ success: true, awaiting_approval: true });
-      } else {
-        sendResponse({ success: false, error: `Unknown action: ${action}` });
+        return;
       }
     });
 
@@ -228,23 +233,8 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
   // Cloud Sync Event Listeners
   if (cloudSyncService) {
     cloudSyncService.on('cloud-prompt', async ({ prompt, promptId, fromDeviceId }) => {
-      if (mainWindow) mainWindow.webContents.send('remote-ai-prompt', { prompt, promptId, fromDeviceId });
-      const { llmGenerateHandler } = handlers;
-      if (llmGenerateHandler) {
-        try {
-          const targetModel = store.get('ollama_model') || '';
-          const provider = (targetModel.includes('gemini') || targetModel.includes('google')) ? 'google-flash' : 'ollama';
-          const streamEvent = {
-            sender: {
-              isDestroyed: () => false,
-              send: (_channel, data) => {
-                if (data?.type === 'text-delta') cloudSyncService.sendAIResponse(fromDeviceId, promptId, data.textDelta || '', true);
-                else if (data?.type === 'finish') cloudSyncService.sendAIResponse(fromDeviceId, promptId, '', false);
-              }
-            }
-          };
-          await llmGenerateHandler([{ role: 'user', content: prompt }], { model: targetModel, provider }, streamEvent);
-        } catch (err) { cloudSyncService.sendAIResponse(fromDeviceId, promptId, `Error: ${err.message}`, false); }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('remote-ai-prompt', { prompt, promptId, fromDeviceId, streamToMobile: true });
       }
     });
 

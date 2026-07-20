@@ -11,8 +11,10 @@ const LABEL_CONFIG: Record<string, { icon: React.ReactNode; color: string; bgCol
   WEB_SEARCH_FALLBACK_OCR: { icon: <Search size={11} />, color: 'text-sky-400',    bgColor: 'border-sky-500/10 bg-sky-500/[0.03]', text: 'Search (OCR)' },
   PAGE_CONTENT:          { icon: <FileText size={11} />,  color: 'text-emerald-400', bgColor: 'border-emerald-500/10 bg-emerald-500/[0.03]', text: 'Page Content' },
   SCREENSHOT_ANALYSIS:   { icon: <Camera size={11} />,    color: 'text-purple-400', bgColor: 'border-purple-500/10 bg-purple-500/[0.03]', text: 'Screenshot' },
+  DOM_CONTENT:           { icon: <Terminal size={11} />,  color: 'text-amber-400',  bgColor: 'border-amber-500/10 bg-amber-500/[0.03]', text: 'DOM Content' },
   DOM_EXTRACTED:         { icon: <Terminal size={11} />,  color: 'text-amber-400',  bgColor: 'border-amber-500/10 bg-amber-500/[0.03]', text: 'DOM Content' },
   DOM_SEARCH:            { icon: <Search size={11} />,    color: 'text-sky-400',    bgColor: 'border-sky-500/10 bg-sky-500/[0.03]', text: 'DOM Search' },
+  WEB_SEARCH_RESULTS:    { icon: <Search size={11} />,    color: 'text-sky-400',    bgColor: 'border-sky-500/10 bg-sky-500/[0.03]', text: 'Search Results' },
 };
 
 const URL_REGEX = /https?:\/\/[^\s\])>"'`,]+/g;

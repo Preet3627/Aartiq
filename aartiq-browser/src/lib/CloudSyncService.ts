@@ -80,6 +80,8 @@ export class CloudSyncService extends EventEmitter {
                 console.log('[CloudSync] User logged in:', user.uid);
                 await this._registerDevice();
                 this._startListeningForDevices();
+                this._startPromptListener();
+                this._startAIResponseListener();
                 this.emit('connected', user.uid);
             } else {
                 this.user = null;

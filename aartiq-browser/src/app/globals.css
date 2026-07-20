@@ -59,6 +59,14 @@
   /* fonts */
   --font-display: "Space Grotesk", "Manrope", "Syne", "Inter", system-ui, sans-serif;
   --font-body: "Manrope", "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --chat-font: inherit;
+
+  /* Global motion tokens — 150-180ms spring, opacity+translate only */
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration-fast: 150ms;
+  --duration-base: 180ms;
+  --duration-slow: 250ms;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -636,7 +644,7 @@
 body {
   background-color: var(--primary-bg);
   color: var(--primary-text);
-  font-family: var(--font-display);
+  font-family: var(--chat-font, var(--font-display));
   font-weight: 400;
   letter-spacing: 0.02em;
   -webkit-font-smoothing: antialiased;
@@ -1285,4 +1293,120 @@ body {
   background: linear-gradient(90deg, #38bdf8, #818cf8, #a78bfa, #818cf8, #38bdf8);
   background-size: 300% 100%;
   animation: gradient-shift 3s ease infinite;
+}
+
+/* Moving Gradient Border Animation for AI Chat Composer */
+@keyframes moving-gradient-border {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes moving-gradient-glow {
+  0%, 100% {
+    opacity: 0.6;
+    filter: blur(8px);
+  }
+  50% {
+    opacity: 1;
+    filter: blur(16px);
+  }
+}
+
+.moving-gradient-border {
+  position: relative;
+  background: linear-gradient(
+    90deg,
+    var(--glow-primary, #a855f7),
+    var(--glow-secondary, #6366f1),
+    var(--glow-tertiary, #ec4899),
+    var(--glow-secondary, #6366f1),
+    var(--glow-primary, #a855f7)
+  );
+  background-size: 300% 100%;
+  animation: moving-gradient-border 4s ease infinite;
+}
+
+.moving-gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: inherit;
+  background-size: 300% 100%;
+  animation: moving-gradient-border 4s ease infinite reverse;
+  opacity: 0.5;
+  filter: blur(12px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+.moving-gradient-border::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--glow-primary, #a855f7),
+    var(--glow-secondary, #6366f1),
+    var(--glow-tertiary, #ec4899),
+    var(--glow-secondary, #6366f1),
+    var(--glow-primary, #a855f7)
+  );
+  background-size: 300% 100%;
+  animation: moving-gradient-border 6s ease infinite;
+  opacity: 0.3;
+  filter: blur(24px);
+  z-index: -2;
+  pointer-events: none;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TABLE STYLES (Chat Markdown)
+   ───────────────────────────────────────────────────────────── */
+
+.aartiq-table {
+  font-variant-numeric: tabular-nums;
+}
+
+.aartiq-table-head {
+  background: color-mix(in srgb, var(--primary-text) 5%, transparent);
+}
+
+.aartiq-table-head .aartiq-table-th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--secondary-text);
+  border-bottom: 2px solid color-mix(in srgb, var(--primary-text) 12%, transparent);
+  white-space: nowrap;
+}
+
+.aartiq-table-body .aartiq-table-td {
+  padding: 9px 14px;
+  font-size: 13px;
+  color: var(--primary-text);
+  border-bottom: 1px solid color-mix(in srgb, var(--primary-text) 7%, transparent);
+}
+
+.aartiq-table-body .aartiq-table-row:last-child .aartiq-table-td {
+  border-bottom: none;
+}
+
+.aartiq-table-row:hover .aartiq-table-td {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.aartiq-table-row-header:hover .aartiq-table-th {
+  background: color-mix(in srgb, var(--primary-text) 5%, transparent);
 }

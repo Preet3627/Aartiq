@@ -1,4 +1,4 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useEffect, useCallback, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -8,6 +8,7 @@ import {
   Fingerprint,
   Lock,
   MousePointer2,
+  QrCode,
   Search,
   Shield,
   Terminal,
@@ -108,6 +109,104 @@ function DangerousActionNotice({ command, risk }: { command?: string; risk: 'low
   );
 }
 
+function HighRiskQrSection({
+  qrImage,
+  expectedPin,
+  pinInput,
+  setPinInput,
+  pinVerified,
+  setPinVerified,
+  mobileApproved,
+  qrLoading,
+  qrError,
+}: {
+  qrImage: string | null;
+  expectedPin: string;
+  pinInput: string;
+  setPinInput: (val: string) => void;
+  pinVerified: boolean;
+  setPinVerified: (val: boolean) => void;
+  mobileApproved: boolean;
+  qrLoading: boolean;
+  qrError: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 space-y-4">
+      <div className="flex items-center gap-2 text-[13px] font-medium text-red-500">
+        <QrCode size={15} />
+        Mobile QR + PIN verification required
+      </div>
+      <p className="text-[12px] leading-relaxed text-secondary-text">
+        Scan the QR code with Aartiq Mobile, then enter the matching PIN to confirm this high-risk action.
+      </p>
+
+      {qrLoading && (
+        <div className="flex items-center gap-2 text-[12px] text-secondary-text">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-500/30 border-t-red-500" />
+          Generating QR code...
+        </div>
+      )}
+
+      {!qrLoading && qrError && (
+        <p className="text-[12px] text-amber-400">Could not generate QR code. Connect to mobile to approve.</p>
+      )}
+
+      {qrImage && (
+        <div className="flex flex-col items-center gap-3">
+          <div className="rounded-xl border border-white/10 bg-white p-3">
+            <img src={qrImage} alt="Scan with Aartiq Mobile" className="h-36 w-36" />
+          </div>
+
+          <div className="text-center">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-secondary-text">Device PIN</div>
+            <div className="mt-1 font-mono text-2xl font-black tracking-[0.3em] text-primary-text">{expectedPin}</div>
+          </div>
+
+          <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] ${mobileApproved ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+            {mobileApproved ? <Check size={14} /> : <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-500/30 border-t-amber-500" />}
+            {mobileApproved ? 'Mobile approval received!' : 'Waiting for mobile approval...'}
+          </div>
+
+          <div className="w-full max-w-xs space-y-1.5">
+            <label className="text-[11px] font-medium text-secondary-text">Enter PIN to confirm</label>
+            <input
+              type="password"
+              value={pinInput}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '');
+                setPinInput(val);
+                if (val.length === expectedPin.length && expectedPin.length > 0) {
+                  setPinVerified(val === expectedPin);
+                } else {
+                  setPinVerified(false);
+                }
+              }}
+              disabled={!mobileApproved}
+              maxLength={expectedPin.length || 6}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="off"
+              placeholder={`Enter ${expectedPin.length || 6}-digit PIN`}
+              className={`w-full rounded-lg border px-3 py-2.5 text-center font-mono text-sm font-semibold tracking-widest outline-none transition-colors ${
+                !mobileApproved
+                  ? 'border-white/10 bg-white/5 text-secondary-text/50 cursor-not-allowed'
+                  : pinVerified
+                    ? 'border-emerald-500/50 bg-emerald-500/5 text-emerald-400'
+                    : pinInput.length === expectedPin.length
+                      ? 'border-red-500/50 bg-red-500/5 text-red-400'
+                      : 'border-white/20 bg-white/5 text-primary-text focus:border-[var(--accent)]'
+              }`}
+            />
+            {pinInput.length === expectedPin.length && !pinVerified && (
+              <p className="text-[11px] text-red-400">PIN does not match</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SinglePermissionCard({
   context,
   onAllow,
@@ -119,6 +218,90 @@ function SinglePermissionCard({
 }) {
   const [alwaysAllow, setAlwaysAllow] = useState(false);
   const actionName = humanAction(context.action, context.actionType);
+  const isHighRisk = context.risk === 'high';
+
+  const [qrImage, setQrImage] = useState<string | null>(null);
+  const [expectedPin, setExpectedPin] = useState('');
+  const [pinInput, setPinInput] = useState('');
+  const [pinVerified, setPinVerified] = useState(false);
+  const [mobileApproved, setMobileApproved] = useState(false);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState(false);
+
+  const expectedPinRef = useRef('');
+  const cleanupMobileListenerRef = useRef<(() => void) | null>(null);
+  const actionIdRef = useRef(`${context.actionType || 'high-risk'}-${Date.now()}`);
+
+  useEffect(() => {
+    if (!isHighRisk) return;
+
+    let cancelled = false;
+    setQrLoading(true);
+    setQrError(false);
+
+    const actionId = actionIdRef.current;
+
+    (async () => {
+      try {
+        const electronAPI = (window as any).electronAPI;
+        const result = await electronAPI?.generateHighRiskQr?.(actionId);
+        if (cancelled) return;
+
+        if (result) {
+          const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+          if (!cancelled) {
+            setQrImage(parsed.qrImage || null);
+            setExpectedPin(parsed.pin || '');
+            expectedPinRef.current = parsed.pin || '';
+          }
+        } else {
+          if (!cancelled) setQrError(true);
+        }
+      } catch (e) {
+        console.warn('[PermissionModal] Failed to generate QR:', e);
+        if (!cancelled) setQrError(true);
+      } finally {
+        if (!cancelled) setQrLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isHighRisk, context.actionType]);
+
+  useEffect(() => {
+    if (!isHighRisk) return;
+
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI?.onMobileApproveHighRisk) return;
+
+    const cleanup = electronAPI.onMobileApproveHighRisk((data: { pin: string; id: string }) => {
+      if (!data) return;
+      const currentExpectedPin = expectedPinRef.current;
+      if (currentExpectedPin && data.pin === currentExpectedPin && data.id) {
+        setMobileApproved(true);
+      }
+    });
+
+    cleanupMobileListenerRef.current = cleanup;
+
+    return () => {
+      cleanupMobileListenerRef.current?.();
+      cleanupMobileListenerRef.current = null;
+    };
+  }, [isHighRisk]);
+
+  const canApprove = isHighRisk ? (mobileApproved && pinVerified) : true;
+  const approveLabel = isHighRisk
+    ? !mobileApproved
+      ? 'Awaiting Mobile Approval'
+      : !pinVerified
+        ? 'Enter Matching PIN'
+        : 'Approve (QR + PIN)'
+    : alwaysAllow
+      ? 'Always Allow'
+      : 'Allow Once';
 
   return (
     <PermissionShell>
@@ -131,7 +314,7 @@ function SinglePermissionCard({
             <div className="text-[13px] text-secondary-text">Allow Aartiq to</div>
             <h2 className="mt-0.5 text-lg font-semibold leading-tight text-primary-text">{actionName}</h2>
             <div className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${riskTone[context.risk]}`}>
-              {context.risk === 'high' ? 'High risk — biometric required' : context.risk === 'medium' ? 'Needs approval' : 'Low risk'}
+              {context.risk === 'high' ? 'High risk — QR + PIN required' : context.risk === 'medium' ? 'Needs approval' : 'Low risk'}
             </div>
           </div>
           <button type="button" onClick={onDeny} className="rounded-md p-2 text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text" title="Deny">
@@ -173,16 +356,18 @@ function SinglePermissionCard({
 
           <DangerousActionNotice command={context.target} risk={context.risk} />
 
-          {context.risk === 'high' && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4">
-              <div className="flex items-center gap-2 text-[13px] font-medium text-red-500">
-                <Fingerprint size={15} />
-                Biometric verification required
-              </div>
-              <p className="mt-1 text-[12px] leading-relaxed text-secondary-text">
-                After clicking Allow, your device will prompt for Touch ID / fingerprint to confirm this high-risk action. No exceptions.
-              </p>
-            </div>
+          {isHighRisk && (
+            <HighRiskQrSection
+              qrImage={qrImage}
+              expectedPin={expectedPin}
+              pinInput={pinInput}
+              setPinInput={setPinInput}
+              pinVerified={pinVerified}
+              setPinVerified={setPinVerified}
+              mobileApproved={mobileApproved}
+              qrLoading={qrLoading}
+              qrError={qrError}
+            />
           )}
 
           {context.requiresDeviceUnlock && context.risk !== 'high' && (
@@ -208,7 +393,7 @@ function SinglePermissionCard({
               <div className="grid grid-cols-[90px_1fr] gap-2 text-[11px] text-secondary-text">
                 <span>Action type</span><span className="font-mono">{context.actionType || 'unknown'}</span>
                 <span>Risk</span><span>{context.risk}</span>
-                <span>Biometric</span><span>{context.risk === 'high' ? 'required' : context.requiresDeviceUnlock ? 'required' : 'not required'}</span>
+                <span>Verification</span><span>{isHighRisk ? 'QR + PIN' : context.requiresDeviceUnlock ? 'Device unlock' : 'None'}</span>
               </div>
             </TechnicalDetails>
           )}
@@ -236,9 +421,14 @@ function SinglePermissionCard({
         <button
           type="button"
           onClick={() => onAllow(context.risk === 'high' ? false : alwaysAllow)}
-          className="flex-1 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm"
+          disabled={!canApprove}
+          className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm ${
+            canApprove
+              ? 'bg-[var(--accent)]'
+              : 'cursor-not-allowed bg-white/10 text-secondary-text/50'
+          }`}
         >
-          {context.risk === 'high' ? 'Allow (Touch ID)' : alwaysAllow ? 'Always Allow' : 'Allow Once'}
+          {approveLabel}
         </button>
       </div>
     </PermissionShell>

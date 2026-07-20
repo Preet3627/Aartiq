@@ -8,6 +8,9 @@ import { MODEL_REGISTRY } from '@/lib/modelRegistry';
 
 // ... (rest of the interfaces are the same)
 
+let _fetchAppConfigPending = false;
+let _fetchAppConfigWarned = false;
+
 export interface BrowserState {
     // URL and navigation
     currentUrl: string;
@@ -359,6 +362,8 @@ export const useAppStore = create<BrowserState>()(
             clientSecret: '',
             redirectUri: '',
             fetchAppConfig: async () => {
+                if (_fetchAppConfigPending) return;
+                _fetchAppConfigPending = true;
                 // Initialize with safe defaults immediately in case fetch fails
                 const defaults = {
                     clientId: '601898745585-8g9t0k72gq4q1a4s1o4d1t6t7e5v4c4g.apps.googleusercontent.com',
@@ -369,9 +374,9 @@ export const useAppStore = create<BrowserState>()(
                 try {
                     const res = await fetch('https://aartiq-three.vercel.app/api/config', {
                         headers: {
-                            'X-Aartiq-App-Token': 'aartiq-secure-v1' // Same token as landing page
+                            'X-Aartiq-App-Token': 'aartiq-secure-v1'
                         },
-                        signal: AbortSignal.timeout(5000) // Don't hang forever
+                        signal: AbortSignal.timeout(5000)
                     });
                     
                     if (res.ok) {
@@ -386,14 +391,14 @@ export const useAppStore = create<BrowserState>()(
                             customFirebaseConfig: config.firebaseConfig || null
                         });
                         if (window.electronAPI) window.electronAPI.saveGoogleConfig(update);
-                        console.log('App config synced and persisted:', config);
                     } else {
-                        // Fallback to local persistence if server is reachable but errors
                         set(defaults);
                     }
                 } catch (e) {
-                    console.warn('Network sync for app config failed, using secure defaults:', e);
-                    // Critical: ensures no crash on network failure
+                    if (!_fetchAppConfigWarned) {
+                        _fetchAppConfigWarned = true;
+                        console.warn('Network sync for app config failed, using secure defaults');
+                    }
                     set(defaults);
                 }
             },

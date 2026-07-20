@@ -343,6 +343,20 @@ export class WiFiSyncService extends EventEmitter {
         });
     }
 
+    public sendFileToMobile(filename: string, fileBuffer: Buffer, mimeType: string, metadata?: Record<string, any>) {
+        const base64Data = fileBuffer.toString('base64');
+        this.broadcast({
+            type: 'file-transfer',
+            filename,
+            mimeType,
+            data: base64Data,
+            size: fileBuffer.length,
+            ...metadata,
+            timestamp: Date.now(),
+        });
+        console.log(`[WiFi-Sync] Sent file to mobile: ${filename} (${(fileBuffer.length / 1024).toFixed(1)} KB)`);
+    }
+
     private async _handleDesktopControl(ws: WebSocket, msg: any) {
         const { commandId, action, prompt, promptId, args } = msg;
         console.log(`[WiFi-Sync] Desktop Control: action=${action}`);

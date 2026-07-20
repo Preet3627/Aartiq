@@ -1,6 +1,6 @@
 {
   "name": "Aartiq",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "private": true,
   "description": "Aartiq Browser - A high-performance, intelligence-driven browsing workspace with local LLM support and advanced productivity features.",
   "author": "Latestinssan",
@@ -16,7 +16,9 @@
     "build": "next build",
     "start": "npx serve@latest out",
     "lint": "eslint",
-    "test": "jest",
+    "test": "NODE_OPTIONS='--experimental-vm-modules' jest",
+    "test:extraction": "NODE_OPTIONS='--experimental-vm-modules' jest tests/extraction.test.js",
+    "test:extraction:live": "electron tests/live-extraction-test.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "predev": "npx tsc src/lib/P2PFileSyncService.ts src/lib/WiFiSyncService.ts src/lib/modelRegistry.ts src/lib/CloudSyncService.ts src/types/electron.d.ts --outDir src/lib --module CommonJS --skipLibCheck --esModuleInterop",
@@ -56,6 +58,7 @@
     "@ghostery/adblocker-electron": "^2.14.1",
     "@googleapis/gmail": "^16.1.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@mozilla/readability": "^0.6.0",
     "@pdf-lib/fontkit": "^1.1.1",
     "@tensorflow/tfjs": "^4.22.0",
     "ai": "^6.0.134",
@@ -75,7 +78,6 @@
     "firebase": "^12.7.0",
     "framer-motion": "^12.23.26",
     "googleapis": "^171.4.0",
-    "jimp": "^1.6.0",
     "jsdom": "^29.1.1",
     "lucide-react": "^0.562.0",
     "mermaid": "^11.9.0",
@@ -93,11 +95,11 @@
     "screenshot-desktop": "^1.15.3",
     "sharp": "^0.34.5",
     "side-channel": "^1.1.0",
+    "smiles-drawer": "^2.4.1",
     "tesseract.js": "^7.0.0",
     "wait-on": "^9.0.3",
     "ws": "^8.18.0",
-    "xlsx": "^0.18.5",
-    "zod": "^3.25.76"
+    "xlsx": "^0.18.5"
   },
   "optionalDependencies": {
     "@cherrystudio/mac-system-ocr": "^0.2.7",

@@ -387,6 +387,7 @@ declare global {
             setClipboardText: (text: string) => void;
             setVolume: (level: number) => Promise<{ success: boolean; error?: string }>;
             setBrightness: (level: number) => Promise<{ success: boolean; error?: string }>;
+            setBrowserFont: (fontFamily: string, fontSize?: number) => Promise<{ success: boolean; error?: string }>;
             performClick: (options: any) => Promise<{ success: boolean; error?: string }>;
             clickAt: (x: number, y: number) => Promise<{ success: boolean; error?: string }>;
             clickAppElement: (appName: string, elementText: string, reason: string) => Promise<{ success: boolean; error?: string }>;
@@ -474,6 +475,10 @@ declare global {
             aiWebSearch: (query: string, engine?: string, count?: number) => Promise<{ results: Array<{ title: string; url: string; snippet: string; content: string }>; engine?: string; error?: string }>;
             webSearchYoutube: (query: string, count?: number) => Promise<{ success: boolean; results?: Array<{ title: string; url: string; snippet: string; videoId: string; channel: string; length: string; thumbnail: string }>; error?: string }>;
             fetchPageContent: (url: string, maxChars?: number) => Promise<{ success: boolean; content?: string; error?: string }>;
+            researchStart: (query: string, engine?: string, options?: { maxResults?: number; concurrency?: number }) => Promise<{ success: boolean; pipelineId?: string; report?: string; clusters?: any[]; contradictions?: any[]; stats?: { totalUrls: number; successful: number; clusters: number }; error?: string }>;
+            researchCancel: (pipelineId: string) => Promise<{ success: boolean; error?: string }>;
+            researchGetStatus: (pipelineId: string) => Promise<{ success: boolean; running?: boolean }>;
+            onResearchProgress: (callback: (progress: { pipelineId: string; stage: string; message?: string; [key: string]: any }) => void) => () => void;
             domClickElement: (opts: { tabId?: string; selector?: string; text?: string; 'aria-label'?: string; retry?: number; verify?: boolean }) => Promise<{ success: boolean; error?: string; method?: string; tag?: string; text?: string; rect?: { x: number; y: number; w: number; h: number } }>;
             domFillForm: (opts: { tabId?: string; selector?: string; value: string; retry?: number; verify?: boolean; clearFirst?: boolean }) => Promise<{ success: boolean; error?: string; value?: string; verified?: boolean }>;
 
@@ -500,6 +505,7 @@ declare global {
             workflowStatus: () => Promise<{ success: boolean; isRecording?: boolean; stepCount?: number }>;
             generateHighRiskQr: (actionId: string) => Promise<string | null>;
             onMobileApproveHighRisk: (callback: (data: { pin: string; id: string }) => void) => () => void;
+            forwardAiStream: (opts: { promptId: string; response: string; isStreaming: boolean; fromDeviceId?: string; mode?: string }) => Promise<{ success: boolean }>;
             logError: (message: string) => void;
             getAppIcon: (path?: string) => Promise<string | null>;
             getAartiqIcon: () => Promise<string | null>;

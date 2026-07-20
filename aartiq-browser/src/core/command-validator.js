@@ -1,18 +1,8 @@
 const { exec, spawn } = require('child_process');
 const Store = require('electron-store');
+const { validateCommand: securityValidate, getShellRisk } = require('../../lib/SecurityValidator');
 
 const permissionStore = new Store({ name: 'comet-permissions' });
-
-const SAFE_COMMANDS = new Set([
-  'ls', 'll', 'la', 'cd', 'pwd', 'echo', 'cat', 'head', 'tail', 'grep', 'find', 'which',
-  'whoami', 'date', 'cal', 'df', 'du', 'free', 'uptime', 'ps', 'kill', 'killall',
-  'mkdir', 'touch', 'rm', 'rmdir', 'cp', 'mv', 'ln', 'chmod', 'chown', 'tar', 'unzip', 'zip',
-  'git', 'npm', 'npx', 'node', 'python', 'python3', 'pip', 'pip3', 'ruby', 'perl', 'php',
-  'curl', 'wget', 'ssh', 'scp', 'rsync', 'open', 'xdg-open', 'gnome-open', 'kde-open',
-  'xattr', 'plutil', 'defaults', 'codesign', 'spctl', 'pmset', 'caffeinate', 'say',
-  'afplay', 'osascript', 'diskutil', 'netstat', 'ping', 'traceroute', 'dig', 'nslookup',
-  'top', 'htop', 'iostat', 'vmstat', 'lsof', 'networksetup', 'system_profiler'
-]);
 
 function validateCommand(cmd) {
   if (!cmd || typeof cmd !== 'string') {
@@ -25,53 +15,17 @@ function validateCommand(cmd) {
   if (trimmed.length > 10000) {
     throw new Error('Command too long (max 10000 characters)');
   }
-  const forbidden = ['&', '&&', '|', '||', ';', '`', '$(', '\\', '>', '>>', '<'];
-  for (const token of forbidden) {
-    if (trimmed.includes(token)) {
-      throw new Error(`Invalid command: forbidden token "${token}"`);
-    }
-  }
-  const firstWord = trimmed.split(/\s+/)[0];
-  if (SAFE_COMMANDS.has(firstWord.toLowerCase())) {
-    return trimmed;
-  }
-  const mediumRisk = [
-    'sudo', 'su', 'chmod', 'chown', 'del', 'format', 'fdisk', 'mkfs', 'dd',
-    'reboot', 'shutdown', 'halt', 'init', 'systemctl', 'launchctl',
-    'kill', 'killall', 'pkill', 'force-quit'
-  ];
-  const hasSudo = trimmed.toLowerCase().includes('sudo');
-  if (hasSudo && !trimmed.toLowerCase().startsWith('sudo ') && !trimmed.toLowerCase().startsWith('sudo -')) {
-    throw new Error('Invalid command: sudo must be at the beginning');
-  }
-  const firstToken = trimmed.toLowerCase();
-  for (const risk of mediumRisk) {
-    if (firstToken.startsWith(risk + ' ') || firstToken === risk) {
-      return trimmed;
-    }
+  // Delegate dangerous-pattern and blocked-command checks to SecurityValidator.
+  const result = securityValidate(trimmed);
+  if (!result.valid) {
+    throw new Error(result.errors.join('; '));
   }
   return trimmed;
 }
 
 function analyzeCommandRisk(cmd) {
-  const lowRisk = ['ls', 'll', 'la', 'pwd', 'echo', 'cat', 'head', 'tail', 'grep', 'find', 'which', 'whoami', 'date', 'cal', 'df', 'du', 'free', 'uptime', 'ps', 'top', 'git status', 'git log'];
-  const mediumRisk = ['git', 'npm', 'npx', 'node', 'mkdir', 'touch', 'cp', 'mv', 'tar', 'unzip', 'curl', 'wget', 'open', 'xdg-open', 'defaults', 'plutil'];
-  const highRisk = ['sudo', 'su', 'del', 'format', 'rm -rf', 'dd', 'mkfs', 'fdisk', 'reboot', 'shutdown', 'kill', 'killall', 'pkill', 'launchctl', 'systemctl'];
-  const critical = ['>', '>>', '|', ';', '&&', '$(', '`'];
-  const cmdLower = cmd.toLowerCase();
-  for (const c of critical) {
-    if (cmd.includes(c)) return 'critical';
-  }
-  for (const c of highRisk) {
-    if (cmdLower.includes(c)) return 'high';
-  }
-  for (const c of mediumRisk) {
-    if (cmdLower.startsWith(c + ' ') || cmdLower === c) return 'medium';
-  }
-  for (const c of lowRisk) {
-    if (cmdLower.startsWith(c + ' ') || cmdLower === c) return 'low';
-  }
-  return 'medium';
+  // Delegate to the single-source-of-truth risk classifier.
+  return getShellRisk(cmd);
 }
 
 function explainCommand(cmd) {

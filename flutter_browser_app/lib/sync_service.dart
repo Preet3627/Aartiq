@@ -370,6 +370,11 @@ class SyncService {
       StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get onDesktopControl =>
       _desktopControlController.stream;
+
+  // File transfer from desktop
+  final StreamController<Map<String, dynamic>> _fileTransferController =
+      StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get onFileTransfer => _fileTransferController.stream;
   final Map<String, dynamic> _cloudDeviceCache = {};
   StreamSubscription<DatabaseEvent>? _cloudDevicesSubscription;
   StreamSubscription<DatabaseEvent>? _cloudAIResponsesSubscription;
@@ -716,6 +721,16 @@ class SyncService {
       } else if (msg['type'] == 'desktop-control-response') {
         _desktopControlController.add(msg);
         print('[Sync] Desktop control response: ${msg['action']}');
+      } else if (msg['type'] == 'file-transfer') {
+        _fileTransferController.add({
+          'filename': msg['filename'],
+          'mimeType': msg['mimeType'],
+          'data': msg['data'],
+          'size': msg['size'],
+          'source': msg['source'],
+          'timestamp': msg['timestamp'],
+        });
+        print('[Sync] File transfer received: ${msg['filename']} (${msg['mimeType']})');
       } else if (msg['type'] == 'device-trust-updated') {
         final updatedDeviceId = msg['deviceId']?.toString();
         if (updatedDeviceId != null) {
@@ -888,7 +903,7 @@ class SyncService {
         };
       }
 
-      final response = await onCommandResponse
+      final response = await onDesktopControl
           .firstWhere(
             (msg) => msg['commandId'] == commandId,
             orElse: () => {'error': 'Timeout'},
@@ -1132,4 +1147,29 @@ class SyncService {
   bool get isCloudDesktopSession => _desktopConnectionMode == 'cloud';
   String get desktopConnectionMode => _desktopConnectionMode;
   String? get connectedDesktopLabel => _connectedDesktopLabel;
+
+  Future<String?> saveReceivedFile(Map<String, dynamic> fileData) async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final downloadsDir = Directory('${directory.path}/Aartiq');
+      if (!await downloadsDir.exists()) {
+        await downloadsDir.create(recursive: true);
+      }
+
+      final filename = fileData['filename'] as String? ?? 'received_file';
+      final base64Data = fileData['data'] as String?;
+      if (base64Data == null || base64Data.isEmpty) return null;
+
+      final bytes = base64Decode(base64Data);
+      final filePath = '${downloadsDir.path}/$filename';
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+
+      print('[Sync] File saved: $filePath (${(bytes.length / 1024).toFixed(1)} KB)');
+      return filePath;
+    } catch (e) {
+      print('[Sync] Failed to save file: $e');
+      return null;
+    }
+  }
 }

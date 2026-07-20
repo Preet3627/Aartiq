@@ -260,6 +260,8 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
       return { error: 'Invalid query', results: [] };
     }
 
+    console.log(`[DOM_SEARCH] Query: "${query}"`);
+
     try {
       const wc = view.webContents;
       if (!wc || wc.isDestroyed()) return { error: 'No active view', results: [] };
@@ -267,34 +269,110 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
       const results = await wc.executeJavaScript(`
         (() => {
           const query = ${JSON.stringify(query)};
-          const searchLower = query.toLowerCase();
           const results = [];
-          
-          function walk(el, path = '') {
-            if (['script', 'style', 'noscript', 'iframe', 'nav', 'footer', 'header'].includes(el.tagName.toLowerCase())) return;
-            
+
+          // ── Strategy 1: CSS selector ──
+          // Heuristic: query contains CSS-selector chars or looks like a tag/class/id selector,
+          // including descendant selectors like "ul li a" or "main article h1"
+          const looksLikeSelector = /[.#\\[\\]:>+~]|^(h[1-6]|div|span|p|a|button|input|img|ul|li|table|tr|td|th|article|section|nav|header|footer|main|aside|form|label|select|option|textarea|video|audio|canvas|svg)(\\s+\\w+)*$/i.test(query.trim());
+
+          if (looksLikeSelector) {
+            try {
+              const els = document.querySelectorAll(query);
+              // Track seen text+href to deduplicate across selectors (e.g. h2 vs h2 a matching same link)
+              const seen = new Set();
+              for (let i = 0; i < els.length; i++) {
+                const el = els[i];
+                const tag = el.tagName.toLowerCase();
+                const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                const href = el.getAttribute && el.getAttribute('href') || '';
+
+                // Skip empty or whitespace-only results
+                if (!text) continue;
+
+                // Deduplicate: same visible text + same href = same element
+                const dedupKey = text.substring(0, 100) + '|' + (href || '');
+                if (seen.has(dedupKey)) continue;
+                seen.add(dedupKey);
+
+                // Link density heuristic: elements where >70% of text is inside <a> tags
+                // are almost always navigation/menus, not content
+                let linkDensity = 0;
+                const links = el.querySelectorAll('a');
+                if (links.length > 0 && text.length > 0) {
+                  const linkTextLen = Array.from(links).reduce((s, a) => s + (a.textContent || '').length, 0);
+                  linkDensity = linkTextLen / text.length;
+                }
+                // Also check: if this element IS an <a>, check its parent's link density
+                const parentEl = el.parentElement;
+                let parentLinkDensity = 0;
+                if (parentEl && parentEl.tagName.toLowerCase() !== 'a') {
+                  const parentLinks = parentEl.querySelectorAll('a');
+                  const parentText = (parentEl.textContent || '').replace(/\\s+/g, ' ').trim();
+                  if (parentLinks.length > 0 && parentText.length > 0) {
+                    const parentLinkTextLen = Array.from(parentLinks).reduce((s, a) => s + (a.textContent || '').length, 0);
+                    parentLinkDensity = parentLinkTextLen / parentText.length;
+                  }
+                }
+
+                const isNavLike = linkDensity > 0.7 || parentLinkDensity > 0.7;
+
+                let xpath = '';
+                try {
+                  const idx = Array.from(el.parentNode ? el.parentNode.children : []).indexOf(el) + 1;
+                  const parentTag = el.parentElement ? el.parentElement.tagName.toLowerCase() : '';
+                  xpath = parentTag ? '//' + parentTag + '[' + idx + ']/' + tag : '//' + tag;
+                } catch (_) {}
+
+                results.push({
+                  text: text.substring(0, 200),
+                  context: text.substring(0, 120),
+                  xpath: xpath,
+                  score: Math.max(10, 30 - results.length),
+                  tag: tag,
+                  href: href || undefined,
+                  navLike: isNavLike,
+                  linkDensity: Math.round(linkDensity * 100) / 100
+                });
+
+                if (results.length >= 15) break;
+              }
+              if (results.length > 0) {
+                return results;
+              }
+            } catch (selectorErr) {
+              // Invalid selector — fall through to text search
+            }
+          }
+
+          // ── Strategy 2: text-content walk (original behavior) ──
+          const searchLower = query.toLowerCase();
+
+          function walk(el, path) {
+            if (['script', 'style', 'noscript', 'iframe'].includes(el.tagName.toLowerCase())) return;
+
             const tag = el.tagName.toLowerCase();
             const xpath = path ? path + '/' + tag : '//' + tag;
-            
+
             let text = '';
             for (const node of el.childNodes) {
               if (node.nodeType === 3) text += node.textContent || '';
               else if (node.nodeType === 1) walk(node, xpath);
             }
-            
+
             const textLower = text.toLowerCase();
             const idx = textLower.indexOf(searchLower);
-            
+
             if (idx !== -1) {
               const start = Math.max(0, idx - 40);
               const end = Math.min(text.length, idx + query.length + 40);
               const context = text.slice(start, end);
-              
+
               let score = 10;
               if (textLower.startsWith(searchLower)) score += 20;
               if (textLower.includes(' ' + searchLower)) score += 10;
               if (text.length < 200) score += 15;
-              
+
               results.push({
                 text: text.slice(Math.max(0, idx - 20), idx) + '[[' + text.slice(idx, idx + query.length) + ']]' + text.slice(idx + query.length, idx + query.length + 20),
                 context: context,
@@ -304,13 +382,14 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
               });
             }
           }
-          
-          walk(document.body);
-          
+
+          walk(document.body, '');
+
           return results.sort((a, b) => b.score - a.score).slice(0, 15);
         })()
       `);
 
+      console.log(`[DOM_SEARCH] Results: ${results?.length || 0} (query: "${query}")`);
       return { results: results || [], query };
     } catch (e) {
       console.error('[SecureDOM] Search failed:', e);
@@ -1026,19 +1105,18 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
     if (!view && tabId) {
       view = tabViews.get(handlers.activeTabId);
     }
+    // Last resort: pick the active tab's view only — never silently read from a random tab
+    if (!view && handlers.activeTabId) {
+      view = tabViews.get(handlers.activeTabId);
+    }
     if (!view) {
-      for (const [, v] of tabViews) {
-        if (v && v.webContents && !v.webContents.isDestroyed()) {
-          view = v;
-          break;
-        }
-      }
+      return { content: '', error: 'No active view found' };
     }
 
-    await new Promise(resolve => setTimeout(resolve, 500));
-
+    // Wait for page to have meaningful content (up to 10s, checking every 500ms)
     let content = '';
-    for (let attempt = 0; attempt < 3; attempt++) {
+    let lastDiagnostic = '';
+    for (let attempt = 0; attempt < 20; attempt++) {
       let wc;
       try {
         wc = view && view.webContents;
@@ -1052,32 +1130,149 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
       try {
         const pendingUrl = wc.getURL();
         if (!pendingUrl || pendingUrl === 'about:blank') {
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 500));
           continue;
         }
 
-        content = await wc.executeJavaScript(`
+        // Get the full HTML from the renderer
+        const html = await wc.executeJavaScript(`
           (() => {
             try {
-              const clone = document.body.cloneNode(true);
-              const elementsToRemove = clone.querySelectorAll('script, style, nav, footer, header, noscript, svg');
-              elementsToRemove.forEach(e => e.remove());
-
-              return clone.innerText
-                .replace(/\\s+/g, ' ')
-                .replace(/[\\r\\n]+/g, '\\n')
-                .trim() || document.body.innerText;
+              return document.documentElement.outerHTML || '';
             } catch(e) {
-              return document.body ? document.body.innerText : "";
+              return document.body ? document.body.innerHTML : '';
             }
           })()
         `);
-        if (content && content.length > 50) break;
-        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        if (!html || html.length < 200) {
+          lastDiagnostic = `html too short: ${(html || '').length} chars`;
+          await new Promise(resolve => setTimeout(resolve, 500));
+          continue;
+        }
+
+        // Use Readability via web-extractor for clean article extraction
+        const url = wc.getURL() || 'about:blank';
+        const { extractArticleFromHtml } = require('../../lib/web-extractor');
+        const articleResult = extractArticleFromHtml(html, url, { maxChars: 50000 });
+
+        // Heuristic: real articles typically produce 1000+ chars via Readability; shorter
+        // results usually indicate a listing/index page rather than a short article.
+        // However, genuinely brief articles under 1000 chars may over-trigger the fallback
+        // below — we mitigate this by also checking for a byline: a page that Readability
+        // identifies as having an author is more likely a genuine article even if short.
+        // The 500-char minimum on the byline path prevents category/listing pages (which
+        // sometimes get a byline from a short description block) from being misclassified.
+        // TechCrunch listing pages produce ~302 chars with a byline, so 500 gives margin.
+        const hasByline = !!(articleResult && articleResult.byline);
+        const readabilitySufficient = articleResult && articleResult.length > 1000;
+        const extracted = (articleResult && articleResult.content) || '';
+
+        if (readabilitySufficient || (hasByline && extracted.length > 500)) {
+          content = extracted;
+          lastDiagnostic = `readability ok: ${extracted.length} chars`;
+          break;
+        }
+
+        // Fallback: parse with JSDOM + stripJunkFromDom when Readability returns too little
+        // (listing/index pages, thin content). This reuses the same junk-stripping that the
+        // other extraction paths use, removing nav, footer, header, ads, etc. — unlike the
+        // old raw innerText path which only removed 5 tags.
+        let rawText = '';
+        try {
+          const { JSDOM } = require('jsdom');
+          const { stripJunkFromDom, extractText } = require('../../lib/web-extractor');
+          const dom = new JSDOM(html, { url });
+          stripJunkFromDom(dom.window.document);
+          rawText = extractText(dom.window.document);
+        } catch (_) {
+          // JSDOM or import failed — fall back to raw innerText from renderer
+          rawText = await wc.executeJavaScript(`
+            (() => {
+              try {
+                const clone = document.body.cloneNode(true);
+                clone.querySelectorAll('script, style, noscript, svg, iframe').forEach(e => e.remove());
+                return clone.innerText.replace(/\\s+/g, ' ').trim();
+              } catch(e) {
+                return document.body ? document.body.innerText : '';
+              }
+            })()
+          `);
+        }
+
+        if (rawText && rawText.length > 100) {
+          // If we got some Readability content, prepend it as context
+          const combined = extracted && extracted.length > 50
+            ? `[Article summary]\n${extracted}\n\n[Full page content]\n${rawText}`
+            : rawText;
+          content = combined.substring(0, 50000);
+          lastDiagnostic = `jsdom ok: ${rawText.length} chars`;
+          break;
+        }
+
+        // JSDOM+stripJunk may have been too aggressive — try raw renderer innerText
+        // as a fallback before giving up on this attempt. This catches sites where
+        // stripJunkFromDom's link-density heuristic removes the main content container.
+        if (!rawText || rawText.length <= 100) {
+          try {
+            const rendererText = await wc.executeJavaScript(`
+              (() => {
+                try {
+                  const clone = document.body.cloneNode(true);
+                  clone.querySelectorAll('script, style, noscript, svg, iframe').forEach(e => e.remove());
+                  return clone.innerText.replace(/\\s+/g, ' ').trim();
+                } catch(e) {
+                  return document.body ? document.body.innerText : '';
+                }
+              })()
+            `);
+            if (rendererText && rendererText.length > 100) {
+              const combined = extracted && extracted.length > 50
+                ? `[Article summary]\n${extracted}\n\n[Full page content]\n${rendererText}`
+                : rendererText;
+              content = combined.substring(0, 50000);
+              lastDiagnostic = `renderer innerText fallback ok: ${rendererText.length} chars (jsdom stripped too much)`;
+              break;
+            }
+          } catch (_) {}
+        }
+
+        // Content too short — page may still be hydrating, wait and retry
+        await new Promise(resolve => setTimeout(resolve, 500));
       } catch (e) {
-        if (attempt === 2) return { error: e.message };
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (attempt >= 18) return { error: e.message };
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
+    }
+
+    // Final fallback: try raw renderer innerText even after all retries failed.
+    // This catches cases where the page has visible content but the extraction
+    // pipeline (Readability + JSDOM+stripJunk) couldn't produce enough text.
+    if (!content) {
+      try {
+        const wc = view && view.webContents;
+        if (wc && !wc.isDestroyed()) {
+          const fallbackText = await wc.executeJavaScript(`
+            (() => {
+              try {
+                const clone = document.body.cloneNode(true);
+                clone.querySelectorAll('script, style, noscript, svg, iframe').forEach(e => e.remove());
+                return clone.innerText.replace(/\\s+/g, ' ').trim();
+              } catch(e) {
+                return document.body ? document.body.innerText : '';
+              }
+            })()
+          `);
+          if (fallbackText && fallbackText.length > 100) {
+            content = fallbackText.substring(0, 50000);
+            console.log(`[extract-page-content] Final innerText fallback: ${content.length} chars`);
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!content) {
+      console.log(`[extract-page-content] No content extracted. Last diagnostic: ${lastDiagnostic || 'unknown'}`);
     }
     return { content };
   });

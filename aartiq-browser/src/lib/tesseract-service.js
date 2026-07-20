@@ -544,7 +544,7 @@ $payload = [PSCustomObject]@{
         foreach ($word in $line.Words) {
           [PSCustomObject]@{
             text = $word.Text
-            confidence = 0.95
+            confidence = null
             bbox = [PSCustomObject]@{
               x = [int]$word.BoundingRect.X
               y = [int]$word.BoundingRect.Y
@@ -570,7 +570,7 @@ $payload = [PSCustomObject]@{
 
       [PSCustomObject]@{
         text = $line.Text
-        confidence = 0.95
+        confidence = null
         bbox = [PSCustomObject]@{
           x = $minX
           y = $minY
@@ -605,7 +605,7 @@ $payload | ConvertTo-Json -Compress -Depth 8
         .map((line) => createEntry(
           line.text,
           this.mapCaptureBboxToScreen(line.bbox, capture, 1),
-          line.confidence ?? 0.95,
+          line.confidence ?? null,
           { source: 'windows-native-line', provider: 'windows-media-ocr' }
         ))
         .filter(Boolean));
@@ -615,7 +615,7 @@ $payload | ConvertTo-Json -Compress -Depth 8
         .map((word) => createEntry(
           word.text,
           this.mapCaptureBboxToScreen(word.bbox, capture, 1),
-          word.confidence ?? 0.95,
+          word.confidence ?? null,
           { source: 'windows-native-word', provider: 'windows-media-ocr' }
         ))
         .filter(Boolean));
@@ -824,7 +824,7 @@ print(json.dumps({"results": results}))
         result.results.map((item) => createEntry(
           item.text,
           { x0: item.left, y0: item.top, x1: item.left + item.width, y1: item.top + item.height },
-          item.confidence ?? 0.95,
+          item.confidence ?? null,
           { source: 'uniocr-line', provider: `uniocr-${provider}` }
         )).filter(Boolean),
         displayId
@@ -877,7 +877,7 @@ print(json.dumps({"results": results}))
         result.boxes.map((item) => createEntry(
           item.text,
           { x0: item.x, y0: item.y, x1: item.x + item.width, y1: item.y + item.height },
-          item.confidence ?? 0.95,
+          item.confidence ?? null,
           { source: 'rusto-line', provider: 'rusto-paddleocr' }
         )).filter(Boolean),
         displayId

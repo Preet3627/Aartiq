@@ -4,15 +4,17 @@ const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontext
 const http = require('http');
 const { getAppIconBase64, searchApplications, execShellCommand, validateCommand } = require('../main/handlers/utils.js');
 const { generateAartiqPDFTemplate } = require('../main/handlers/pdf-utils.js');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const { domEngine } = require('./dom-engine');
+const { extractFromHtml, DEFAULT_UA } = require('./web-extractor');
 const { BrowserWindow, app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+const CHROME_UA = DEFAULT_UA;
 
 const TOOL_RISK_MAP = {
   list_tabs: 'low',
@@ -41,53 +43,7 @@ const TOOL_RISK_MAP = {
   run_powershell: 'high',
 };
 
-const DESTRUCTIVE_COMMAND_PATTERNS = [
-  /\brm\s/i,
-  /\bdel\s/i,
-  /\bdel\//i,
-  /\brmdir/i,
-  /\brd\s\/[sfq]/i,
-  /\bformat\s/i,
-  /\bfdisk/i,
-  /\bmkfs/i,
-  /\bdd\s+if=/i,
-  /\bshred/i,
-  /\bwipe/i,
-  /\bfind\s.*-delete/i,
-  /\bfind\s.*-exec\s+rm/i,
-  /\bxargs\s+rm/i,
-  /\bxargs\s+del/i,
-  /\bunlk\b/i,
-  /\bunlink\s/i,
-  /\bsudo\s/i,
-  /\bsu\s/i,
-  /\bkill\s/i,
-  /\bkillall/i,
-  /\bpkill/i,
-  />\s*\/dev\//i,
-  /\bshutdown/i,
-  /\breboot/i,
-  /\bhalt\b/i,
-  /\bpoweroff/i,
-  /\binit\s/i,
-  /\bchmod\s/i,
-  /\bchown\s/i,
-  /\bchgrp\s/i,
-  /\bmount\s/i,
-  /\bumount/i,
-  /\beject/i,
-  /\biptables/i,
-  /\bufw\b/i,
-  /\bfirewall/i,
-];
-
-function detectShellCommandRisk(command) {
-  if (!command || typeof command !== 'string') return 'medium';
-  for (const pattern of DESTRUCTIVE_COMMAND_PATTERNS) {
-    if (pattern.test(command)) return 'high';
-  }
-  return 'medium';
-}
+const { containsDestructivePattern, getShellRisk } = require('./SecurityValidator');
 
 class BrowserMcpServer {
   constructor(tabViews, store, mainWindow) {
@@ -438,10 +394,10 @@ class BrowserMcpServer {
     let risk = TOOL_RISK_MAP[toolName] || 'low';
     
     if (toolName === 'execute_shell_command' && args.command) {
-      risk = detectShellCommandRisk(args.command);
+      risk = getShellRisk(args.command);
     }
     if (toolName === 'run_powershell' && args.script) {
-      risk = detectShellCommandRisk(args.script);
+      risk = getShellRisk(args.script);
     }
     if (toolName === 'run_applescript' && args.script) {
       const lower = (args.script || '').toLowerCase();
@@ -671,43 +627,20 @@ class BrowserMcpServer {
             };
           }
           try {
-            let script;
-            if (args.selector) {
-              script = `
-                (() => {
-                  const el = document.querySelector(${JSON.stringify(args.selector)});
-                  if (!el) return { success: false, error: 'Selector not found: ${args.selector}' };
-                  el.click();
-                  return { success: true };
-                })()
-              `;
-            } else if (args.text) {
-              const searchText = JSON.stringify(args.text);
-              script = `
-                (() => {
-                  const words = ${searchText}.toLowerCase().split(/\\s+/).filter(Boolean);
-                  const candidates = document.querySelectorAll('a, button, input, [role="button"], [role="link"], span, div');
-                  let best = null, bestScore = 0;
-                  for (const el of candidates) {
-                    const text = (el.textContent || '').toLowerCase().trim();
-                    if (!text) continue;
-                    const score = words.filter(w => text.includes(w)).length;
-                    if (score > bestScore) { bestScore = score; best = el; }
-                  }
-                  if (!best || bestScore === 0) return { success: false, error: 'No element found matching text' };
-                  best.click();
-                  return { success: true, matched: (best.textContent || '').trim().substring(0, 100) };
-                })()
-              `;
-            } else {
+            if (!args.selector && !args.text) {
               return {
                 content: [{ type: 'text', text: 'Provide either selector or text parameter' }],
                 isError: true,
               };
             }
-            const result = await view.webContents.executeJavaScript(script);
+            const result = await domEngine.clickElement(view.webContents, {
+              selector: args.selector,
+              text: args.text,
+              retry: 3,
+            });
             if (result?.success) {
-              return { content: [{ type: 'text', text: `Clicked element${result.matched ? ': ' + result.matched : ''}` }] };
+              const label = result.element?.text?.substring(0, 80) || result.element?.selector || '';
+              return { content: [{ type: 'text', text: `Clicked element${label ? ': ' + label : ''}` }] };
             }
             return {
               content: [{ type: 'text', text: result?.error || 'Click failed' }],
@@ -742,28 +675,14 @@ class BrowserMcpServer {
             };
           }
           try {
-            const script = `
-              (() => {
-                const el = document.querySelector(${JSON.stringify(args.selector)});
-                if (!el) return { success: false, error: 'Element not found' };
-                const tag = el.tagName.toLowerCase();
-                if (tag === 'input' || tag === 'textarea') {
-                  el.value = ${JSON.stringify(args.value)};
-                  el.dispatchEvent(new Event('input', { bubbles: true }));
-                  el.dispatchEvent(new Event('change', { bubbles: true }));
-                  return { success: true };
-                }
-                if (el.isContentEditable) {
-                  el.textContent = ${JSON.stringify(args.value)};
-                  el.dispatchEvent(new Event('input', { bubbles: true }));
-                  return { success: true };
-                }
-                return { success: false, error: 'Element is not a form field' };
-              })()
-            `;
-            const result = await view.webContents.executeJavaScript(script);
+            const result = await domEngine.fillField(view.webContents, {
+              selector: args.selector,
+              value: args.value,
+              retry: 3,
+              verify: true,
+            });
             if (result?.success) {
-              return { content: [{ type: 'text', text: `Filled ${args.selector}` }] };
+              return { content: [{ type: 'text', text: `Filled ${args.selector}${result.verified ? ' (verified)' : ''}` }] };
             }
             return {
               content: [{ type: 'text', text: result?.error || 'Fill failed' }],
@@ -942,19 +861,19 @@ class BrowserMcpServer {
                 shell.openPath(appPath);
               } else {
                 await new Promise((resolve, reject) => {
-                  exec(`open -a "${appPath}"`, (err) => {
-                    if (err) reject(err); else resolve(true);
-                  });
+                  const child = spawn('open', ['-a', appPath]);
+                  child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`open exited ${code}`)));
+                  child.on('error', reject);
                 });
               }
             } else if (process.platform === 'win32') {
               await new Promise((resolve, reject) => {
-                exec(`start "" "${appPath}"`, { shell: true }, (err) => {
-                  if (err) reject(err); else resolve(true);
-                });
+                const child = spawn('cmd', ['/c', 'start', '', appPath]);
+                child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`start exited ${code}`)));
+                child.on('error', reject);
               });
             } else {
-              exec(`xdg-open "${appPath}"`, { shell: true });
+              spawn('xdg-open', [appPath], { detached: true }).unref();
             }
             return {
               content: [{ type: 'text', text: `Opened application: ${appPath}` }],
@@ -988,7 +907,7 @@ class BrowserMcpServer {
       },
       {
         name: 'set_brightness',
-        description: 'Set screen brightness level (0 to 1). macOS only.',
+        description: 'Set screen brightness level (0 to 1). macOS only. Requires the "brightness" CLI tool (install via: brew install brightness).',
         inputSchema: {
           type: 'object',
           properties: {
@@ -999,10 +918,14 @@ class BrowserMcpServer {
         execute: async (args) => {
           const level = Math.min(1.0, Math.max(0.0, args.level));
           if (process.platform === 'darwin') {
-            await execAsync(`brightness ${level}`);
-            return { content: [{ type: 'text', text: `Brightness set to ${level}` }] };
+            try {
+              await execAsync(`brightness ${level}`);
+              return { content: [{ type: 'text', text: `Brightness set to ${level}` }] };
+            } catch (e) {
+              return { content: [{ type: 'text', text: `Brightness control failed. Install the "brightness" CLI tool: brew install brightness. Error: ${e.message}` }], isError: true };
+            }
           }
-          return { content: [{ type: 'text', text: `Brightness control not supported on platform: ${process.platform}` }], isError: true };
+          return { content: [{ type: 'text', text: `Brightness control is not supported on ${process.platform}. This tool currently only works on macOS with the "brightness" CLI tool installed.` }], isError: true };
         },
       },
       {
@@ -1022,8 +945,18 @@ class BrowserMcpServer {
             return { content: [{ type: 'text', text: 'Invalid time format. Please provide a valid ISO date/time string.' }], isError: true };
           }
           if (process.platform === 'darwin') {
-            await execAsync(`osascript -e 'tell application "Reminders" to make new reminder with properties {name:"${args.message}", remind me date:"${alarmTime.toISOString()}"}'`);
-            return { content: [{ type: 'text', text: `Reminder set for ${alarmTime.toLocaleString()} with message: "${args.message}"` }] };
+            const script = `on run argv
+              set msg to item 1 of argv
+              set dt to item 2 of argv
+              tell application "Reminders"
+                make new reminder with properties {name:msg, remind me date:(date (dt))}
+              end tell
+            end run`;
+            const child = spawn('osascript', ['-e', script, '--', args.message, alarmTime.toISOString()]);
+            await new Promise((resolve, reject) => {
+              child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`osascript exited ${code}`)));
+              child.on('error', reject);
+            });            return { content: [{ type: 'text', text: `Reminder set for ${alarmTime.toLocaleString()} with message: "${args.message}"` }] };
           }
           return { content: [{ type: 'text', text: `Alarm/Reminder not supported on platform: ${process.platform}` }], isError: true };
         },
@@ -1074,8 +1007,20 @@ class BrowserMcpServer {
             return { content: [{ type: 'text', text: `AppleScript blocked: no allowed app target in script. Allowed: ${ALLOWED_APPS.join(', ')}` }], isError: true };
           }
           try {
-            const escaped = script.replace(/'/g, "\\'");
-            const { stdout } = await execAsync(`osascript -e '${escaped}'`);
+            const child = spawn('osascript', ['-'], { stdio: ['pipe', 'pipe', 'pipe'] });
+            child.stdin.write(script);
+            child.stdin.end();
+            let stdout = '';
+            let stderr = '';
+            child.stdout.on('data', (d) => { stdout += d.toString(); });
+            child.stderr.on('data', (d) => { stderr += d.toString(); });
+            const exitCode = await new Promise((resolve) => {
+              child.on('close', resolve);
+              child.on('error', () => resolve(1));
+            });
+            if (exitCode !== 0) {
+              return { content: [{ type: 'text', text: `AppleScript error: ${stderr.trim()}` }], isError: true };
+            }
             return { content: [{ type: 'text', text: stdout.trim() }] };
           } catch (e) {
             return { content: [{ type: 'text', text: `AppleScript failed: ${e.message}` }], isError: true };
@@ -1107,8 +1052,8 @@ class BrowserMcpServer {
             }
           }
           try {
-            const escaped = script.replace(/"/g, '\\"');
-            const { stdout } = await execAsync(`powershell -Command "${escaped}"`);
+            const encoded = Buffer.from(script, 'utf16le').toString('base64');
+            const { stdout } = await execAsync(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`);
             return { content: [{ type: 'text', text: stdout.trim() }] };
           } catch (e) {
             return { content: [{ type: 'text', text: `PowerShell failed: ${e.message}` }], isError: true };
@@ -1390,14 +1335,14 @@ class BrowserMcpServer {
   }
 
   async _readPageContent(view, maxChars = 6000) {
-    return view.executeJavaScript(`
+    const html = await view.executeJavaScript(`
       (() => {
         document.querySelectorAll('script, style, nav, footer, header, noscript, svg, iframe, form, .sidebar, .menu, .footer, .header, .nav, .ad, .cookie, .popup, .modal, .overlay').forEach(el => el.remove());
-        const main = document.querySelector('main, article, [role="main"], #content, #main, .content, .post, .entry, .article');
-        const text = main ? main.textContent : (document.body ? document.body.textContent : '');
-        return (text || '').replace(/\\s+/g, ' ').trim().substring(0, ${maxChars});
+        return document.documentElement.outerHTML;
       })()
     `);
+    if (!html) return '';
+    return extractFromHtml(html, 'about:blank', { maxChars, useReadability: true });
   }
 
   async _browserSearch(query, engine, count) {

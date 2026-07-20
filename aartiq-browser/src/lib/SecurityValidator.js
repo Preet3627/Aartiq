@@ -1,31 +1,31 @@
+// ============================================================================
+// SecurityValidator.js — Single source of truth for shell command validation
+// ============================================================================
+
 const { exec, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+// Patterns that indicate genuinely dangerous/destructive commands.
 const DANGEROUS_PATTERNS = [
-  /rm\s+-rf\s+\//i,
-  /:\s*\|/i,
-  /\\x[0-9a-f]{2}/i,
-  /\$\([^)]+\)/,
-  /`[^`]+`/,
-  /;\s*rm\s/i,
-  /mkfs/i,
-  /dd\s+if=/i,
-  /[>|]\/dev\/sd/i,
-  /:\|/i,
+  /rm\s+-rf\s+\//i,           // rm -rf /
+  /rm\s+-rf\s+~\//i,          // rm -rf ~/
+  /:\s*\|/i,                  // fork bomb
+  /\\x[0-9a-f]{2}/i,         // hex-encoded chars
+  /;\s*rm\s/i,                // ; rm ...
+  /mkfs/i,                    // format filesystem
+  /dd\s+if=/i,                // dd write
+  /[>|]\/dev\/sd/i,           // write to device
+  /chown\s+root/i,            // chown root
+  /chmod\s+777/i,             // chmod 777
+  /shutdown/i,
+  /reboot/i,
+  /halt\b/i,
+  /poweroff/i,
+  /init\s+[06]/i,             // init runlevels 0,6 = halt/reboot
+  /iptables|ufw|firewall/i,   // firewall changes
 ];
-
-const SHELL_SANITIZE_PATTERNS = [
-  /[;&|`$<>]/g,
-  /[\\]/g,
-];
-
-const COMMAND_WHITELIST = new Set([
-  'ls', 'cd', 'pwd', 'mkdir', 'touch', 'cat', 'grep', 'find', 'echo',
-  'curl', 'wget', 'git', 'npm', 'node', 'python', 'python3',
-  'open', 'code', ' subl', 'vim', 'nano',
-]);
 
 const BLOCKED_COMMANDS = new Set([
   'sudo', 'su', 'passwd', 'chgrp',
@@ -39,6 +39,47 @@ const HIGH_RISK_FILE_COMMANDS = new Set([
   'mount', 'umount', 'eject',
 ]);
 
+// Commands that are destructive enough to require explicit approval (from mcp-browser-server).
+const DESTRUCTIVE_COMMAND_PATTERNS = [
+  /\brm\s/i,
+  /\bdel\s/i,
+  /\bdel\//i,
+  /\brmdir/i,
+  /\brd\s\/[sfq]/i,
+  /\bformat\s/i,
+  /\bfdisk/i,
+  /\bmkfs/i,
+  /\bdd\s+if=/i,
+  /\bshred/i,
+  /\bwipe/i,
+  /\bfind\s.*-delete/i,
+  /\bfind\s.*-exec\s+rm/i,
+  /\bxargs\s+rm/i,
+  /\bxargs\s+del/i,
+  /\bunlk\b/i,
+  /\bunlink\s/i,
+  /\bsudo\s/i,
+  /\bsu\s/i,
+  /\bkill\s/i,
+  /\bkillall/i,
+  /\bpkill/i,
+  />\s*\/dev\//i,
+  /\bshutdown/i,
+  /\breboot/i,
+  /\bhalt\b/i,
+  /\bpoweroff/i,
+  /\binit\s/i,
+  /\bchmod\s/i,
+  /\bchown\s/i,
+  /\bchgrp\s/i,
+  /\bmount\s/i,
+  /\bumount/i,
+  /\beject/i,
+  /\biptables/i,
+  /\bufw\b/i,
+  /\bfirewall/i,
+];
+
 const AUTO_EXEC_ALLOWED = new Set([
   'NAVIGATE', 'SHELL_COMMAND_LIGHT',
 ]);
@@ -50,62 +91,52 @@ const RISK_LEVELS = {
   CRITICAL: 'critical',
 };
 
-function sanitizeShellCommand(command) {
-  if (!command || typeof command !== 'string') {
-    return '';
-  }
-  
-  let sanitized = command.trim();
-  
-  for (const pattern of SHELL_SANITIZE_PATTERNS) {
-    sanitized = sanitized.replace(pattern, '');
-  }
-  
-  return sanitized;
-}
+// --- Core validation ---
 
 function containsDangerousPattern(input) {
-  if (!input || typeof input !== 'string') {
-    return false;
-  }
-  
+  if (!input || typeof input !== 'string') return false;
   return DANGEROUS_PATTERNS.some(pattern => pattern.test(input));
+}
+
+function containsDestructivePattern(input) {
+  if (!input || typeof input !== 'string') return false;
+  return DESTRUCTIVE_COMMAND_PATTERNS.some(pattern => pattern.test(input));
 }
 
 function validateCommand(command) {
   const errors = [];
   const warnings = [];
-  
+
   if (!command || typeof command !== 'string') {
-    return { valid: false, errors: ['Command must be a non-empty string'] };
+    return { valid: false, errors: ['Command must be a non-empty string'], warnings: [] };
   }
-  
+
   if (command.length > 10000) {
     errors.push('Command exceeds maximum length of 10000 characters');
   }
-  
+
   if (containsDangerousPattern(command)) {
     errors.push('Command contains dangerous patterns');
   }
-  
+
   const firstWord = command.trim().split(/\s+/)[0].toLowerCase();
-  
+
   if (BLOCKED_COMMANDS.has(firstWord)) {
     errors.push(`Command "${firstWord}" is blocked for security reasons`);
   }
-  
+
   if (HIGH_RISK_FILE_COMMANDS.has(firstWord)) {
     warnings.push(`Command "${firstWord}" is classified as HIGH RISK and requires explicit approval`);
   }
-  
+
   if (command.includes('..')) {
     warnings.push('Command contains path traversal pattern (..)');
   }
-  
+
   if (command.includes('$(') || command.includes('`')) {
     warnings.push('Command contains command substitution');
   }
-  
+
   return {
     valid: errors.length === 0,
     errors,
@@ -113,28 +144,48 @@ function validateCommand(command) {
   };
 }
 
+// --- Risk classification (replaces mcp-browser-server:detectShellCommandRisk) ---
+
+function getShellRisk(command) {
+  if (!command || typeof command !== 'string') return 'medium';
+  if (containsDestructivePattern(command)) return 'high';
+  return 'medium';
+}
+
+// --- Sanitization ---
+
+function sanitizeShellCommand(command) {
+  if (!command || typeof command !== 'string') return '';
+  // Strip shell metacharacters that could cause injection.
+  // Note: this intentionally breaks legitimate commands with pipes/redirects —
+  // callers that need pipes should not sanitize.
+  return command.replace(/[;&|`$<>\\]/g, '').trim();
+}
+
+// --- Other validators (unchanged) ---
+
 function validateOcrCoordinates(x, y, screenBounds) {
   const errors = [];
-  
+
   if (typeof x !== 'number' || typeof y !== 'number') {
     errors.push('Coordinates must be numbers');
     return { valid: false, errors };
   }
-  
+
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
     errors.push('Coordinates must be finite numbers');
   }
-  
+
   if (x < 0 || y < 0) {
     errors.push('Coordinates cannot be negative');
   }
-  
+
   if (screenBounds) {
     if (x > screenBounds.width || y > screenBounds.height) {
       errors.push('Coordinates are outside screen bounds');
     }
   }
-  
+
   return {
     valid: errors.length === 0,
     errors,
@@ -143,32 +194,32 @@ function validateOcrCoordinates(x, y, screenBounds) {
 
 function validateFilePath(filePath, allowedDirs = []) {
   const errors = [];
-  
+
   if (!filePath || typeof filePath !== 'string') {
     errors.push('File path must be a non-empty string');
     return { valid: false, errors };
   }
-  
+
   if (filePath.includes('..')) {
     errors.push('File path contains path traversal (../)');
   }
-  
+
   if (filePath.includes('\0')) {
     errors.push('File path contains null byte');
   }
-  
+
   const resolvedPath = path.resolve(filePath);
-  
+
   if (allowedDirs.length > 0) {
-    const isAllowed = allowedDirs.some(dir => 
+    const isAllowed = allowedDirs.some(dir =>
       resolvedPath.startsWith(path.resolve(dir))
     );
-    
+
     if (!isAllowed) {
       errors.push('File path is not in allowed directories');
     }
   }
-  
+
   return {
     valid: errors.length === 0,
     errors,
@@ -178,23 +229,23 @@ function validateFilePath(filePath, allowedDirs = []) {
 
 function validateUrl(url) {
   const errors = [];
-  
+
   if (!url || typeof url !== 'string') {
     errors.push('URL must be a non-empty string');
     return { valid: false, errors };
   }
-  
+
   try {
     const parsed = new URL(url);
-    
+
     if (!['http:', 'https:'].includes(parsed.protocol)) {
       errors.push('URL must use HTTP or HTTPS protocol');
     }
-    
+
     if (parsed.hostname === 'localhost' || /^127\./.test(parsed.hostname)) {
       errors.push('Access to localhost is restricted');
     }
-    
+
     return { valid: errors.length === 0, errors, parsed };
   } catch (e) {
     errors.push('Invalid URL format');
@@ -205,12 +256,12 @@ function validateUrl(url) {
 function validateAiCommand(command) {
   const errors = [];
   const warnings = [];
-  
+
   if (!command || typeof command !== 'object') {
     errors.push('AI command must be an object');
-    return { valid: false, errors };
+    return { valid: false, errors, warnings };
   }
-  
+
   const knownCommands = [
     'NAVIGATE', 'SHELL_COMMAND', 'CREATE_PDF', 'CREATE_PDF_JSON',
     'CLICK_ELEMENT', 'FIND_AND_CLICK', 'OCR_SCREEN', 'OCR_COORDINATES',
@@ -219,11 +270,11 @@ function validateAiCommand(command) {
     'DELETE_FILE', 'REMOVE_FILE', 'FORMAT_DISK', 'PARTITION_DISK',
     'WRITE_DISK', 'POWER_ACTION', 'FIREWALL_CHANGE', 'PERMISSION_CHANGE',
   ];
-  
+
   if (command.command && !knownCommands.includes(command.command)) {
     warnings.push(`Unknown command type: ${command.command}`);
   }
-  
+
   if (command.params) {
     if (command.params.path && typeof command.params.path === 'string') {
       const pathValidation = validateFilePath(command.params.path);
@@ -231,7 +282,7 @@ function validateAiCommand(command) {
         errors.push(...pathValidation.errors.map(e => `path: ${e}`));
       }
     }
-    
+
     if (command.params.url && typeof command.params.url === 'string') {
       const urlValidation = validateUrl(command.params.url);
       if (!urlValidation.valid) {
@@ -239,7 +290,7 @@ function validateAiCommand(command) {
       }
     }
   }
-  
+
   return {
     valid: errors.length === 0,
     errors,
@@ -273,7 +324,7 @@ function getRiskLevel(commandType) {
     'FIREWALL_CHANGE': RISK_LEVELS.HIGH,
     'PERMISSION_CHANGE': RISK_LEVELS.HIGH,
   };
-  
+
   return riskMap[commandType] || RISK_LEVELS.MEDIUM;
 }
 
@@ -337,6 +388,8 @@ module.exports = {
   validateOcrCoordinates,
   sanitizeShellCommand,
   containsDangerousPattern,
+  containsDestructivePattern,
+  getShellRisk,
   getRiskLevel,
   canAutoExecute,
   RISK_LEVELS,

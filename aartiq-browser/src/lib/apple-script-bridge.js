@@ -9,71 +9,107 @@ const AppleScriptBridge = {
   speechSynthesizer: null,
 };
 
+// Each command returns { script, args } — the script uses `on run argv` so
+// user-supplied values are never interpolated into the AppleScript source.
 const APPLE_SCRIPT_COMMANDS = {
-  'ask AI': (params) => `
-    tell application "Aartiq"
-      activate
-      ask AI "${params.message || ''}"
-    end tell
-  `,
+  'ask AI': (params) => ({
+    script: `on run argv
+      set msg to item 1 of argv
+      tell application "Aartiq"
+        activate
+        ask AI msg
+      end tell
+    end run`,
+    args: [params.message || ''],
+  }),
 
-  'navigate': (params) => `
-    tell application "Aartiq"
-      activate
-      navigate to "${params.url || ''}"
-    end tell
-  `,
+  'navigate': (params) => ({
+    script: `on run argv
+      set targetUrl to item 1 of argv
+      tell application "Aartiq"
+        activate
+        navigate to targetUrl
+      end tell
+    end run`,
+    args: [params.url || ''],
+  }),
 
-  'create pdf': (params) => `
-    tell application "Aartiq"
-      activate
-      create PDF with content "${params.content || ''}" title "${params.title || 'Document'}"
-    end tell
-  `,
+  'create pdf': (params) => ({
+    script: `on run argv
+      set pdfContent to item 1 of argv
+      set pdfTitle to item 2 of argv
+      tell application "Aartiq"
+        activate
+        create PDF with content pdfContent title pdfTitle
+      end tell
+    end run`,
+    args: [params.content || '', params.title || 'Document'],
+  }),
 
-  'run shell command': (params) => `
-    tell application "Aartiq"
-      activate
-      run command "${params.command || ''}"
-    end tell
-  `,
+  'run shell command': (params) => ({
+    script: `on run argv
+      set cmd to item 1 of argv
+      tell application "Aartiq"
+        activate
+        run command cmd
+      end tell
+    end run`,
+    args: [params.command || ''],
+  }),
 
-  'set volume': (params) => `
-    set volume output volume ${params.level || 50}
-  `,
+  'set volume': (params) => ({
+    // Numeric value — safe to inline, but we validate via parseInt.
+    script: `set volume output volume ${parseInt(params.level, 10) || 50}`,
+    args: [],
+  }),
 
-  'take screenshot': () => `
-    tell application "Aartiq"
+  'take screenshot': () => ({
+    script: `tell application "Aartiq"
       activate
       take screenshot
-    end tell
-  `,
+    end tell`,
+    args: [],
+  }),
 
-  'open app': (params) => `
-    tell application "Aartiq"
-      activate
-      open application "${params.appName || ''}"
-    end tell
-  `,
+  'open app': (params) => ({
+    script: `on run argv
+      set targetApp to item 1 of argv
+      tell application "Aartiq"
+        activate
+        open application targetApp
+      end tell
+    end run`,
+    args: [params.appName || ''],
+  }),
 
-  'schedule task': (params) => `
-    tell application "Aartiq"
-      activate
-      schedule task "${params.task || ''}" at "${params.schedule || 'daily'}"
-    end tell
-  `,
+  'schedule task': (params) => ({
+    script: `on run argv
+      set taskName to item 1 of argv
+      set scheduleTime to item 2 of argv
+      tell application "Aartiq"
+        activate
+        schedule task taskName at scheduleTime
+      end tell
+    end run`,
+    args: [params.task || '', params.schedule || 'daily'],
+  }),
 
-  'voice chat': () => `
-    tell application "Aartiq"
+  'voice chat': () => ({
+    script: `tell application "Aartiq"
       activate
       start voice chat
-    end tell
-  `,
+    end tell`,
+    args: [],
+  }),
 };
 
-async function runAppleScript(script) {
+async function runAppleScript(script, args = []) {
   return new Promise((resolve, reject) => {
-    const child = spawn('osascript', ['-e', script], {
+    const childArgs = ['-e', script];
+    if (args.length > 0) {
+      childArgs.push('--', ...args);
+    }
+    const child = spawn('osascript', childArgs, {
       stdio: ['pipe', 'pipe', 'pipe']
     });
 
@@ -101,26 +137,41 @@ async function runAppleScript(script) {
 }
 
 async function executeAppleScriptCommand(command, params = {}) {
-  const scriptGenerator = APPLE_SCRIPT_COMMANDS[command];
-  
-  if (!scriptGenerator) {
+  const commandDef = APPLE_SCRIPT_COMMANDS[command];
+
+  if (!commandDef) {
     throw new Error(`Unknown command: ${command}`);
   }
 
-  const script = scriptGenerator(params);
-  return await runAppleScript(script);
+  const { script, args } = typeof commandDef === 'function' ? commandDef(params) : commandDef;
+  return await runAppleScript(script, args);
 }
 
 async function speakText(text, rate = 200, voice = null) {
-  let script = `say "${text.replace(/"/g, '\\"')}"`;
-  
+  // Use `on run argv` so text and voice are never interpolated into the script.
+  let script = `
+    on run argv
+      set textToSpeak to item 1 of argv
+      set rateVal to item 2 of argv as integer
+  `;
   if (voice) {
-    script += ` using voice "${voice}"`;
+    script += `
+      set voiceName to item 3 of argv
+      say textToSpeak using voice name speaking rate rateVal
+    `;
+  } else {
+    script += `
+      say textToSpeak speaking rate rateVal
+    `;
   }
-  
-  script += ` speaking rate ${rate}`;
-  
-  return await runAppleScript(script);
+  script += `
+    end run
+  `;
+
+  const args = [text, String(rate)];
+  if (voice) args.push(voice);
+
+  return await runAppleScript(script, args);
 }
 
 async function listenForSpeech(timeout = 10000) {

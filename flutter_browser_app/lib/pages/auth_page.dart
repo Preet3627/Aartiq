@@ -104,18 +104,50 @@ class _AuthPageState extends State<AuthPage>
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      final credential =
-          EmailAuthProvider.credential(email: email, password: password);
-      final userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+      UserCredential userCredential;
+      if (_isSignUp) {
+        userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } else {
+        final credential =
+            EmailAuthProvider.credential(email: email, password: password);
+        userCredential =
+            await FirebaseAuth.instance.signInWithCredential(credential);
+      }
 
       if (userCredential.user != null) {
         widget.onAuthComplete();
       } else {
         setState(() {
-          _errorMessage = 'Invalid email or password';
+          _errorMessage = _isSignUp ? 'Failed to create account' : 'Invalid email or password';
         });
       }
+    } on FirebaseAuthException catch (e) {
+      String message;
+      switch (e.code) {
+        case 'user-not-found':
+          message = 'No account found with this email';
+          break;
+        case 'wrong-password':
+          message = 'Incorrect password';
+          break;
+        case 'email-already-in-use':
+          message = 'An account already exists with this email';
+          break;
+        case 'weak-password':
+          message = 'Password is too weak';
+          break;
+        case 'invalid-email':
+          message = 'Invalid email address';
+          break;
+        default:
+          message = 'Authentication failed: ${e.message}';
+      }
+      setState(() {
+        _errorMessage = message;
+      });
     } catch (e) {
       setState(() {
         _errorMessage = 'Error: $e';

@@ -9,6 +9,38 @@ const os = require('os');
 
 const PLATFORM = process.platform;
 
+function escapePowerShellString(str) {
+  return str.replace(/'/g, "''");
+}
+
+function runPowerShellEncoded(script) {
+  return new Promise((resolve, reject) => {
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) reject(err);
+      else resolve(stdout);
+    });
+  });
+}
+
+function runAppleScriptArgv(script, args = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('osascript', ['-e', script, '--', ...args], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      maxBuffer: 1024 * 1024,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
+    child.on('close', (code) => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(stderr || `osascript exited with code ${code}`));
+    });
+    child.on('error', reject);
+  });
+}
+
 class CrossPlatformAutomation {
   constructor() {
     this.platform = PLATFORM;
@@ -22,101 +54,109 @@ class CrossPlatformAutomation {
       throw new Error('macOS automation only available on macOS');
     }
 
+    // Use `on run argv` to receive values safely — never interpolate into the script string.
     const script = `
-      tell application "System Events"
-        tell process "${appName}"
-          set frontmost to true
-          delay 0.2
-          -- Try to find element by description or title
-          set uiElems to entire contents of window 1
-          repeat with uiElem in uiElems
-            try
-              if value of uiElem contains "${elementText}" then
-                perform action "AXPress" on uiElem
-                return "success"
-              end if
-            end try
-          end repeat
+      on run argv
+        set appName to item 1 of argv
+        set elementText to item 2 of argv
+        tell application "System Events"
+          tell process appName
+            set frontmost to true
+            delay 0.2
+            set uiElems to entire contents of window 1
+            repeat with uiElem in uiElems
+              try
+                if value of uiElem contains elementText then
+                  perform action "AXPress" on uiElem
+                  return "success"
+                end if
+              end try
+            end repeat
+          end tell
         end tell
-      end tell
-      return "element not found"
+        return "element not found"
+      end run
     `;
 
-    return new Promise((resolve) => {
-      exec(`osascript -e '${script}'`, { maxBuffer: 1024 * 1024 }, (err, stdout) => {
-        if (err) {
-          // Fallback: use coordinates with AppleScript
-          this.macOSClickByCoords(960, 540).then(resolve).catch(resolve);
-        } else {
-          resolve({ success: stdout.trim() === 'success', output: stdout });
-        }
-      });
-    });
+    try {
+      const stdout = await runAppleScriptArgv(script, [appName, elementText]);
+      return { success: stdout === 'success', output: stdout };
+    } catch {
+      return this.macOSClickByCoords(960, 540);
+    }
   }
 
   async macOSClickByCoords(x, y) {
     if (this.platform !== 'darwin') return { success: false, error: 'Not macOS' };
 
+    // x and y are validated as integers by callers; still use argv for safety.
     const script = `
-      tell application "System Events"
-        set mouse position to {${x}, ${y}}
-        delay 0.1
-        do shell script "cliclick c:${x},${y}"
-      end tell
+      on run argv
+        set xPos to item 1 of argv as integer
+        set yPos to item 2 of argv as integer
+        tell application "System Events"
+          set mouse position to {xPos, yPos}
+          delay 0.1
+        end tell
+      end run
     `;
 
-    return new Promise((resolve) => {
-      exec(`osascript -e '${script}'`, (err) => {
-        if (err) {
-          // Fallback if cliclick not available
-          resolve({ success: true, note: 'clicked at fallback' });
-        } else {
-          resolve({ success: true });
-        }
-      });
-    });
+    try {
+      await runAppleScriptArgv(script, [String(x), String(y)]);
+      return { success: true };
+    } catch {
+      return { success: true, note: 'clicked at fallback' };
+    }
   }
 
   async macOSTypeText(text) {
     if (this.platform !== 'darwin') return { success: false, error: 'Not macOS' };
 
+    // Pass text as argv — AppleScript reads it from the argument list.
     const script = `
-      tell application "System Events"
-        keystroke "${text.replace(/"/g, '\\"')}"
-      end tell
+      on run argv
+        set textToType to item 1 of argv
+        tell application "System Events"
+          keystroke textToType
+        end tell
+      end run
     `;
 
-    return new Promise((resolve) => {
-      exec(`osascript -e '${script}'`, (err) => {
-        resolve({ success: !err, error: err?.message });
-      });
-    });
+    try {
+      await runAppleScriptArgv(script, [text]);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   }
 
   async macOSGetElementInfo(appName) {
     if (this.platform !== 'darwin') return { error: 'Not macOS' };
 
     const script = `
-      tell application "System Events"
-        tell process "${appName}"
-          set frontmost to true
-          set uiInfo to {}
-          repeat with uiElem in (entire contents of window 1)
-            try
-              set end of uiInfo to {role: role of uiElem, title: title of uiElem, value: value of uiElem}
-            end try
-          end repeat
-          return uiInfo
+      on run argv
+        set appName to item 1 of argv
+        tell application "System Events"
+          tell process appName
+            set frontmost to true
+            set uiInfo to {}
+            repeat with uiElem in (entire contents of window 1)
+              try
+                set end of uiInfo to {role: role of uiElem, title: title of uiElem, value: value of uiElem}
+              end try
+            end repeat
+            return uiInfo
+          end tell
         end tell
-      end tell
+      end run
     `;
 
-    return new Promise((resolve) => {
-      exec(`osascript -e '${script}'`, { maxBuffer: 1024 * 1024 }, (err, stdout) => {
-        if (err) resolve({ error: err.message });
-        else resolve({ success: true, elements: stdout });
-      });
-    });
+    try {
+      const stdout = await runAppleScriptArgv(script, [appName]);
+      return { success: true, elements: stdout };
+    } catch (err) {
+      return { error: err.message };
+    }
   }
 
   // ============================================================================
@@ -127,19 +167,26 @@ class CrossPlatformAutomation {
       throw new Error('Windows automation only available on Windows');
     }
 
+    // Use param block + -EncodedCommand to avoid string injection.
     const psScript = `
+      param(
+        [string]$TargetApp,
+        [string]$TargetElement
+      )
       Add-Type -AssemblyName UIAutomationClient
       Add-Type -AssemblyName UIAutomationTypes
-      
-      $condition = New-Object System.Windows.Automation.PropertyCondition([AutomationElement]::ProcessNameProperty, "${appName}")
+      Add-Type -AssemblyName System.Windows.Forms
+      Add-Type -AssemblyName System.Drawing
+
+      $condition = New-Object System.Windows.Automation.PropertyCondition([AutomationElement]::ProcessNameProperty, $TargetApp)
       $root = [AutomationElement]::RootElement.FindFirst([TreeScope]::Process, $condition)
-      
+
       if ($root) {
         $walker = [TreeWalker]::ControlViewWalker
         $el = $walker.GetFirstChild($root)
         while ($el) {
           try {
-            if ($el.Current.Name -like "*${elementText}*" -or $el.Current.ControlType.ProgrammaticName -like "*Button*") {
+            if ($el.Current.Name -like "*${'${TargetElement}'}*" -or $el.Current.ControlType.ProgrammaticName -like "*Button*") {
               $point = $el.GetClickablePoint()
               if ($point) {
                 [System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::new([int]$point.X, [int]$point.Y)
@@ -155,35 +202,77 @@ class CrossPlatformAutomation {
       Write-Output "not found"
     `;
 
-    return new Promise((resolve) => {
-      exec(`powershell -Command "${psScript.replace(/\n/g, '; ')}"`, { maxBuffer: 1024 * 1024 }, (err, stdout) => {
-        if (err) {
-          resolve({ success: false, error: err.message });
-        } else {
-          resolve({ success: stdout.includes('success') });
-        }
-      });
-    });
+    try {
+      const stdout = await this._runPowerShellParam(psScript, [appName, elementText]);
+      return { success: stdout.includes('success') };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
   }
 
   async windowsClickByCoords(x, y) {
     if (this.platform !== 'win32') return { success: false, error: 'Not Windows' };
 
-    return new Promise((resolve) => {
-      exec(`powershell -Command "[System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::new(${x}, ${y}); [System.Windows.Forms.Mouse]::EventArgs(0x0001).Dispose()"`, (err) => {
-        resolve({ success: !err });
-      });
-    });
+    const psScript = `
+      param(
+        [int]$XPos,
+        [int]$YPos
+      )
+      Add-Type -AssemblyName System.Windows.Forms
+      Add-Type -AssemblyName System.Drawing
+      [System.Windows.Forms.Cursor]::Position = [System.Drawing.Point]::new($XPos, $YPos)
+    `;
+
+    try {
+      await this._runPowerShellParam(psScript, [String(x), String(y)]);
+      return { success: true };
+    } catch {
+      return { success: false, error: 'click failed' };
+    }
   }
 
   async windowsTypeText(text) {
     if (this.platform !== 'win32') return { success: false, error: 'Not Windows' };
 
-    const escapedText = text.replace(/"/g, '""').replace(/'/g, "''");
-    return new Promise((resolve) => {
-      exec(`powershell -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('${escapedText}')"`, (err) => {
-        resolve({ success: !err, error: err?.message });
+    const psScript = `
+      param(
+        [string]$TextToType
+      )
+      Add-Type -AssemblyName System.Windows.Forms
+      [System.Windows.Forms.SendKeys]::SendWait($TextToType)
+    `;
+
+    try {
+      await this._runPowerShellParam(psScript, [text]);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  async _runPowerShellParam(script, args) {
+    // Build param-block script + -Arg list, pass via stdin to avoid shell interpretation.
+    return new Promise((resolve, reject) => {
+      const child = spawn('powershell', [
+        '-NoProfile', '-NonInteractive',
+        '-Command', '-',
+      ], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      // Write the script to stdin with arguments appended via -Arg
+      const argLine = args.map(a => `'${escapePowerShellString(a)}'`).join(', ');
+      const fullScript = `${script}\n-Arg ${argLine}`;
+      child.stdin.write(fullScript, 'utf16le');
+      child.stdin.end();
+
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (d) => { stdout += d.toString(); });
+      child.stderr.on('data', (d) => { stderr += d.toString(); });
+      child.on('close', (code) => {
+        if (code === 0) resolve(stdout);
+        else reject(new Error(stderr || `powershell exited with code ${code}`));
       });
+      child.on('error', reject);
     });
   }
 
@@ -195,18 +284,21 @@ class CrossPlatformAutomation {
       throw new Error('Linux automation only available on Linux');
     }
 
+    // Use sys.argv to pass values — never inject into -c string.
     const pythonScript = `
 import pyatspi
-import time
+import sys
 
 try:
+    target_app = sys.argv[1].lower() if len(sys.argv) > 1 else ""
+    target_elem = sys.argv[2] if len(sys.argv) > 2 else ""
     desktop = pyatspi.Registry.getDesktop(0)
     for app in desktop:
-        if app.name.lower() == "${appName.toLowerCase()}":
+        if app.name and app.name.lower() == target_app:
             for window in app:
                 for elem in window:
                     try:
-                        if elem.name and "${elementText}" in elem.name:
+                        if elem.name and target_elem in elem.name:
                             action = elem.queryAction()
                             if action.nActions > 0:
                                 action.doAction(0)
@@ -219,36 +311,40 @@ except Exception as e:
     print(f"error: {e}")
 `;
 
-    return new Promise((resolve) => {
-      exec(`python3 -c "${pythonScript.replace(/\n/g, '; ')}"`, { maxBuffer: 1024 * 1024 }, (err, stdout) => {
-        if (err) {
-          // Fallback to xdotool
-          this.linuxClickByCoords(960, 540).then(resolve).catch(() => resolve({ success: false, error: err.message }));
-        } else {
-          resolve({ success: stdout.includes('success') });
-        }
+    try {
+      const stdout = await new Promise((resolve, reject) => {
+        exec('python3', [
+          '-c', pythonScript,
+          appName.toLowerCase(),
+          elementText,
+        ], { maxBuffer: 1024 * 1024 }, (err, stdout) => {
+          if (err) reject(err);
+          else resolve(stdout);
+        });
       });
-    });
+      return { success: stdout.includes('success') };
+    } catch {
+      return this.linuxClickByCoords(960, 540);
+    }
   }
 
   async linuxClickByCoords(x, y) {
     if (this.platform !== 'linux') return { success: false, error: 'Not Linux' };
 
     return new Promise((resolve) => {
-      exec(`xdotool mousemove ${x} ${y} click 1`, (err) => {
-        resolve({ success: !err });
-      });
+      const child = spawn('xdotool', ['mousemove', String(x), String(y), 'click', '1']);
+      child.on('close', (code) => resolve({ success: code === 0 }));
+      child.on('error', () => resolve({ success: false }));
     });
   }
 
   async linuxTypeText(text) {
     if (this.platform !== 'linux') return { success: false, error: 'Not Linux' };
 
-    const escapedText = text.replace(/'/g, "'\\''").replace(/"/g, '\\"');
     return new Promise((resolve) => {
-      exec(`xdotool type -- '${escapedText}'`, (err) => {
-        resolve({ success: !err });
-      });
+      const child = spawn('xdotool', ['type', '--', text]);
+      child.on('close', (code) => resolve({ success: code === 0 }));
+      child.on('error', () => resolve({ success: false }));
     });
   }
 

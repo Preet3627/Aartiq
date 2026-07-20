@@ -1138,7 +1138,9 @@ export default function Home() {
   // Init Browser Intelligence
   useEffect(() => {
     BrowserAI.initURLPredictor();
-    BrowserAI.loadVectorMemory();
+    if (useAppStore.getState().enableCrossSessionMemory) {
+      BrowserAI.loadVectorMemory();
+    }
   }, []);
 
   // AI Query Interception
@@ -1995,7 +1997,7 @@ export default function Home() {
               <Languages size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Translate</span>
             </button>
-            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'save-page' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+            <button onClick={async () => { try { await window.electronAPI?.invoke('popup-action', { action: 'save-page' }); } catch {} window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
               <DownloadIcon size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Save Page</span>
             </button>
@@ -2008,19 +2010,19 @@ export default function Home() {
               <Code2 size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Inspect</span>
             </button>
-            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'create-shortcut' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+            <button onClick={async () => { try { await window.electronAPI?.invoke('popup-action', { action: 'create-shortcut' }); } catch {} window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
               <Plus size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Create Shortcut</span>
             </button>
-            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'cycle-theme' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+            <button onClick={async () => { try { await window.electronAPI?.invoke('popup-action', { action: 'cycle-theme' }); } catch {} window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
               <Palette size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Switch Theme</span>
             </button>
-            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'search-with-ai' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+            <button onClick={async () => { try { await window.electronAPI?.invoke('popup-action', { action: 'search-with-ai' }); } catch {} window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
               <Sparkles size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Search with AI</span>
             </button>
-            <button onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: 'open-setting', section: 'profile' }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+            <button onClick={async () => { try { await window.electronAPI?.invoke('popup-action', { action: 'open-setting', section: 'profile' }); } catch {} window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
               <GhostSettings size={14} />
               <span className="text-[10px] font-black uppercase tracking-widest">Settings</span>
             </button>
@@ -2035,7 +2037,7 @@ export default function Home() {
               { action: 'tool-select', view: 'firewall', icon: <Shield size={14} />, label: 'Nexus Shield' },
               { action: 'tool-select', view: 'p2psync', icon: <Share2 size={14} />, label: 'P2P Sync' },
             ].map((item) => (
-              <button key={item.view} onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: item.action, view: item.view }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <button key={item.view} onClick={async () => { try { await window.electronAPI?.invoke('popup-action', { action: item.action, view: item.view }); } catch {} window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
                 {item.icon}
                 <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
               </button>
@@ -2050,7 +2052,7 @@ export default function Home() {
               { action: 'tool-select', view: 'media', icon: <ImageIcon size={14} />, label: 'Media Studio' },
               { action: 'tool-select', view: 'presenton', icon: <Presentation size={14} />, label: 'Presenton' },
             ].map((item) => (
-              <button key={item.view} onClick={async () => { await window.electronAPI?.invoke('popup-action', { action: item.action, view: item.view }); window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
+              <button key={item.view} onClick={async () => { try { await window.electronAPI?.invoke('popup-action', { action: item.action, view: item.view }); } catch {} window.close(); }} className="w-full px-4 py-2 flex items-center gap-3 hover:bg-sky-500/10 text-white/60 hover:text-sky-400 transition-all text-left">
                 {item.icon}
                 <span className="text-[10px] font-black uppercase tracking-widest">{item.label}</span>
               </button>

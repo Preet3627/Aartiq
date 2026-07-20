@@ -457,8 +457,8 @@ export function isIrreversibleCommand(command: string): boolean {
   if (IRREVERSIBLE_COMMANDS.has(base)) return true;
   if (base === 'rm' && (lower.includes('-rf') || lower.includes('-r') || lower.includes('-f'))) return true;
   if (base === 'rm') return true;
-  if (base === 'mv' && lower.includes('/')) return true;
-  if (lower.includes('>') || lower.includes('>>') || lower.includes('|')) return true;
+  if (base === 'mv' && lower.includes('/dev')) return true;
+  if (lower.includes('>') || lower.includes('>>')) return true;
   if (lower.includes('shred') || lower.includes('wipe')) return true;
   if (lower.includes('find ') && lower.includes('-delete')) return true;
   if (lower.includes('find ') && lower.includes('-exec rm')) return true;

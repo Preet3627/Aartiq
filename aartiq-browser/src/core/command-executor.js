@@ -213,17 +213,43 @@ class CommandExecutor {
       }
       return new Promise((resolve) => {
         try {
-          const child = spawn(command, args, { shell: true });
-          let stdout = '';
-          let stderr = '';
-          child.stdout.on('data', (data) => { stdout += data.toString(); });
-          child.stderr.on('data', (data) => { stderr += data.toString(); });
-          child.on('close', (code) => {
-            resolve({ success: code === 0, code, stdout, stderr });
-          });
-          child.on('error', (error) => {
-            resolve({ success: false, error: error.message });
-          });
+          // Use shell: false by default — command + args are passed directly to the
+          // OS execve without shell interpretation, preventing metacharacter injection.
+          // Only fall back to shell: true when the command string itself contains shell
+          // features (pipes, redirects, glob) that require shell interpretation, and
+          // only after capability controller approval above.
+          const needsShell = /[|;&`$<>]/.test(command) || args.some(a => /[|;&`$<>]/.test(a));
+          const spawnOpts = { shell: needsShell };
+          if (!needsShell) {
+            // When not using shell, the first "arg" may actually be flags for the
+            // command (e.g. command="ls" args=["-la", "/tmp"]). Pass command as
+            // the executable and args as the argument array.
+            const child = spawn(command, args, spawnOpts);
+            let stdout = '';
+            let stderr = '';
+            child.stdout.on('data', (data) => { stdout += data.toString(); });
+            child.stderr.on('data', (data) => { stderr += data.toString(); });
+            child.on('close', (code) => {
+              resolve({ success: code === 0, code, stdout, stderr });
+            });
+            child.on('error', (error) => {
+              resolve({ success: false, error: error.message });
+            });
+          } else {
+            // Shell required: pass the full command as a single string to the shell.
+            const fullCommand = [command, ...args].join(' ');
+            const child = spawn(fullCommand, [], spawnOpts);
+            let stdout = '';
+            let stderr = '';
+            child.stdout.on('data', (data) => { stdout += data.toString(); });
+            child.stderr.on('data', (data) => { stderr += data.toString(); });
+            child.on('close', (code) => {
+              resolve({ success: code === 0, code, stdout, stderr });
+            });
+            child.on('error', (error) => {
+              resolve({ success: false, error: error.message });
+            });
+          }
         } catch (error) {
           resolve({ success: false, error: error.message });
         }

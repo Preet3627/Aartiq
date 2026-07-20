@@ -17,6 +17,47 @@ export interface ReleaseEntry {
 
 export const releases: ReleaseEntry[] = [
   {
+    version: '0.3.4',
+    date: '2026-07-19',
+    codename: 'Nebula',
+    channel: 'stable',
+    changes: {
+      new: [
+        'Token-based Claude Desktop MCP pairing — auto-confirm on local SSE connection, no chat token paste needed',
+        'MCP pairing token with 10-min expiry — generated on auto-configure, sent to local server via POST /pairing/token',
+        'Auto-confirm pairing when mcp-remote connects to /sse — only local processes can reach 127.0.0.1:3001',
+        'UI polls /pairing/status every 2s — shows "Waiting for connection..." → "Claude Desktop connected!"',
+        'Security model in pairing prompt — biometric approval (Touch ID/Windows Hello), per-action prompts, encrypted vault, native OS dialogs',
+      ],
+      fix: [
+        'Fixed multiFillForm type signature — now accepts Record<string, string> fields with optional delayBetweenFields, retry, verify',
+        'Fixed pullOllamaModel type — callback-based (not Promise), matches preload implementation',
+        'Fixed importOllamaModel type — renamed from ollamaImportModel, takes { filePath } object',
+        'Fixed ollamaListModels return type with proper models array structure',
+        'Fixed LLMProviderSettings store property mismatches: azureOpenaiApiKey, azureOpenaiEndpoint, azureOpenaiModel, autoGeminiModelUpdates, setAutoGeminiModelUpdates',
+        'Removed non-existent openAppleIntelligence electronAPI call',
+      ],
+      change: [
+        'MCP pairing flow simplified: auto-configure → restart Claude → auto-verify (no copy/paste tokens)',
+        'MCP server auto-confirms pairing on local SSE connection (security boundary: 127.0.0.1 only)',
+        'Removed manual PIN/prompt copy-paste flow that failed due to LLM safety training',
+        'Updated electron.d.ts with correct multiFillForm, pullOllamaModel, importOllamaModel, ollamaListModels types',
+      ],
+      docs: [
+        'Updated AI-GUIDE.md with v0.3.4 version and token-based pairing workflow',
+        'Updated changelog with accurate v0.3.4 details',
+        'Updated landing page release notes with v0.3.4 entry',
+      ],
+      security: [
+        'MCP server binds to 127.0.0.1 only — no external network exposure for pairing',
+        'Pairing tokens expire after 10 minutes',
+        'Biometric approval (Touch ID / Windows Hello) still required for high-risk actions',
+        'Per-action approval prompts with native OS dialogs for medium-risk operations',
+        'Encrypted local vault (AES-256-GCM) with OS keychain backup for credentials',
+      ]
+    }
+  },
+  {
     version: '0.3.3',
     date: '2026-07-13',
     codename: 'Nebula',
