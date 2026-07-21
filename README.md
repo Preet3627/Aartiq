@@ -180,4 +180,8 @@ Aartiq uses a **dual-license** model:
 
 The MCP server is MIT-licensed for maximum compatibility with Claude Desktop and other MCP clients. All other components remain Apache 2.0.
 
-© 2026 Aartiq
+
+"Aartiq™ is a trademark of Preet3627(Latestinssan). While our source code is freely available under the Apache 2.0 License, this license does not grant permission to use the trade name, logos, or branding of Aartiq. Any modified distributions of this browser must be rebranded under a completely different name."
+
+
+© 2026 Aartiq™. All rights reserved.
