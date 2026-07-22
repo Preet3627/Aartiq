@@ -76,7 +76,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternalApp: (appNameOrPath) => ipcRenderer.invoke('open-external-app', appNameOrPath),
   openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
   searchApplications: (query) => ipcRenderer.invoke('search-applications', query),
-  loadSkill: (skillId) => ipcRenderer.invoke('load-skill', skillId).then(r => r?.success ? r.skill : ''),
+  loadSkill: (skillId) => ipcRenderer.invoke('load-skill', skillId).then(r => {
+    if (!r?.success) console.error('[loadSkill] IPC error for', skillId, r?.error || 'no content');
+    return r?.success ? r.skill : '';
+  }),
   getSuggestions: (query) => ipcRenderer.invoke('get-suggestions', query),
   onAudioStatusChanged: (callback) => {
     const subscription = (event, isPlaying) => callback(isPlaying);

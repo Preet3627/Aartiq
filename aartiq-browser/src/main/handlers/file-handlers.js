@@ -72,7 +72,7 @@ module.exports = function registerFileHandlers(ipcMain, handlers) {
   });
 
   ipcMain.handle('load-skill', async (event, format) => {
-    const { skillLoader } = require('../../lib/SkillLoader.ts');
+    const { skillLoader } = require('../../lib/SkillLoader.js');
     try { const skill = await skillLoader.load(format); return { success: true, skill }; }
     catch (e) { return { success: false, error: e.message }; }
   });

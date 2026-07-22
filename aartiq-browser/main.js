@@ -7810,7 +7810,7 @@ if (isPackaged && process.platform === 'darwin') {
 
   // Skill Loader - loads document generation skills (pdf/docx/pptx)
   ipcMain.handle('load-skill', async (event, format) => {
-    const { skillLoader } = require('./src/lib/SkillLoader.ts');
+    const { skillLoader } = require('./src/lib/SkillLoader.js');
     try {
       const skill = await skillLoader.load(format);
       return { success: true, skill };

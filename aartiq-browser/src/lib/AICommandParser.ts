@@ -675,6 +675,23 @@ export function validateCommand(command: ParsedCommand): { valid: boolean; error
         case 'MULTI_FILL_FORM':
         case 'CLICK_AT':
         case 'PLAY_WORKFLOW':
+        case 'LIST_SKILLS':
+        case 'LOAD_SKILL':
+        case 'SETTINGS_QUERY':
+        case 'SETTINGS_UPDATE':
+        case 'LIST_BOOKMARKS':
+        case 'ADD_BOOKMARK':
+        case 'REMOVE_BOOKMARK':
+        case 'CLEAR_BOOKMARKS':
+        case 'LIST_HISTORY':
+        case 'CLEAR_HISTORY':
+        case 'SET_CHAT_STYLE':
+        case 'OPEN_SETTINGS_PANEL':
+        case 'ENABLE_CLI':
+        case 'STATUS':
+        case 'GENERATE_IMAGE':
+        case 'SEARCH_RESULTS':
+        case 'SCHEDULE_TASK':
             // These are valid without values (params are in JSON body)
             break;
 
