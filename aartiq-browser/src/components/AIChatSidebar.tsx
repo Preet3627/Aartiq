@@ -4731,7 +4731,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           }
           const suStepId = addActionChainStep(`⚙️ Updating ${updateCategory} settings`);
           const updateKeys = Object.keys(updatesObj).join(', ');
-          const updateConfirmed = await requestPermission({
+          const updateConfirmed = await requestActionPermission({
             actionType: 'SETTINGS_UPDATE',
             action: 'Update Settings',
             target: updateCategory,
@@ -4747,7 +4747,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           try {
             const res = await window.electronAPI.updateAISettings(updateCategory, updatesObj);
             if (res?.success) {
-              const appliedKeys = Object.keys(res.applied || {}).map(k => `**${k}** → \`${JSON.stringify(res.applied[k])}\``).join(', ');
+              const appliedKeys = Object.keys(res.applied || {}).map(k => `**${k}** → \`${JSON.stringify(res.applied?.[k])}\``).join(', ');
               setMessages(prev => [...prev, {
                 role: 'model',
                 content: `✅ **Settings Updated** (${updateCategory})\n\n${appliedKeys}`
@@ -4801,7 +4801,7 @@ I couldn't schedule the task. The background service may not be running. Please 
             break;
           }
           const abStepId = addActionChainStep(`🔖 Bookmarking ${rawUrl}`);
-          const confirmed = await requestPermission({
+          const confirmed = await requestActionPermission({
             actionType: 'ADD_BOOKMARK',
             action: 'Add Bookmark',
             target: rawUrl,
@@ -4836,7 +4836,7 @@ I couldn't schedule the task. The background service may not be running. Please 
             break;
           }
           const rbStepId = addActionChainStep(`🔖 Removing bookmark for ${rawUrl}`);
-          const confirmed = await requestPermission({
+          const confirmed = await requestActionPermission({
             actionType: 'REMOVE_BOOKMARK',
             action: 'Remove Bookmark',
             target: rawUrl,
@@ -4866,7 +4866,7 @@ I couldn't schedule the task. The background service may not be running. Please 
 
         case 'CLEAR_BOOKMARKS': {
           const cbStepId = addActionChainStep('🔖 Clearing all bookmarks');
-          const confirmed = await requestPermission({
+          const confirmed = await requestActionPermission({
             actionType: 'CLEAR_BOOKMARKS',
             action: 'Clear All Bookmarks',
             target: 'All Bookmarks',
@@ -4959,7 +4959,7 @@ I couldn't schedule the task. The background service may not be running. Please 
 
         case 'CLEAR_HISTORY': {
           const chStepId = addActionChainStep('📅 Clearing browsing history');
-          const confirmed = await requestPermission({
+          const confirmed = await requestActionPermission({
             actionType: 'CLEAR_HISTORY',
             action: 'Clear Browsing History',
             target: 'All History',

@@ -115,6 +115,9 @@ declare global {
             setActiveLLMProvider: (providerId: string) => Promise<boolean>;
             configureLLMProvider: (providerId: string, options: any) => Promise<boolean>;
             getStoredApiKeys: () => Promise<any>;
+            getAISettings: (category?: string) => Promise<any>;
+            updateAISettings: (category: string, updates: Record<string, any>) => Promise<{ success: boolean; applied?: Record<string, any>; category?: string; error?: string }>;
+            triggerShortcut: (action: string) => Promise<any>;
             getOnboardingState: () => Promise<{
                 hasSeenWelcomePage: boolean;
                 hasCompletedStartupSetup: boolean;
