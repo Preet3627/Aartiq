@@ -175,6 +175,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   vaultDeleteEntry: (entryId) => ipcRenderer.invoke('vault-delete-entry', entryId),
   vaultReadSecret: (entryId) => ipcRenderer.invoke('vault-read-secret', entryId),
   vaultCopySecret: (entryId) => ipcRenderer.invoke('vault-copy-secret', entryId),
+  vaultCheckMigration: () => ipcRenderer.invoke('vault-check-migration'),
+  vaultMigrateToModern: () => ipcRenderer.invoke('vault-migrate-to-modern'),
   extractSearchResults: (tabId) => ipcRenderer.invoke('extract-search-results', tabId),
   translateWebsite: (args) => ipcRenderer.invoke('translate-website', args),
   translateText: (args) => ipcRenderer.invoke('translate-text', args),

@@ -678,5 +678,50 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
     authWindow = null;
   });
 
-  console.log('[Handlers] Auth handlers registered (native keychain)');
+  // ============================================================================
+  // VAULT MIGRATION — Proactive re-encryption of legacy vault data
+  // ============================================================================
+
+  const { migrateVaultToModernFormat, checkVaultMigrationStatus } = require('../../core/vault-handlers');
+
+  /**
+   * Check if any vault entries contain legacy encrypted data (LCL: or E2EE:).
+   * Safe to call at startup — read-only, no modifications.
+   */
+  ipcMain.handle('vault-check-migration', async () => {
+    try {
+      return checkVaultMigrationStatus();
+    } catch (e) {
+      console.error('[Vault Migration] Check failed:', e);
+      return { needsMigration: false, legacyCount: 0, error: e.message };
+    }
+  });
+
+  /**
+   * Proactively migrate all legacy vault entries to the current E2EE2: format.
+   * Decrypts LCL: and E2EE: prefixed data, re-encrypts with PBKDF2 600K SHA-256.
+   * Safe to call multiple times — already-migrated entries are skipped.
+   */
+  ipcMain.handle('vault-migrate-to-modern', async () => {
+    try {
+      const verification = await verifyVaultAccess({
+        reason: 'Vault migration requires authentication to access encryption keys.',
+        actionText: 'Migrate vault to modern encryption format',
+        store,
+        permissionStore,
+      });
+      if (!verification.success) {
+        return { success: false, error: verification.error };
+      }
+
+      const { migrateVaultToModernFormat } = require('../../core/vault-handlers');
+      const result = await migrateVaultToModernFormat();
+      return { success: true, ...result };
+    } catch (e) {
+      console.error('[Vault Migration] Migration failed:', e);
+      return { success: false, error: e.message };
+    }
+  });
+
+  console.log('[Handlers] Auth handlers registered (native keychain + vault migration)');
 };

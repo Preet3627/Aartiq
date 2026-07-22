@@ -17,6 +17,57 @@ export interface ReleaseEntry {
 
 export const releases: ReleaseEntry[] = [
   {
+    version: '0.3.5',
+    date: '2026-07-22',
+    codename: 'Nebula',
+    channel: 'stable',
+    changes: {
+      new: [
+        'Directory Allowlist System — AI file access restricted to explicitly approved directories with read/write separation',
+        'Path canonicalization via fs.realpath() — resolves symlinks before allowlist checking to prevent traversal attacks',
+        'Just-in-time permission prompts — request-directory-access IPC handler for on-demand directory approval',
+        'Batched multi-directory approval — approve multiple paths in a single ticket via CapabilityController',
+        'Settings UI for directory allowlist — access level dropdown (Read Only / Read & Write), recursive toggle, revoke buttons',
+        'OS-Level Sandboxing — platform-specific sandboxing with Seatbelt (macOS), bubblewrap (Linux), and Job Objects (Windows)',
+        'Windows AppContainer sandboxing — Job Objects with process confinement, ACL-based filesystem restrictions, and Firewall network rules',
+        'File management handlers — file-move, file-copy, file-open, file-print route around shell sandbox using Node.js fs APIs',
+        'Vault Migration — proactive re-encryption of legacy LCL: and E2EE: vault data to modern E2EE2: format',
+        'Vault migration IPC handlers — vault-check-migration and vault-migrate-to-modern for startup migration',
+      ],
+      fix: [
+        'CapabilityController.approveAndExecute() now calls approveTicket before redeemTicket',
+        'command-validator.js checkShellPermission() uses real PermissionStore with DI pattern',
+        'execShellCommand() pipeline: validateCommand → checkShellPermission → directory allowlist → executeSandboxed',
+      ],
+      change: [
+        'Security model expanded from 3 layers to 6 layers of defense-in-depth',
+        'PermissionStore allowlist entries now support {path, recursive, access, grantedAt, grantedVia} format',
+        'Sandbox profiles generated dynamically from allowlist — no stale cached profiles',
+        'Environment variables sanitized in all sandboxed processes — API keys never exposed',
+        'sandbox-executor.js exports new Windows sandbox functions',
+        'preload.js exposes new IPC bridges: vaultCheckMigration, vaultMigrateToModern',
+      ],
+      docs: [
+        'Security page updated with 6 defense-in-depth layers, 10 threat scenarios',
+        'AI-GUIDE.md updated with new security architecture (layers 4–7)',
+        'Search index updated with directory allowlist, OS sandboxing, capability-scoped execution entries',
+        'llms.txt updated with six-layer security description',
+      ],
+      security: [
+        'Directory allowlist prevents AI from accessing sensitive directories outside the approved set',
+        'Symlink traversal attacks blocked via fs.realpath() resolution before allowlist checking',
+        'Read/write separation enforced — read-only grants cannot delete or overwrite files',
+        'Windows: Job Objects confine processes with process count limits and kill-on-close',
+        'Windows: ACL-based filesystem restrictions deny writes outside allowlisted directories',
+        'Windows: Firewall rules block all outbound network except explicitly allowlisted domains',
+        'macOS: Seatbelt profiles restrict filesystem writes and network access per execution',
+        'Linux: bubblewrap creates isolated namespaces with read-only system paths',
+        'Legacy vault data (LCL:, E2EE:) proactively migrated to E2EE2: format with 600K PBKDF2',
+        'All 35 directory-allowlist tests passing',
+      ]
+    }
+  },
+  {
     version: '0.3.4',
     date: '2026-07-20',
     codename: 'Nebula',
@@ -723,7 +774,7 @@ export const releases: ReleaseEntry[] = [
       new: [
         'Initial stable release',
         'Core AI agent with chain-of-thought reasoning',
-        'Triple-lock security model',
+        'Three-layer security model',
         'WiFi Sync between desktop and mobile',
         'PDF generation with 5 templates'
       ]

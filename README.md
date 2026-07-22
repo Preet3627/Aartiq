@@ -3,7 +3,7 @@
 An Electron-based browser with an integrated AI chat that executes LLM-planned browser actions, system commands, and document generation — every action is permission-gated before execution.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-0.3.4-blue.svg)](https://github.com/Preet3627/Aartiq/releases/tag/v0.3.4)
+[![Version](https://img.shields.io/badge/Version-0.3.5-blue.svg)](https://github.com/Preet3627/Aartiq/releases/tag/v0.3.5)
 [![Downloads](https://img.shields.io/github/downloads/Preet3627/Aartiq/total?color=success&label=Downloads)](https://github.com/Preet3627/Aartiq/releases)
 [![Windows](https://img.shields.io/badge/Windows-Passing-blue?logo=windows)](https://github.com/Preet3627/Aartiq/releases/latest)
 [![macOS](https://img.shields.io/badge/macOS-Passing-blue?logo=apple)](https://github.com/Preet3627/Aartiq/releases/latest)
@@ -151,8 +151,16 @@ Aartiq enforces security through multiple independent layers:
 1. **Regex blocklist** (`SecurityValidator.js`) — fast first-pass reject of obvious dangerous patterns. Cheap to run but bypassable by construction; not relied upon as the primary defense.
 2. **Permission store** (`command-validator.js:checkShellPermission`) — risk-tiered permission checks against an explicit grant store. Commands are denied unless a matching grant exists at a sufficient level.
 3. **Capability controller** (`capability-controller.js`) — ticket-based approval system that prevents param tampering across the IPC trust boundary. Every shell-execution and system-command entry point is routed through registered actions; unregistered actions are rejected outright.
-4. **OS-level sandboxing** (`sandbox-executor.js`) — filesystem and network confinement via platform-specific mechanisms (macOS Seatbelt, Linux bubblewrap, Windows Job Objects). The spawned process physically cannot write outside the workspace or reach non-allowlisted network destinations.
-5. **Renderer-side approval dialog** (`AIChatSidebar.tsx:requestActionPermission`) — user-facing confirmation before command dispatch.
+4. **Directory allowlist** (`directory-allowlist.js`) — user-controlled set of directories the AI can access, replacing the single hardcoded sandbox workspace. Paths are canonicalized via `fs.realpath()` before checking (follows symlinks, prevents `../` traversal). Each entry specifies read-only or read-write access. The AI must request permission for directories not on the list.
+5. **OS-level sandboxing** (`sandbox-executor.js`) — filesystem and network confinement via platform-specific mechanisms (macOS Seatbelt, Linux bubblewrap, Windows Job Objects with ACL-based filesystem restrictions and Windows Firewall network rules). Sandbox profiles are generated dynamically from the directory allowlist — read-only entries get `--ro-bind`/`file-read*`, read-write entries get `--bind`/`file-write*`. The spawned process physically cannot write outside the allowlisted directories.
+6. **File management bypass** — `move_file`, `copy_file`, `open_file`, `print_file` route directly through `fs` APIs with `isPathAllowed()` checks on both source and destination. No subprocess spawn for common file operations: faster, more auditable, no shell injection surface.
+7. **Renderer-side approval dialog** (`AIChatSidebar.tsx:requestActionPermission`) — user-facing confirmation before command dispatch.
+
+### Encryption & vault migration
+
+- **AES-256-GCM encryption** (E2EE2 format) — PBKDF2 with 600K iterations and per-entry random salt
+- **Legacy vault migration** — automatic detection and re-encryption of old LCL (plaintext base64) and E2EE (PBKDF2 100K iterations, no salt) formats to modern E2EE2
+- **Atomic vault writes** — backup before migration, rollback on failure
 
 ### Remote device security
 
@@ -178,6 +186,7 @@ For the full security model, see [Security Documentation](https://aartiq.ponsris
 | Cloud Sync | [aartiq.ponsrischool.in/docs/cloud-sync](https://aartiq.ponsrischool.in/docs/cloud-sync) |
 | Troubleshooting | [aartiq.ponsrischool.in/docs/troubleshooting](https://aartiq.ponsrischool.in/docs/troubleshooting) |
 | Changelog | [aartiq.ponsrischool.in/docs/changelog](https://aartiq.ponsrischool.in/docs/changelog) |
+| v0.3.5 Release Notes | [release_notes/v0.3.5.md](release_notes/v0.3.5.md) |
 
 ---
 
