@@ -44,15 +44,15 @@ function McpApprovalPopup() {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Tab' && e.shiftKey) {
         e.preventDefault();
-        handleApprove();
+        e.stopPropagation();
       }
       if (e.key === 'Escape') {
         e.preventDefault();
         handleDeny();
       }
     };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+    window.addEventListener('keydown', handleKey, true);
+    return () => window.removeEventListener('keydown', handleKey, true);
   }, [request, status, handleApprove, handleDeny]);
 
   const riskColor = request?.risk === 'high' ? 'text-red-400' : request?.risk === 'medium' ? 'text-orange-400' : 'text-green-400';

@@ -561,10 +561,6 @@ const ClickPermissionModal = memo(function ClickPermissionModal(props: ClickPerm
         event.preventDefault();
         onDeny();
       }
-      if (event.key === 'Tab' && event.shiftKey && onAllow) {
-        event.preventDefault();
-        onAllow(false);
-      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);

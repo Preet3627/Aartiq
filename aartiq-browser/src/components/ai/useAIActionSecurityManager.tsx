@@ -292,19 +292,18 @@ export function useAIActionSecurityManager() {
 
   useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
-      if (!pendingPermission || pendingPermission.context.risk === 'high') {
+      if (!pendingPermission) {
         return;
       }
 
       if (event.shiftKey && event.key === 'Tab') {
         event.preventDefault();
-        pendingPermission.resolve(true);
-        setPendingPermission(null);
+        event.stopPropagation();
       }
     };
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+    window.addEventListener('keydown', handleGlobalKeyDown, true);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
   }, [pendingPermission]);
 
   const approvalModal = useMemo(() => {

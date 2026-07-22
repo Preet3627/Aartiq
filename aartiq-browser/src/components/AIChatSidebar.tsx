@@ -5557,7 +5557,7 @@ I've successfully executed the following real tasks:
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && e.key === 'Tab' && permissionPending && permissionPending.context?.risk !== 'high') {
+      if (e.shiftKey && e.key === 'Tab' && permissionPending) {
         setShiftTabGlow(true);
         setTimeout(() => setShiftTabGlow(false), 900);
       }

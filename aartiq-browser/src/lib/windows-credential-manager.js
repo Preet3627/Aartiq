@@ -126,7 +126,7 @@ switch ("${action}") {
 
 function sanitizeForPowerShell(str) {
   if (!str) return '';
-  return str.replace(/[\\"']/g, '').replace(/\n/g, ' ').replace(/\r/g, '');
+  return str.replace(/[\\"'$`]/g, '').replace(/\n/g, ' ').replace(/\r/g, '');
 }
 
 async function runPs(script) {
