@@ -36,7 +36,8 @@ async function main() {
   for (const asset of assets) {
     const outputPath = path.join(appxDir, asset.name);
     await sharp(sourceIcon)
-      .resize(asset.width, asset.height, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .resize(asset.width, asset.height, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 1 } })
+      .flatten({ background: '#000000' })
       .png()
       .toFile(outputPath);
     console.log('Created ' + asset.name + ' (' + asset.width + 'x' + asset.height + ')');

@@ -198,7 +198,7 @@
       "publisherDisplayName": "Latestinssan",
       "applicationId": "Aartiq",
       "displayName": "Aartiq",
-      "backgroundColor": "transparent",
+      "backgroundColor": "#000000",
       "languages": [
         "en-US"
       ],
