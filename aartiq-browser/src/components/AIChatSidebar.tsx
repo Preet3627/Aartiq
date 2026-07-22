@@ -4616,7 +4616,7 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
 
         case 'LOAD_SKILL': {
-          const skillId = ((command.jsonFormat as any)?.skillId || (command.jsonFormat as any)?.id || command.value || '').trim().toLowerCase();
+          const skillId = (command.params?.skillId || command.params?.id || (command.jsonFormat as any)?.skillId || (command.jsonFormat as any)?.id || command.value || '').trim().toLowerCase();
           if (!skillId) {
             output = 'No skill ID specified. Use [LIST_SKILLS] to see available skills.';
             break;

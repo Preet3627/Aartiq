@@ -26,19 +26,12 @@ class SkillLoader {
 
   private getSkillPaths(format: string): string[] {
     const skillFile = `${format}.md`;
-    const isDevMode = this.isDev();
-
-    if (isDevMode) {
-      return [
-        path.join(__dirname, '../../public/skills', skillFile),
-        path.join(process.cwd(), 'public/skills', skillFile),
-      ];
-    }
-
     return [
+      path.join(app.getAppPath(), 'public/skills', skillFile),
+      path.join(__dirname, '../../public/skills', skillFile),
+      path.join(process.cwd(), 'public/skills', skillFile),
       path.join(process.resourcesPath, 'app.asar.unpacked', 'public/skills', skillFile),
       path.join(app.getPath('userData'), 'skills', skillFile),
-      path.join(__dirname, 'public/skills', skillFile),
     ];
   }
 
