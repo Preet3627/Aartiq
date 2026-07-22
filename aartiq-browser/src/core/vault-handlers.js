@@ -8,16 +8,78 @@ const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
 const SALT_LENGTH = 16;
 const ITERATIONS = 600000;
-const KEY_STORE_KEY = 'vault_encryption_key_derived';
 
-function getOrCreateEncryptionKey() {
-  let keyBase64 = vaultStore.get(KEY_STORE_KEY);
-  if (!keyBase64) {
+const KEYCHAIN_SERVICE = 'vault';
+const KEYCHAIN_ACCOUNT = 'encryption-key';
+const KEYCHAIN_LABEL = 'Aartiq Vault Encryption Key';
+
+let _cachedKey = null;
+
+let nativeKeychain;
+try {
+  nativeKeychain = require('../lib/native-keychain');
+} catch (e) {
+  nativeKeychain = null;
+}
+
+async function getOrCreateEncryptionKey() {
+  if (_cachedKey) return _cachedKey;
+
+  const oldPlaintextKey = vaultStore.get('vault_encryption_key_derived');
+
+  if (nativeKeychain) {
+    const getResult = await nativeKeychain.getPassword({
+      service: KEYCHAIN_SERVICE,
+      account: KEYCHAIN_ACCOUNT,
+    });
+
+    if (getResult.success && getResult.password) {
+      _cachedKey = Buffer.from(getResult.password, 'base64');
+      if (oldPlaintextKey) {
+        vaultStore.delete('vault_encryption_key_derived');
+      }
+      if (_cachedKey.length !== KEY_LENGTH) {
+        throw new Error('Invalid encryption key length in keychain');
+      }
+      return _cachedKey;
+    }
+
     const key = crypto.randomBytes(KEY_LENGTH);
-    keyBase64 = key.toString('base64');
-    vaultStore.set(KEY_STORE_KEY, keyBase64);
+    const keyBase64 = key.toString('base64');
+
+    const addResult = await nativeKeychain.addPassword({
+      service: KEYCHAIN_SERVICE,
+      account: KEYCHAIN_ACCOUNT,
+      password: keyBase64,
+      label: KEYCHAIN_LABEL,
+    });
+
+    if (addResult.success) {
+      _cachedKey = key;
+      if (oldPlaintextKey) {
+        vaultStore.delete('vault_encryption_key_derived');
+      }
+      return _cachedKey;
+    }
+
+    console.error('[Vault] Failed to store key in native keychain:', addResult.error);
   }
-  return Buffer.from(keyBase64, 'base64');
+
+  if (oldPlaintextKey) {
+    console.warn('[Vault] Keychain unavailable. Using legacy key from store. Migrate to keychain when possible.');
+    _cachedKey = Buffer.from(oldPlaintextKey, 'base64');
+    if (_cachedKey.length !== KEY_LENGTH) {
+      throw new Error('Invalid encryption key length');
+    }
+    return _cachedKey;
+  }
+
+  const key = crypto.randomBytes(KEY_LENGTH);
+  const keyBase64 = key.toString('base64');
+  vaultStore.set('vault_encryption_key_derived', keyBase64);
+  console.warn('[Vault] Keychain unavailable. Key stored in legacy format. Migrate to keychain when possible.');
+  _cachedKey = key;
+  return _cachedKey;
 }
 
 function encryptSecret(plaintext, key) {
@@ -50,8 +112,8 @@ function decryptSecret(stored, key) {
   }
 }
 
-function getEncryptionKey() {
-  const key = getOrCreateEncryptionKey();
+async function getEncryptionKey() {
+  const key = await getOrCreateEncryptionKey();
   if (key.length !== KEY_LENGTH) {
     throw new Error('Invalid encryption key length');
   }
@@ -74,7 +136,7 @@ const vaultSaveEntry = async (payload = {}) => {
   const { id, title, username, password, url, notes } = payload;
   const entries = vaultStore.get('entries', []);
   const existing = entries.findIndex(e => e.id === id);
-  const key = getEncryptionKey();
+  const key = await getEncryptionKey();
   const entry = { 
     id: id || `vault-${Date.now()}`, 
     title, username, url, notes,
@@ -110,7 +172,7 @@ const vaultReadSecret = async (entryId) => {
   const entries = vaultStore.get('entries', []);
   const entry = entries.find(e => e.id === entryId);
   if (!entry) return { error: 'Entry not found' };
-  const key = getEncryptionKey();
+  const key = await getEncryptionKey();
   const password = entry.encryptedPassword ? decryptSecret(entry.encryptedPassword, key) : null;
   const notes = entry.encryptedNotes ? decryptSecret(entry.encryptedNotes, key) : null;
   if (entry.encryptedPassword && !password) {
@@ -123,7 +185,7 @@ const vaultCopySecret = async (entryId) => {
   const entries = vaultStore.get('entries', []);
   const entry = entries.find(e => e.id === entryId);
   if (!entry) return { error: 'Entry not found' };
-  const key = getEncryptionKey();
+  const key = await getEncryptionKey();
   const password = entry.encryptedPassword ? decryptSecret(entry.encryptedPassword, key) : null;
   if (!password) return { error: 'Failed to decrypt password' };
   const { clipboard } = require('electron');
