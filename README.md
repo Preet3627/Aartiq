@@ -142,6 +142,21 @@ Every non-trivial action requires explicit approval before execution:
 - **Low risk** (read tabs, navigate, search) — auto-approved based on user preferences
 - **Medium risk** (shell commands, file writes, clipboard) — per-action approval dialog
 - **High risk** (destructive operations, `rm -rf`, `dd`) — biometric confirmation (Touch ID / Windows Hello)
+- **Critical risk** (remote shell commands, privilege escalation) — always requires explicit approval; never auto-approved
+
+### Defense-in-depth layers
+
+Aartiq enforces security through multiple independent layers:
+
+1. **Regex blocklist** (`SecurityValidator.js`) — fast first-pass reject of obvious dangerous patterns. Cheap to run but bypassable by construction; not relied upon as the primary defense.
+2. **Permission store** (`command-validator.js:checkShellPermission`) — risk-tiered permission checks against an explicit grant store. Commands are denied unless a matching grant exists at a sufficient level.
+3. **Capability controller** (`capability-controller.js`) — ticket-based approval system that prevents param tampering across the IPC trust boundary. Every shell-execution and system-command entry point is routed through registered actions; unregistered actions are rejected outright.
+4. **OS-level sandboxing** (`sandbox-executor.js`) — filesystem and network confinement via platform-specific mechanisms (macOS Seatbelt, Linux bubblewrap, Windows Job Objects). The spawned process physically cannot write outside the workspace or reach non-allowlisted network destinations.
+5. **Renderer-side approval dialog** (`AIChatSidebar.tsx:requestActionPermission`) — user-facing confirmation before command dispatch.
+
+### Remote device security
+
+WiFi Sync commands from paired mobile devices undergo the same validation and permission checks as local commands, with risk levels automatically elevated by one tier (remote origin = elevated risk). Power actions (shutdown, restart, sleep, lock) and shell commands require QR/PIN approval.
 
 The MCP server binds to `127.0.0.1` only — no external network exposure. Pairing tokens expire after 10 minutes.
 
@@ -176,11 +191,11 @@ We thank everyone who has contributed to making Aartiq better.
 
 ### Shashank Shekhar
 
-> *Microsoft Store Advisor · Open-Source Developer · UI/UX Feedback*
+> *Microsoft Store Advisor · UI/UX Feedback*
 
-Shashank is the creator of [Daruka](https://daruka.web.app) — a unified memory layer for every AI tool you use — and the developer of [Aria AI Assistant](https://apps.microsoft.com/detail/XPFPNCMXJ31VSR) on the Microsoft Store. He helped Aartiq get published on the Microsoft Store by sharing his experience with the submission process, and provided detailed UI/UX feedback that shaped the Windows experience of the browser. His insight on ad-blocking, minimal design (inspired by Zen Browser), and store optimization were instrumental in Aartiq's public launch.
+Helped Aartiq get published on the Microsoft Store by sharing his submission experience. Provided UI/UX feedback that shaped the Windows build — flagging macOS-specific elements, suggesting ad-blocking, and recommending a clean, minimal design inspired by Zen Browser.
 
-**GitHub:** [theshekhr](https://github.com/theshekhr) · **Daruka:** [daruka.web.app](https://daruka.web.app) · **Microsoft Store:** [Aria AI Assistant](https://apps.microsoft.com/detail/XPFPNCMXJ31VSR)
+**GitHub:** [theshekhr](https://github.com/theshekhr)
 
 ### eddzsh
 
@@ -194,7 +209,7 @@ eddzsh is the security architect behind Aartiq's ticket-based approval system �
 
 > *First Issue Reporter · Early Adopter · Bug Hunter*
 
-Dxrkaa opened [Issue #6](https://github.com/Preet3627/Aartiq/issues/6) — the first community-reported bug on Aartiq — reporting that the latest version failed to launch on Windows (process running in Task Manager but no window visible). This early feedback helped identify and fix a critical launch regression, and marked the beginning of Aartiq's public bug-tracking lifecycle. Every open-source project needs someone willing to file that first issue, and Dxrkaa was that person for Aartiq.
+Dxrkaa opened [Issue #6](https://github.com/Preet3627/Comet-AI/issues/6) — the first community-reported bug on Aartiq — reporting that the latest version failed to launch on Windows (process running in Task Manager but no window visible). This early feedback helped identify and fix a critical launch regression, and marked the beginning of Aartiq's public bug-tracking lifecycle. Every open-source project needs someone willing to file that first issue, and Dxrkaa was that person for Aartiq.
 
 **GitHub:** [Dxrkaa](https://github.com/Dxrkaa) · **Issue:** [#6 — Latest version does not launch](https://github.com/Preet3627/Aartiq/issues/6)
 

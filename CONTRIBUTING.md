@@ -128,17 +128,13 @@ We recognize the people who have helped shape Aartiq beyond code contributions.
 
 ### Shashank Shekhar
 
-> *Microsoft Store Advisor · Open-Source Developer · UI/UX Feedback*
+> *Microsoft Store Advisor · UI/UX Feedback*
 
-**GitHub:** [theshekhr](https://github.com/theshekhr) · **Daruka:** [daruka.web.app](https://daruka.web.app) · **Microsoft Store:** [Aria AI Assistant](https://apps.microsoft.com/detail/XPFPNCMXJ31VSR)
+**GitHub:** [theshekhr](https://github.com/theshekhr)
 
-Shashank is the creator of [Daruka](https://daruka.web.app) — a unified memory layer for every AI tool you use — and the developer of [Aria AI Assistant](https://apps.microsoft.com/detail/XPFPNCMXJ31VSR) on the Microsoft Store. His contributions to Aartiq include:
-
-- **Microsoft Store Guidance:** Navigated the store submission process, shared his experience getting BYOK apps approved, and encouraged Aartiq to pursue store listing
-- **UI/UX Feedback:** Reviewed the Windows build, flagged macOS-specific UI elements (traffic light buttons) on Windows, and pushed for platform-native design
-- **Ad-Blocker Insight:** Suggested a built-in ad blocker, recommending the clean, extension-free approach used by Brave
-- **Design Direction:** Recommended looking at Zen Browser for UI inspiration — clean, minimal, distraction-free
-- **Community Support:** Connected with the project through early testing and ongoing feedback loops
+- **Microsoft Store Guidance:** Shared his store submission experience and encouraged pursuing a store listing
+- **UI/UX Feedback:** Flagged macOS-specific UI on Windows, pushed for platform-native design
+- **Design Direction:** Suggested ad-blocking and a clean, minimal UI inspired by Zen Browser
 
 ### eddzsh
 

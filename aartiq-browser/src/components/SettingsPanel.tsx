@@ -1150,7 +1150,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                                     <p className="text-[10px] text-white/30">Microsoft Store Advisor · UI/UX Feedback</p>
                                                 </div>
                                             </div>
-                                            <p className="text-[11px] text-white/40 leading-relaxed">Creator of Daruka. Guided Microsoft Store submission, flagged macOS UI on Windows, suggested ad-blocker and Zen-inspired design.</p>
+                                            <p className="text-[11px] text-white/40 leading-relaxed">Guided Microsoft Store submission, flagged macOS UI on Windows, suggested ad-blocker and Zen-inspired design.</p>
                                         </div>
 
                                         {/* eddzsh */}

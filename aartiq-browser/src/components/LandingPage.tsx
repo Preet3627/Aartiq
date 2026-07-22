@@ -208,8 +208,44 @@ const LandingPage = () => {
                 </motion.section>
             </div>
 
+            {/* Contributors */}
+            <section className="relative z-10 py-20 px-6">
+                <div className="max-w-4xl mx-auto">
+                    <div className="text-center mb-16">
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20 mb-4">Contributors</p>
+                        <h2 className="text-3xl font-black text-white tracking-tight">Built with community</h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {[
+                            { name: "Shashank Shekhar", role: "Microsoft Store Advisor · UI/UX Feedback", desc: "Guided Microsoft Store submission, flagged macOS UI on Windows, suggested ad-blocker and Zen-inspired design.", initials: "SS", gradient: "from-sky-500/20 to-violet-500/20" },
+                            { name: "eddzsh", role: "Security Architecture · Approval System Design", desc: "Designed the ticket-based approval system. Hash verification, pre-registered call shapes, pattern-based approval.", initials: "ed", gradient: "from-green-500/20 to-emerald-500/20" },
+                            { name: "Dxrkaa", role: "First Issue Reporter · Early Adopter", desc: "Opened the first community bug report. Helped identify and fix a critical Windows launch regression.", initials: "Dx", gradient: "from-orange-500/20 to-red-500/20" },
+                        ].map((c, i) => (
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: i * 0.1 }}
+                                className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 text-left hover:bg-white/[0.04] transition-all"
+                            >
+                                <div className="flex items-center gap-3 mb-3">
+                                    <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${c.gradient} flex items-center justify-center text-xs font-bold text-white/60`}>{c.initials}</div>
+                                    <div>
+                                        <p className="text-sm font-bold text-white">{c.name}</p>
+                                        <p className="text-[10px] text-white/30">{c.role}</p>
+                                    </div>
+                                </div>
+                                <p className="text-[11px] text-white/40 leading-relaxed">{c.desc}</p>
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
             {/* Simple Footer */}
-            <footer className="relative z-10 py-20 border-t border-white/5 mt-20 text-center">
+            <footer className="relative z-10 py-20 border-t border-white/5 text-center">
                 <div className="flex flex-col items-center gap-6">
                     <div className="flex items-center gap-3 opacity-30 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500 cursor-pointer">
                         <img src="/logo-transparent.png" className="w-8 h-8" alt="Logo" />
