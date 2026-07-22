@@ -7893,121 +7893,92 @@ if (isPackaged && process.platform === 'darwin') {
   // Enhanced DOM Click Element with multi-strategy fallback chain:
   // dom-engine → iframe traversal → CDP sendInputEvent → AI resolution → browser-navigation-service
   ipcMain.handle('dom-click-element', async (event, opts) => {
-    const { tabId, selector, text, 'aria-label': ariaLabel, retry = 3, verify = false } = opts || {};
+    const { tabId, selector, text, 'aria-label': ariaLabel, timeout = 5000, verify = false, button } = opts || {};
     const targetTabId = tabId || activeTabId;
+    const query = selector || text || ariaLabel;
     const view = tabViews.get(targetTabId);
 
     if (!view || !view.webContents) {
       return { success: false, error: 'Browser view not found' };
     }
 
-    // Strategy 1: dom-engine (smart resolution + iframe traversal)
-    try {
-      const engineResult = await domEngine.clickElement(view.webContents, { selector, text, 'aria-label': ariaLabel, retry, verify });
-      if (engineResult.success) return engineResult;
-    } catch (_) {}
+    // Strategy 1: dom-engine v2 (AX-tree-first resolution, state check, waitForElement)
+    if (query) {
+      try {
+        const engineResult = await domEngine.clickElement(view.webContents, { selector: query, timeout, verify, button });
+        if (engineResult.success) return { ...engineResult, method: 'dom-engine-v2' };
+      } catch (_) {}
+    }
 
-    // Strategy 2: existing browser-navigation-service (text-matching + AI resolution)
+    // Strategy 2: dom-engine v2 wait + CDP fallback
     try {
-      const target = text || selector || ariaLabel || '';
-      if (target) {
-        const navResult = await resolveAndClickWithAi(view.webContents, target, null);
-        if (navResult?.success) {
-          return { success: true, method: 'browser-navigation', ...navResult };
-        }
-      }
-    } catch (_) {}
-
-    // Strategy 3: CDP trusted click via sendInputEvent (if we can find coordinates)
-    try {
-      if (selector) {
-        const info = await domEngine.findElement(view.webContents, { selector, text, 'aria-label': ariaLabel });
-        if (info?.success && info.element?.rect) {
-          const { x, y } = info.element.rect;
-          const cx = x + Math.round(info.element.rect.w / 2);
-          const cy = y + Math.round(info.element.rect.h / 2);
-          const cdpResult = await domEngine.cdpClick(view.webContents, { x: cx, y: cy });
-          if (cdpResult.success) {
-            return { success: true, method: 'cdp-sendInputEvent', element: info.element };
+      if (query) {
+        const waitResult = await domEngine.waitForElement(view.webContents, { selector: query, timeout: 3000 });
+        if (waitResult.success) {
+          const el = waitResult.element;
+          if (el?.state?.rect) {
+            const cx = el.state.rect.x + Math.round(el.state.rect.w / 2);
+            const cy = el.state.rect.y + Math.round(el.state.rect.h / 2);
+            const cdpResult = await domEngine.cdpClick(view.webContents, { x: cx, y: cy });
+            if (cdpResult.success) return { success: true, method: 'cdp-sendInputEvent', x: cx, y: cy, element: el };
           }
         }
       }
     } catch (_) {}
 
-    // Strategy 4: original inline JS fallback (preserves backward compatibility)
+    // Strategy 3: legacy resolveAndClickWithAi
     try {
+      if (query) {
+        const navResult = await resolveAndClickWithAi(view.webContents, query, null);
+        if (navResult?.success) return { success: true, method: 'browser-navigation', ...navResult };
+      }
+    } catch (_) {}
+
+    // Strategy 4: inline JS fallback (backward compat)
+    try {
+      if (!query) return { success: false, error: 'No selector provided' };
       const clickCode = `
         (async () => {
-          const MAX_RETRIES = ${retry};
+          const MAX_RETRIES = 3;
           const RETRY_DELAY = 200;
-          const strategies = [];
-
-          ${selector ? `strategies.push(() => document.querySelector(${JSON.stringify(selector)}));` : ''}
-          ${text ? `strategies.push(() => {
-            const t = ${JSON.stringify(text)}.toLowerCase();
-            const clickables = document.querySelectorAll('button, a, input[type="submit"], input[type="button"], [role="button"], [role="link"], [role="option"], [role="tab"], [role="menuitem"], [onclick], .btn, .button');
-            for (const el of clickables) {
-              const elText = (el.textContent || el.value || '').toLowerCase().trim();
-              if (elText === t || elText.includes(t)) return el;
-            }
-            const all = document.querySelectorAll('*');
-            for (const el of all) {
-              if (el.children.length === 0 || el.tagName === 'BUTTON' || el.tagName === 'A') {
-                const elText = (el.textContent || '').toLowerCase().trim();
-                if (elText === t || elText.includes(t)) return el;
+          const T = ${JSON.stringify(query)};
+          const strategies = [
+            () => document.querySelector(T),
+            () => {
+              const all = document.querySelectorAll('button, a, [role="button"], [role="link"], [onclick], .btn, .button');
+              const t = T.toLowerCase();
+              for (const el of all) {
+                const et = (el.textContent || el.value || '').toLowerCase().trim();
+                if (et === t || et.includes(t)) return el;
               }
-            }
-            return null;
-          });` : ''}
-          ${ariaLabel ? `strategies.push(() => document.querySelector([aria-label="${ariaLabel.replace(/"/g, '\\"')}"]));` : ''}
-          ${text ? `strategies.push(() => {
-            const t = ${JSON.stringify(text)}.toLowerCase();
-            return document.querySelector([placeholder*="\${t}"], [title*="\${t}"], [aria-label*="\${t}"]);
-          });` : ''}
-
-          for (let retry = 0; retry < MAX_RETRIES; retry++) {
+              return null;
+            },
+            () => document.querySelector('[aria-label*="' + T + '"], [placeholder*="' + T + '"], [title*="' + T + '"]'),
+          ];
+          for (let r = 0; r < MAX_RETRIES; r++) {
             for (let si = 0; si < strategies.length; si++) {
               try {
-                const element = strategies[si]();
-                if (!element) continue;
-                const rect = element.getBoundingClientRect();
-                if (rect.width === 0 || rect.height === 0) {
-                  const parent = element.closest('button, a, [role="button"], input, select, textarea, label, [onclick]');
-                  if (parent) {
-                    const pr = parent.getBoundingClientRect();
-                    if (pr.width > 0 && pr.height > 0) {
-                      parent.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      await new Promise(r => setTimeout(r, 150));
-                      parent.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                      parent.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                      parent.click();
-                      return { success: true, method: 'parent', tag: parent.tagName, text: (parent.textContent || '').trim().substring(0, 100) };
-                    }
-                  }
-                  continue;
-                }
-                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                await new Promise(r => setTimeout(r, 150));
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, cancelable: true, view: window }));
-                element.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window, clientX: centerX, clientY: centerY }));
-                element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-                element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-                element.click();
-                return { success: true, method: 'strategy_' + si, tag: element.tagName, text: (element.textContent || element.value || '').trim().substring(0, 100), rect: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) } };
-              } catch (e) { continue; }
+                const el = strategies[si]();
+                if (!el) continue;
+                const rect = el.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0) continue;
+                el.scrollIntoView({ block: 'center' });
+                await new Promise(x => setTimeout(x, 150));
+                el.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+                el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                el.click();
+                return { success: true, method: 'legacy-fallback' };
+              } catch (_) {}
             }
-            if (retry < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, RETRY_DELAY));
+            if (r < MAX_RETRIES - 1) await new Promise(x => setTimeout(x, RETRY_DELAY));
           }
-          return { success: false, error: 'Element not found after ' + MAX_RETRIES + ' retries with ' + strategies.length + ' strategies' };
+          return { success: false, error: 'Element not found' };
         })()
       `;
       const result = await view.webContents.executeJavaScript(clickCode);
       if (result?.success) return result;
-    } catch (e) {
-      console.error('[Main] DOM click failed:', e);
-    }
+    } catch (_) {}
 
     return { success: false, error: 'Click failed: element not found via any strategy' };
   });

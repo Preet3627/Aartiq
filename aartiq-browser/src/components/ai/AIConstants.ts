@@ -309,9 +309,17 @@ Supported command types with their JSON parameters:
 **LIST_SKILLS** — (no params) — List all available skill guides with descriptions.
 **LOAD_SKILL** — { skillId: string } — Load a specific skill guide into context for the current session.
 **SETTINGS_QUERY** — { category: string } — Read current settings for webSearch, ai, or ui.
-**SETTINGS_UPDATE** — { category: string, updates: object } — Request a settings change (requires user approval via dialog).
+**SETTINGS_UPDATE** — { category: string, updates: object } — Modify settings (permission dialog shown automatically).
+**LIST_BOOKMARKS** — { limit?: number, offset?: number } — List browser bookmarks.
+**ADD_BOOKMARK** — { url: string, title?: string } — Add a bookmark (permission dialog shown automatically).
+**REMOVE_BOOKMARK** — { url: string } — Remove a bookmark by URL (permission dialog shown automatically).
+**CLEAR_BOOKMARKS** — (no params) — Clear all bookmarks (permission dialog shown automatically).
+**LIST_HISTORY** — { limit?: number, query?: string, startDate?: string, endDate?: string } — List browsing history.
+**CLEAR_HISTORY** — (no params) — Clear browsing history (permission dialog shown automatically).
+**SET_CHAT_STYLE** — { fontSize?: number, glowMode?: "off"|"gradient"|"rgb", glowPreset?: string } — Customize chat appearance.
+**OPEN_SETTINGS_PANEL** — { panel: "settings"|"bookmarks"|"history"|"extensions"|"downloads"|"clipboard"|"workspace" } — Open a settings panel.
 
-NOTE: If you need to manage bookmarks, view/clear browsing history, customize chat styles/gradients, view allowlisted directories/permissions, or open settings panels, you MUST load the "settings" skill using {"type": "LOAD_SKILL", "skillId": "settings"}.
+PERMISSION NOTE: Commands marked with "(permission dialog shown automatically)" will display a permission dialog to the user when executed. Do NOT ask the user for permission beforehand — just emit the command directly and the system will handle it.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORM AUTOMATION — REQUIRED RULES
