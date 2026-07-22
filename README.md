@@ -24,6 +24,7 @@ An Electron-based browser with an integrated AI chat that executes LLM-planned b
 - [Performance](#performance)
 - [Security](#security)
 - [Documentation](#documentation)
+- [Contributors](#contributors)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -165,9 +166,39 @@ For the full security model, see [Security Documentation](https://aartiq.ponsris
 
 ---
 
-## Contributing
+## Contributors
 
-PRs are welcome. Please open an issue first to discuss significant changes.
+We thank everyone who has contributed to making Aartiq better.
+
+<a href="https://github.com/Preet3627/Aartiq/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Preet3627/Aartiq" />
+</a>
+
+### Shashank Shekhar
+
+> *Microsoft Store Advisor · Open-Source Developer · UI/UX Feedback*
+
+Shashank is the creator of [Daruka](https://daruka.web.app) — a unified memory layer for every AI tool you use — and the developer of [Aria AI Assistant](https://apps.microsoft.com/detail/XPFPNCMXJ31VSR) on the Microsoft Store. He helped Aartiq get published on the Microsoft Store by sharing his experience with the submission process, and provided detailed UI/UX feedback that shaped the Windows experience of the browser. His insight on ad-blocking, minimal design (inspired by Zen Browser), and store optimization were instrumental in Aartiq's public launch.
+
+**GitHub:** [theshekhr](https://github.com/theshekhr) · **Daruka:** [daruka.web.app](https://daruka.web.app) · **Microsoft Store:** [Aria AI Assistant](https://apps.microsoft.com/detail/XPFPNCMXJ31VSR)
+
+### eddzsh
+
+> *Security Architecture · Electron IPC Trust Boundary · Approval System Design*
+
+eddzsh is the security architect behind Aartiq's ticket-based approval system — the core mechanism that prevents param tampering and race conditions in the main/renderer trust boundary. Through detailed Reddit discussions on r/electronjs, eddzsh laid out the exact pattern Aartiq now uses: signed tickets with hashed payloads, pre-registered call shapes for unattended execution, and pattern-based approval for scheduled tasks. His guidance on "hash the exact payload at propose time, diff it at execute time" became the foundation of Aartiq's permission model. Without this contribution, the AI agent would still be trusting the renderer to pass back untampered params.
+
+**Reddit:** [eddzsh](https://www.reddit.com/user/eddzsh) · **Key Insight:** *"Approval should mean consent to THAT exact action, not a blanket yes for whatever the agent is holding a moment later."*
+
+### Dxrkaa
+
+> *First Issue Reporter · Early Adopter · Bug Hunter*
+
+Dxrkaa opened [Issue #6](https://github.com/Preet3627/Aartiq/issues/6) — the first community-reported bug on Aartiq — reporting that the latest version failed to launch on Windows (process running in Task Manager but no window visible). This early feedback helped identify and fix a critical launch regression, and marked the beginning of Aartiq's public bug-tracking lifecycle. Every open-source project needs someone willing to file that first issue, and Dxrkaa was that person for Aartiq.
+
+**GitHub:** [Dxrkaa](https://github.com/Dxrkaa) · **Issue:** [#6 — Latest version does not launch](https://github.com/Preet3627/Aartiq/issues/6)
+
+---
 
 ## License
 

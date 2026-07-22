@@ -122,6 +122,53 @@ If you have questions, feel free to contact us via the official website at [http
 
 Thank you for contributing! 🚀
 
+## 🏆 Contributors
+
+We recognize the people who have helped shape Aartiq beyond code contributions.
+
+### Shashank Shekhar
+
+> *Microsoft Store Advisor · Open-Source Developer · UI/UX Feedback*
+
+**GitHub:** [theshekhr](https://github.com/theshekhr) · **Daruka:** [daruka.web.app](https://daruka.web.app) · **Microsoft Store:** [Aria AI Assistant](https://apps.microsoft.com/detail/XPFPNCMXJ31VSR)
+
+Shashank is the creator of [Daruka](https://daruka.web.app) — a unified memory layer for every AI tool you use — and the developer of [Aria AI Assistant](https://apps.microsoft.com/detail/XPFPNCMXJ31VSR) on the Microsoft Store. His contributions to Aartiq include:
+
+- **Microsoft Store Guidance:** Navigated the store submission process, shared his experience getting BYOK apps approved, and encouraged Aartiq to pursue store listing
+- **UI/UX Feedback:** Reviewed the Windows build, flagged macOS-specific UI elements (traffic light buttons) on Windows, and pushed for platform-native design
+- **Ad-Blocker Insight:** Suggested a built-in ad blocker, recommending the clean, extension-free approach used by Brave
+- **Design Direction:** Recommended looking at Zen Browser for UI inspiration — clean, minimal, distraction-free
+- **Community Support:** Connected with the project through early testing and ongoing feedback loops
+
+### eddzsh
+
+> *Security Architecture · Electron IPC Trust Boundary · Approval System Design*
+
+**Reddit:** [eddzsh](https://www.reddit.com/user/eddzsh)
+
+eddzsh is the security architect behind Aartiq's ticket-based approval system. Through detailed discussions on r/electronjs, he designed the exact pattern Aartiq now uses for its permission model. His contributions include:
+
+- **Ticket-Based Approval Pattern:** Designed the signed ticket system where main process issues a request ID, stores exact params server-side, and only lets the approval event redeem that specific ticket
+- **Hash Verification at Propose Time:** Proposed hashing the exact payload at propose time and diffing it against execution — catching race conditions where the AI assembles different params after approval
+- **Pre-Registered Call Shapes:** Designed the system for unattended/scheduled execution where exact call shapes (tool + fixed args) are registered during interactive sessions and verified at runtime
+- **Pattern-Based Approval:** Suggested scoping approvals to patterns instead of literal values for scheduled tasks with variable args (e.g., dated filenames)
+- **Trust Boundary Design:** Articulated the core principle that "nothing stops params being tampered with in transit" and built the foundation to prevent it
+
+### Dxrkaa
+
+> *First Issue Reporter · Early Adopter · Bug Hunter*
+
+**GitHub:** [Dxrkaa](https://github.com/Dxrkaa) · **Issue:** [#6](https://github.com/Preet3627/Aartiq/issues/6)
+
+Dxrkaa opened the first community-reported bug on Aartiq. His contributions include:
+
+- **First Issue Report:** Opened [Issue #6](https://github.com/Preet3627/Aartiq/issues/6) reporting that the latest version failed to launch on Windows (process running in Task Manager but no window visible)
+- **Early Adoption:** Was among the first external users to install and test Aartiq on Windows
+- **Bug Discovery:** Identified a critical launch regression that was fixed in v0.2.9
+- **Community Catalyst:** The first issue report marked the beginning of Aartiq's public bug-tracking lifecycle
+
+---
+
 ## 📝 License
 
 Aartiq uses a **dual-license** model:

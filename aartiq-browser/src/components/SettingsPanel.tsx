@@ -1092,7 +1092,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                 <img src="/logo-transparent.png" alt="Aartiq" className="w-24 h-24 mx-auto mb-2 shadow-2xl drop-shadow-[0_0_20px_rgba(56,189,248,0.4)] animate-pulse" />
                                 <h2 className="text-5xl font-black tracking-tighter">{store.appName}</h2>
                                 <p className="text-white/40 max-w-md mx-auto text-sm leading-relaxed font-medium">
-                                    A performance-hardened Chromium shell with native AI orchestration, optimized for decentralized workflows.
+                                    AI browser with permission-gated automation and ticket-based security.
                                 </p>
 
                                 {/* Onboarding Actions */}
@@ -1136,9 +1136,52 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                     </button>
                                 </div>
 
+                                {/* Contributors Section */}
+                                <div className="pt-8 border-t border-white/5 max-w-lg mx-auto">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20 mb-6">Contributors</p>
+                                    
+                                    <div className="space-y-4">
+                                        {/* Shashank Shekhar */}
+                                        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-500/20 to-violet-500/20 flex items-center justify-center text-xs font-bold text-white/60">SS</div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-white">Shashank Shekhar</p>
+                                                    <p className="text-[10px] text-white/30">Microsoft Store Advisor · UI/UX Feedback</p>
+                                                </div>
+                                            </div>
+                                            <p className="text-[11px] text-white/40 leading-relaxed">Creator of Daruka. Guided Microsoft Store submission, flagged macOS UI on Windows, suggested ad-blocker and Zen-inspired design.</p>
+                                        </div>
+
+                                        {/* eddzsh */}
+                                        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center text-xs font-bold text-white/60">ed</div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-white">eddzsh</p>
+                                                    <p className="text-[10px] text-white/30">Security Architecture · Approval System Design</p>
+                                                </div>
+                                            </div>
+                                            <p className="text-[11px] text-white/40 leading-relaxed">Designed the ticket-based approval system. Hash verification, pre-registered call shapes, pattern-based approval for unattended execution.</p>
+                                        </div>
+
+                                        {/* Dxrkaa */}
+                                        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-left">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500/20 to-red-500/20 flex items-center justify-center text-xs font-bold text-white/60">Dx</div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-white">Dxrkaa</p>
+                                                    <p className="text-[10px] text-white/30">First Issue Reporter · Early Adopter</p>
+                                                </div>
+                                            </div>
+                                            <p className="text-[11px] text-white/40 leading-relaxed">Opened the first community bug report (Issue #6). Helped identify and fix a critical Windows launch regression.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="pt-6 border-t border-white/5 max-w-sm mx-auto">
                                     <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/20">Version {versionLabel} Stable</p>
-                                    <p className="text-[10px] text-white/20 mt-1">Aartiq Intelligence System • Enhancement Update</p>
+                                    <p className="text-[10px] text-white/20 mt-1">Aartiq Intelligence System • Security Update</p>
                                 </div>
                             </div>
                         )}

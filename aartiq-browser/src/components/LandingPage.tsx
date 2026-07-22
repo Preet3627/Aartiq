@@ -31,15 +31,22 @@ const LandingPage = () => {
 
     const AARTIQ_README = `
 # ☄️ Aartiq (${versionLabel})
-### The Future of Autonomous Web Intelligence
+### AI Browser with Permission-Gated Automation
 
-**Aartiq** is an AI-native browser designed to automate your digital life. Built for extreme performance and deep AI integration.
+**Aartiq** is an AI-native browser designed to automate your digital life. Built for performance and deep AI integration.
 
 **Core Pillars:**
 *   **Autonomous Agency**: The Aartiq Agent doesn't just answer questions; it acts.
-*   **Neural Orchestration**: Native support for Gemini, Claude, and Local LLMs.
+*   **Multi-Model Support**: Native support for Gemini, Claude, Groq, xAI, and Local LLMs.
 *   **Local Memory**: Built-in vector database for infinite semantic history.
-*   **Hardware Isolation**: Sandboxed environment for maximum security.
+*   **Permission-Gated Security**: Every AI action requires explicit approval before execution.
+
+**Security Architecture:**
+*   **Ticket-Based Approval**: Cryptographic tickets with hash verification prevent param tampering
+*   **Biometric Verification**: Touch ID (macOS) and Windows Hello for high-risk operations
+*   **Risk-Tiered Permissions**: Low/medium/high risk classification with appropriate gates
+*   **MCP Isolation**: Localhost-only binding, no external network exposure
+*   **Unattended Execution**: Pre-registered call shapes for scheduled tasks with pattern matching
 `.trim();
 
     useEffect(() => {
@@ -152,7 +159,7 @@ const LandingPage = () => {
                 {/* Feature Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mb-32">
                     {[
-                        { icon: <Shield size={24} />, title: "Hardened", desc: "Chromium sandbox with neural firewalling." },
+                        { icon: <Shield size={24} />, title: "Hardened", desc: "Chromium sandbox, permission-gated AI actions, biometric approval for high-risk operations." },
                         { icon: <Zap size={24} />, title: "Instant", desc: "Optimized for extreme low-latency task execution." },
                         { icon: <Cpu size={24} />, title: "Native AI", desc: "Integrated reasoning engines for deep automation." }
                     ].map((feature, i) => (
