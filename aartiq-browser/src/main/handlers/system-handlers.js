@@ -159,17 +159,17 @@ module.exports = function registerSystemHandlers(ipcMain, handlers) {
   });
 
   // ============================================================================
-  // BIOMETRIC AUTHENTICATION
+  // BIOMETRIC AUTHENTICATION (Windows Hello + Touch ID + Linux)
   // ============================================================================
   try {
-    const { BiometricAuthManager, CrossPlatformBiometricAuth } = require('../../service/biometric-auth.js');
-    const biometricAuth = new BiometricAuthManager();
+    const { WindowsHelloAuth, CrossPlatformBiometricAuth } = require('../../service/windows-hello-auth.js');
+    const windowsHello = new WindowsHelloAuth();
     const crossPlatformAuth = new CrossPlatformBiometricAuth();
 
-    ipcMain.handle('biometric-check', async () => await biometricAuth.quickCheck());
-    ipcMain.handle('biometric-authenticate', async (event, reason) => await biometricAuth.authenticate(reason || 'Authenticate to proceed'));
+    ipcMain.handle('biometric-check', async () => await windowsHello.quickCheck());
+    ipcMain.handle('biometric-authenticate', async (event, reason) => await windowsHello.authenticate(reason || 'Authenticate to proceed'));
     ipcMain.handle('biometric-execute', async (event, actions, reason) => await crossPlatformAuth.executeWithAuth(actions, reason || 'Execute critical action'));
-    console.log('[Handlers] Biometric authentication registered');
+    console.log('[Handlers] Windows Hello + Cross-platform biometric authentication registered');
   } catch (error) {
     console.warn('[Handlers] Biometric auth unavailable:', error.message);
   }

@@ -855,6 +855,79 @@ capabilityController.registerAction({
 });
 commandExecutor.setCapabilityController(capabilityController);
 
+// ============================================================================
+// TICKET-BASED APPROVAL SYSTEM
+// Prevents param tampering in IPC trust boundary
+// ============================================================================
+
+// Send approval required event to renderer
+capabilityController.onApprovalRequired = (ticket) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('approval-required', ticket);
+  }
+};
+
+// Approve a ticket and execute the action
+ipcMain.handle('approval-ticket-approve', async (event, ticketId) => {
+  console.log(`[Main] Approval ticket ${ticketId} approved by renderer`);
+  return await capabilityController.approveAndExecute(ticketId, 'user');
+});
+
+// Deny a ticket
+ipcMain.handle('approval-ticket-deny', async (event, ticketId, reason) => {
+  console.log(`[Main] Approval ticket ${ticketId} denied: ${reason}`);
+  return capabilityController.denyTicket(ticketId, 'user', reason);
+});
+
+// Get ticket status (for polling)
+ipcMain.handle('approval-ticket-status', async (event, ticketId) => {
+  return capabilityController.getTicketStatus(ticketId);
+});
+
+// Get all pending approvals
+ipcMain.handle('approval-ticket-pending', async () => {
+  return capabilityController.getPendingApprovals();
+});
+
+// Get approval statistics
+ipcMain.handle('approval-ticket-stats', async () => {
+  return capabilityController.getStats();
+});
+
+// ============================================================================
+// UNATTENDED EXECUTION (for scheduled tasks)
+// ============================================================================
+
+// Register a call shape for unattended execution
+ipcMain.handle('approval-register-call-shape', async (event, { actionName, params, metadata }) => {
+  console.log(`[Main] Registering call shape for unattended: ${actionName}`);
+  return capabilityController.registerCallShape(actionName, params, metadata);
+});
+
+// Register a call shape pattern for flexible unattended execution
+ipcMain.handle('approval-register-call-pattern', async (event, { actionName, paramPatterns, metadata }) => {
+  console.log(`[Main] Registering call shape pattern: ${actionName}`);
+  return capabilityController.registerCallShapePattern(actionName, paramPatterns, metadata);
+});
+
+// Execute action for unattended/scheduled execution
+ipcMain.handle('approval-execute-unattended', async (event, { actionName, params }) => {
+  console.log(`[Main] Unattended execution: ${actionName}`);
+  return await capabilityController.executeUnattended(actionName, params);
+});
+
+// Get registered call shapes for an action
+ipcMain.handle('approval-get-call-shapes', async (event, actionName) => {
+  return capabilityController.getCallShapes(actionName);
+});
+
+// Revoke a call shape
+ipcMain.handle('approval-revoke-call-shape', async (event, shapeId) => {
+  return capabilityController.revokeCallShape(shapeId);
+});
+
+console.log('[Main] Ticket-based approval system + unattended execution registered');
+
 // Network Security - Now managed by NetworkSecurityManager (src/core/network-security.js)
 // Keeping backwards compatibility aliases for existing code references
 const networkSecurityConfig = networkSecurityManager.getConfig();

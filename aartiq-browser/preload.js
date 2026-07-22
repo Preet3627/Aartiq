@@ -585,6 +585,33 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAutoApprovedCommands: () => ipcRenderer.invoke('permission-auto-commands'),
   setAutoApprovalAction: (payload) => ipcRenderer.invoke('permission-auto-action', payload),
   getAutoApprovedActions: () => ipcRenderer.invoke('permission-auto-actions'),
+  
+  // Ticket-based approval system (prevents param tampering)
+  approveTicket: (ticketId) => ipcRenderer.invoke('approval-ticket-approve', ticketId),
+  denyTicket: (ticketId, reason) => ipcRenderer.invoke('approval-ticket-deny', ticketId, reason),
+  getTicketStatus: (ticketId) => ipcRenderer.invoke('approval-ticket-status', ticketId),
+  getPendingApprovals: () => ipcRenderer.invoke('approval-ticket-pending'),
+  
+  // Listen for approval required events from main
+  onApprovalRequired: (callback) => {
+    const subscription = (event, ticket) => callback(ticket);
+    ipcRenderer.on('approval-required', subscription);
+    return () => ipcRenderer.removeListener('approval-required', subscription);
+  },
+  
+  // Approval statistics
+  getApprovalStats: () => ipcRenderer.invoke('approval-ticket-stats'),
+  
+  // Unattended execution (for scheduled tasks)
+  registerCallShape: (actionName, params, metadata) => 
+    ipcRenderer.invoke('approval-register-call-shape', { actionName, params, metadata }),
+  registerCallShapePattern: (actionName, paramPatterns, metadata) => 
+    ipcRenderer.invoke('approval-register-call-pattern', { actionName, paramPatterns, metadata }),
+  executeUnattended: (actionName, params) => 
+    ipcRenderer.invoke('approval-execute-unattended', { actionName, params }),
+  getCallShapes: (actionName) => ipcRenderer.invoke('approval-get-call-shapes', actionName),
+  revokeCallShape: (shapeId) => ipcRenderer.invoke('approval-revoke-call-shape', shapeId),
+  
   generateHighRiskQr: (actionId) => ipcRenderer.invoke('generate-high-risk-qr', actionId),
   onMobileApproveHighRisk: (callback) => {
     const subscription = (event, data) => callback(data);
