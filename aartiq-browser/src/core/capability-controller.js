@@ -115,7 +115,17 @@ class CapabilityController {
    * It validates the ticket, verifies params hash, and executes.
    */
   async approveAndExecute(ticketId, approvedBy = 'user') {
-    // Redeem the ticket (uses stored immutable params, no external input)
+    // Step 1: Approve the ticket (pending → approved)
+    const approval = this.ticketManager.approveTicket(ticketId, approvedBy);
+    if (!approval.success) {
+      return {
+        approved: false,
+        reason: approval.reason,
+        ticketId,
+      };
+    }
+
+    // Step 2: Redeem the ticket (approved → redeemed, uses stored immutable params)
     const redemption = this.ticketManager.redeemTicket(ticketId);
     
     if (!redemption.success) {

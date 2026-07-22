@@ -311,6 +311,7 @@ const { NetworkSecurityManager } = require('./src/core/network-security.js');
 const { WindowManager, windowManager } = require('./src/core/window-manager.js');
 const { CommandExecutor } = require('./src/core/command-executor.js');
 const { CapabilityController } = require('./src/core/capability-controller.js');
+const { setPermissionStore: setCommandValidatorPermissionStore } = require('./src/core/command-validator.js');
 
 // ✅ NEW: Relocate essential system IPC handlers to the top to prevent "no handler registered" errors
 ipcMain.handle('get-app-version', () => {
@@ -813,6 +814,9 @@ ipcMain.handle('get-app-icon', async (event, appPath) => {
 
 
 const permissionStore = new PermissionStore();
+// Wire PermissionStore into command-validator so checkShellPermission() uses the
+// same store as the rest of the application (replacing the old electron-store-based approach).
+setCommandValidatorPermissionStore(permissionStore);
 let cometAiEngine = new AartiqAiEngine();
 let robotService = new RobotService(permissionStore);
 const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -9030,6 +9034,7 @@ ${tabData}`;
     ragService, voiceService, workflowRecorder, popSearch,
     flutterBridge,
     resolveAndClickWithAi, ensureVaultApprovalForFormFill,
+    capabilityController,
   };
   // --- Native Mac UI Sidebar + Permission bridge IPC ---
   ipcMain.on('native-mac-ui-sidebar-open', () => {

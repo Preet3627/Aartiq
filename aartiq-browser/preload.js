@@ -585,6 +585,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAutoApprovedCommands: () => ipcRenderer.invoke('permission-auto-commands'),
   setAutoApprovalAction: (payload) => ipcRenderer.invoke('permission-auto-action', payload),
   getAutoApprovedActions: () => ipcRenderer.invoke('permission-auto-actions'),
+
+  // Directory Allowlist
+  getDirectoryAllowlist: () => ipcRenderer.invoke('directory-allowlist-get'),
+  addDirectoryToAllowlist: (dirPath, options) => ipcRenderer.invoke('directory-allowlist-add', { dirPath, ...options }),
+  removeDirectoryFromAllowlist: (dirPath) => ipcRenderer.invoke('directory-allowlist-remove', { dirPath }),
+  
+  // File Management (routes around shell sandbox)
+  moveFile: (source, dest) => ipcRenderer.invoke('file-move', { source, dest }),
+  copyFile: (source, dest) => ipcRenderer.invoke('file-copy', { source, dest }),
+  openFile: (filePath) => ipcRenderer.invoke('file-open', filePath),
+  printFile: (filePath) => ipcRenderer.invoke('file-print', filePath),
+  checkFileAccess: (filePath, operation) => ipcRenderer.invoke('file-check-access', { filePath, operation }),
+  
+  // Batched directory access request
+  requestDirectoryAccess: (requests) => ipcRenderer.invoke('request-directory-access', { requests }),
   
   // Ticket-based approval system (prevents param tampering)
   approveTicket: (ticketId) => ipcRenderer.invoke('approval-ticket-approve', ticketId),

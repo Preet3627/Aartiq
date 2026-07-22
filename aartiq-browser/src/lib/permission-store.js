@@ -1,8 +1,19 @@
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { app } = require('electron');
 
 const PERM_LEVELS = ['read', 'interact', 'write', 'execute', 'send'];
+
+const DEFAULT_ALLOWED_DIRECTORIES = [
+  { path: os.homedir(), recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
+  { path: path.join(os.homedir(), 'Desktop'), recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
+  { path: path.join(os.homedir(), 'Documents'), recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
+  { path: path.join(os.homedir(), 'Downloads'), recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
+  { path: '/tmp', recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
+  { path: '/Applications', recursive: true, access: 'read', grantedAt: 0, grantedVia: 'default' },
+  { path: '/System/Applications', recursive: true, access: 'read', grantedAt: 0, grantedVia: 'default' },
+];
 
 class PermissionStore {
   constructor() {
@@ -18,6 +29,7 @@ class PermissionStore {
       requireBiometricPerSession: true,
       autoApprovedCommands: [],
       autoApprovedActions: [],
+      allowedDirectories: [...DEFAULT_ALLOWED_DIRECTORIES],
     };
     this.autoApprovedCommands = new Set();
     this.autoApprovedActions = new Set();
@@ -118,6 +130,94 @@ class PermissionStore {
 
   getAutoApprovedActions() {
     return [...this.autoApprovedActions];
+  }
+
+  // --- Directory Allowlist CRUD ---
+
+  getAllowedDirectories() {
+    const dirs = Array.isArray(this.settings.allowedDirectories)
+      ? this.settings.allowedDirectories
+      : [...DEFAULT_ALLOWED_DIRECTORIES];
+
+    // Backward compat: migrate string-only entries to object format
+    return dirs.map(d => {
+      if (typeof d === 'string') {
+        return { path: d, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'migrated' };
+      }
+      return { ...d };
+    });
+  }
+
+  addAllowedDirectory(dirPath, options = {}) {
+    if (!dirPath || typeof dirPath !== 'string') return false;
+    const resolved = path.resolve(dirPath);
+    if (!Array.isArray(this.settings.allowedDirectories)) {
+      this.settings.allowedDirectories = [...DEFAULT_ALLOWED_DIRECTORIES];
+    }
+
+    // Normalize existing entries to objects
+    this.settings.allowedDirectories = this.settings.allowedDirectories.map(d =>
+      typeof d === 'string'
+        ? { path: d, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'migrated' }
+        : d
+    );
+
+    if (this.settings.allowedDirectories.some(d => path.resolve(d.path) === resolved)) {
+      return false;
+    }
+
+    this.settings.allowedDirectories.push({
+      path: resolved,
+      recursive: options.recursive !== false,
+      access: options.access === 'read' ? 'read' : 'read-write',
+      grantedAt: Date.now(),
+      grantedVia: options.grantedVia || 'settings',
+    });
+    this._saveSettings();
+    this.logAudit(`directory-allowlist.add: ${resolved} (${options.access || 'read-write'}, recursive=${options.recursive !== false})`);
+    return true;
+  }
+
+  updateAllowedDirectory(dirPath, updates) {
+    if (!dirPath || typeof dirPath !== 'string') return false;
+    const resolved = path.resolve(dirPath);
+    if (!Array.isArray(this.settings.allowedDirectories)) return false;
+
+    this.settings.allowedDirectories = this.settings.allowedDirectories.map(d => {
+      const entry = typeof d === 'string'
+        ? { path: d, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'migrated' }
+        : d;
+      if (path.resolve(entry.path) === resolved) {
+        return { ...entry, ...updates, path: resolved };
+      }
+      return entry;
+    });
+    this._saveSettings();
+    this.logAudit(`directory-allowlist.update: ${resolved} ${JSON.stringify(updates)}`);
+    return true;
+  }
+
+  removeAllowedDirectory(dirPath) {
+    if (!dirPath || typeof dirPath !== 'string') return false;
+    const resolved = path.resolve(dirPath);
+    if (!Array.isArray(this.settings.allowedDirectories)) return false;
+    const before = this.settings.allowedDirectories.length;
+    this.settings.allowedDirectories = this.settings.allowedDirectories.filter(d => {
+      const entryPath = typeof d === 'string' ? d : d.path;
+      return path.resolve(entryPath) !== resolved;
+    });
+    if (this.settings.allowedDirectories.length === before) return false;
+    this._saveSettings();
+    this.logAudit(`directory-allowlist.remove: ${resolved}`);
+    return true;
+  }
+
+  isDirectoryAllowed(dirPath, operation = 'read') {
+    if (!dirPath || typeof dirPath !== 'string') return false;
+    const { isPathAllowed } = require('../core/directory-allowlist');
+    const dirs = this.getAllowedDirectories();
+    const result = isPathAllowed(dirPath, dirs, operation);
+    return result.allowed;
   }
 
   isAutoExecutable(riskLevel) {

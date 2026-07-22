@@ -1,6 +1,20 @@
 // ============================================================================
 // SecurityValidator.js — Single source of truth for shell command validation
 // ============================================================================
+//
+// IMPORTANT: This file provides a fast first-pass regex-based reject layer.
+// It is NOT the primary security defense. Text-based filters are bypassable
+// by construction (e.g., encoded payloads, argument injection, TOCTOU races).
+//
+// Primary enforcement happens at:
+//   1. Permission store (checkShellPermission in command-validator.js) — risk-tiered
+//   2. Capability controller (capability-controller.js) — ticket-based approval
+//   3. OS-level sandboxing (sandbox-executor.js) — filesystem/network confinement
+//
+// This regex layer catches obvious dangerous patterns early (cheap, fast) but
+// must not be treated as sufficient on its own. See the NVIDIA AI Red Team
+// guidance and agentsh syscall-policy approach for industry context.
+// ============================================================================
 
 const { exec, spawn } = require('child_process');
 const path = require('path');

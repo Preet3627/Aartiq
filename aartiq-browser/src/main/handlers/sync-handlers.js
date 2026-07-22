@@ -183,6 +183,7 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
       if (command === 'desktop-control') {
         const { action, prompt, promptId, ...restArgs } = args || {};
         const { generateShellApprovalQR } = handlers;
+        const { capabilityController } = handlers;
         const actionArgs = restArgs;
 
         if (action === 'send-prompt') {
@@ -193,9 +194,83 @@ module.exports = function registerSyncHandlers(ipcMain, handlers) {
         } else if (action === 'get-status') {
           sendResponse({ success: true, desktopName: os.hostname(), platform: os.platform() });
         } else if (action === 'shell-command') {
-          const { exec } = require('child_process');
-          exec(actionArgs.command || args.command, { timeout: 30000 }, (err, stdout, stderr) => {
-            sendResponse(err ? { success: false, error: err.message } : { success: true, output: stdout || stderr });
+          // ====================================================================
+          // SECURITY FIX (audit-doc §3e): Remote shell execution from WiFi Sync.
+          //
+          // Previously this was: exec(actionArgs.command || args.command, …)
+          // with zero validation — a paired mobile device could run arbitrary
+          // shell commands on the desktop.
+          //
+          // Now:
+          //   1. Validate via SecurityValidator (dangerous patterns, blocked list)
+          //   2. Classify risk and escalate to 'high' (remote origin = elevated risk)
+          //   3. Route through capability controller (ticket-based approval)
+          //   4. Require QR/PIN approval (same flow as shutdown/restart/sleep/lock)
+          //   5. Execute via execFile (no shell interpretation)
+          //
+          // The remote origin bumps risk by one tier: medium→high, high→critical.
+          // Critical-risk commands are never auto-approved.
+          // ====================================================================
+          const { validateCommand, analyzeCommandRisk } = require('../../core/command-validator');
+          const { validateCommand: securityValidate } = require('../../lib/SecurityValidator');
+
+          const shellCmd = actionArgs.command || args.command;
+          if (!shellCmd) {
+            sendResponse({ success: false, error: 'No command provided' });
+            return;
+          }
+
+          // 1. Validate command (dangerous patterns, blocked list)
+          try {
+            validateCommand(shellCmd);
+          } catch (e) {
+            sendResponse({ success: false, error: `Command validation failed: ${e.message}` });
+            return;
+          }
+
+          // 2. Classify risk and escalate for remote origin
+          let riskLevel = analyzeCommandRisk(shellCmd);
+          // Remote origin always elevates risk
+          if (riskLevel === 'low') riskLevel = 'medium';
+          else if (riskLevel === 'medium') riskLevel = 'high';
+          else riskLevel = 'critical'; // already high → critical
+
+          // 3. Route through capability controller
+          if (capabilityController) {
+            const capResult = await capabilityController.executeAction('execute-shell-command', {
+              rawCommand: shellCmd,
+              reason: `Remote shell command from paired mobile device`,
+              riskLevel,
+            });
+
+            if (!capResult.approved) {
+              if (capResult.needsApproval) {
+                // 4. Require QR/PIN approval (same as shutdown/restart/sleep/lock)
+                const { qrImage, pin, token } = await generateShellApprovalQR(shellCmd);
+                wifiSyncService.sendToMobile({
+                  action: 'shell-approval-qr',
+                  commandId: token,
+                  pin,
+                  command: shellCmd,
+                  qrData: qrImage,
+                });
+                sendResponse({ success: true, awaiting_approval: true });
+                return;
+              }
+              sendResponse({ success: false, error: capResult.reason || 'Shell command denied by capability controller.' });
+              return;
+            }
+          }
+
+          // 5. Execute — use execFile with no shell interpretation
+          const { execFile: execFileFn } = require('child_process');
+          const cmdParts = shellCmd.trim().split(/\s+/);
+          const cmdBinary = cmdParts[0];
+          const cmdArgs = cmdParts.slice(1);
+          execFileFn(cmdBinary, cmdArgs, { timeout: 30000 }, (err, stdout, stderr) => {
+            sendResponse(err
+              ? { success: false, error: err.message }
+              : { success: true, output: stdout || stderr });
           });
         } else if (action === 'high-risk-approve') {
           if (mainWindow && !mainWindow.isDestroyed()) {

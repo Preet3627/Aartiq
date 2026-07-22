@@ -7,12 +7,15 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronUp,
+  FolderOpen,
+  FolderPlus,
   Lock,
   Monitor,
   Settings2,
   Shield,
   SunMedium,
   Terminal,
+  Trash2,
   Volume2,
   XCircle,
   Zap,
@@ -110,6 +113,11 @@ const PermissionSettings = () => {
   const [showSafeCommands, setShowSafeCommands] = useState(false);
   const [showMediumCommands, setShowMediumCommands] = useState(false);
   const [showHighCommands, setShowHighCommands] = useState(false);
+  const [allowedDirectories, setAllowedDirectories] = useState<Array<{path:string;recursive:boolean;access:string;grantedAt:number;grantedVia:string}>>([]);
+  const [newDirectoryPath, setNewDirectoryPath] = useState('');
+  const [newDirectoryAccess, setNewDirectoryAccess] = useState<'read'|'read-write'>('read-write');
+  const [newDirectoryRecursive, setNewDirectoryRecursive] = useState(true);
+  const [directoryError, setDirectoryError] = useState('');
 
   const loadSettings = async () => {
     try {
@@ -133,6 +141,21 @@ const PermissionSettings = () => {
             ? nextSettings.autoApprovedActions.map((action) => normalizeActionType(action))
             : [],
         });
+      }
+
+      // Load directory allowlist
+      try {
+        const dirResult = await (window as any).electronAPI?.getDirectoryAllowlist?.();
+        if (dirResult?.success && Array.isArray(dirResult.directories)) {
+          const dirs = dirResult.directories.map((d: any) =>
+            typeof d === 'string'
+              ? { path: d, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'migrated' }
+              : d
+          );
+          setAllowedDirectories(dirs);
+        }
+      } catch (dirErr) {
+        console.error('[PermissionSettings] Failed to load directory allowlist:', dirErr);
       }
     } catch (error) {
       console.error('[PermissionSettings] Failed to load settings:', error);
@@ -199,6 +222,51 @@ const PermissionSettings = () => {
     } catch (error) {
       console.error('[PermissionSettings] Failed to update action override:', error);
       await loadSettings();
+    }
+  };
+
+  const addDirectoryToAllowlist = async () => {
+    if (!newDirectoryPath.trim()) return;
+    setDirectoryError('');
+    try {
+      const result = await (window as any).electronAPI?.addDirectoryToAllowlist?.(newDirectoryPath.trim(), {
+        access: newDirectoryAccess,
+        recursive: newDirectoryRecursive,
+        grantedVia: 'settings',
+      });
+      if (result?.success) {
+        const dirs = result.directories.map((d: any) =>
+          typeof d === 'string'
+            ? { path: d, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'migrated' }
+            : d
+        );
+        setAllowedDirectories(dirs);
+        setNewDirectoryPath('');
+      } else {
+        setDirectoryError(result?.error || 'Failed to add directory.');
+      }
+    } catch (error) {
+      console.error('[PermissionSettings] Failed to add directory:', error);
+      setDirectoryError('Failed to add directory.');
+    }
+  };
+
+  const removeDirectoryFromAllowlist = async (dirPath: string) => {
+    setDirectoryError('');
+    try {
+      const result = await (window as any).electronAPI?.removeDirectoryFromAllowlist?.(dirPath);
+      if (result?.success) {
+        const dirs = result.directories.map((d: any) =>
+          typeof d === 'string'
+            ? { path: d, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'migrated' }
+            : d
+        );
+        setAllowedDirectories(dirs);
+      } else {
+        setDirectoryError(result?.error || 'Failed to remove directory.');
+      }
+    } catch (error) {
+      console.error('[PermissionSettings] Failed to remove directory:', error);
     }
   };
 
@@ -662,6 +730,129 @@ const PermissionSettings = () => {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Directory Allowlist Section */}
+      <div className="bg-white/5 rounded-3xl p-6 border border-white/10 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <FolderOpen size={20} className="text-emerald-400" />
+            <div>
+              <h4 className="text-lg font-bold text-white">Directory Allowlist</h4>
+              <p className="text-xs text-white/40">
+                Control which directories the AI can access. Scoped, explicit, and revocable.
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] uppercase tracking-[0.4em] text-white/40">
+            {allowedDirectories.length} directories
+          </span>
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          <input
+            type="text"
+            value={newDirectoryPath}
+            onChange={(e) => { setNewDirectoryPath(e.target.value); setDirectoryError(''); }}
+            onKeyDown={(e) => e.key === 'Enter' && addDirectoryToAllowlist()}
+            placeholder="/path/to/directory"
+            className="flex-1 min-w-[200px] bg-black/30 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-emerald-500/50 transition-all"
+          />
+          <select
+            value={newDirectoryAccess}
+            onChange={(e) => setNewDirectoryAccess(e.target.value as 'read' | 'read-write')}
+            className="bg-black/30 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white/80 focus:outline-none focus:border-emerald-500/50"
+          >
+            <option value="read-write">Read & Write</option>
+            <option value="read">Read Only</option>
+          </select>
+          <label className="flex items-center gap-2 bg-black/30 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white/80 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={newDirectoryRecursive}
+              onChange={(e) => setNewDirectoryRecursive(e.target.checked)}
+              className="accent-emerald-500"
+            />
+            Recursive
+          </label>
+          <button
+            onClick={addDirectoryToAllowlist}
+            disabled={!newDirectoryPath.trim()}
+            className="px-4 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-xl text-sm text-emerald-300 font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <FolderPlus size={16} />
+            Add
+          </button>
+        </div>
+
+        {directoryError && (
+          <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2">
+            {directoryError}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          {allowedDirectories.map((dir) => (
+            <div
+              key={dir.path}
+              className="flex items-center justify-between bg-black/20 border border-white/5 rounded-xl px-4 py-3"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <FolderOpen size={16} className="text-emerald-400/60 flex-shrink-0" />
+                <div className="min-w-0">
+                  <code className="text-sm text-white/80 font-mono truncate block">{dir.path}</code>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                      dir.access === 'read-write'
+                        ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20'
+                        : 'text-amber-300 bg-amber-500/10 border-amber-500/20'
+                    }`}>
+                      {dir.access === 'read-write' ? 'Read & Write' : 'Read Only'}
+                    </span>
+                    {dir.recursive && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full border text-sky-300 bg-sky-500/10 border-sky-500/20">
+                        Recursive
+                      </span>
+                    )}
+                    {dir.grantedVia && dir.grantedVia !== 'default' && (
+                      <span className="text-[10px] text-white/30">
+                        via {dir.grantedVia}
+                        {dir.grantedAt > 0 && ` · ${new Date(dir.grantedAt).toLocaleDateString()}`}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => removeDirectoryFromAllowlist(dir.path)}
+                className="p-2 hover:bg-red-500/10 rounded-lg transition-all flex-shrink-0"
+                title="Remove directory"
+              >
+                <Trash2 size={14} className="text-red-400/60 hover:text-red-400" />
+              </button>
+            </div>
+          ))}
+          {allowedDirectories.length === 0 && (
+            <div className="text-xs text-white/40 text-center py-4">
+              No directories in allowlist. Add a directory to grant AI access.
+            </div>
+          )}
+        </div>
+
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 mt-4">
+          <div className="flex items-start gap-3">
+            <Shield size={16} className="text-blue-400 mt-0.5" />
+            <div>
+              <h5 className="text-blue-300 font-bold text-xs mb-1">How Directory Access Works</h5>
+              <ul className="text-blue-200/70 text-[11px] space-y-0.5">
+                <li>• Paths are resolved via realpath before checking — symlinks and traversal (../) are followed to their real target.</li>
+                <li>• <strong>Read Only</strong> grants can view files but cannot write, delete, or move them.</li>
+                <li>• When the AI needs a directory not on this list, it will ask you first (Allow Once / Allow Always / Deny).</li>
+                <li>• Revoking a directory here immediately removes access — no caching layer holds stale permissions.</li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
 

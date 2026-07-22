@@ -46,6 +46,40 @@ module.exports = function registerPermissionHandlers(ipcMain, handlers) {
     actions: permissionStore.getAutoApprovedActions()
   }));
 
+  // --- Directory Allowlist IPC ---
+
+  ipcMain.handle('directory-allowlist-get', async () => {
+    try {
+      return { success: true, directories: permissionStore.getAllowedDirectories() };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('directory-allowlist-add', async (event, { dirPath }) => {
+    try {
+      const added = permissionStore.addAllowedDirectory(dirPath);
+      if (added) {
+        return { success: true, directories: permissionStore.getAllowedDirectories() };
+      }
+      return { success: false, error: 'Directory already in allowlist or invalid path.' };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('directory-allowlist-remove', async (event, { dirPath }) => {
+    try {
+      const removed = permissionStore.removeAllowedDirectory(dirPath);
+      if (removed) {
+        return { success: true, directories: permissionStore.getAllowedDirectories() };
+      }
+      return { success: false, error: 'Directory not found in allowlist.' };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
   ipcMain.handle('set-proxy', async (event, config) => {
     const updates = config
       ? {
@@ -91,6 +125,7 @@ module.exports = function registerPermissionHandlers(ipcMain, handlers) {
       requireBiometricEveryTime: !!storeSettings.requireBiometricEveryTime,
       autoApprovedCommands: Array.isArray(storeSettings.autoApprovedCommands) ? storeSettings.autoApprovedCommands : [],
       autoApprovedActions: Array.isArray(storeSettings.autoApprovedActions) ? storeSettings.autoApprovedActions : [],
+      allowedDirectories: permissionStore?.getAllowedDirectories?.() || [],
     };
   });
 

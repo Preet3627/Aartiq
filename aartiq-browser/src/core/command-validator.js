@@ -1,8 +1,14 @@
 const { exec, spawn } = require('child_process');
-const Store = require('electron-store');
-const { validateCommand: securityValidate, getShellRisk } = require('../../lib/SecurityValidator');
+const { validateCommand: securityValidate, getShellRisk } = require('../lib/SecurityValidator');
 
-const permissionStore = new Store({ name: 'comet-permissions' });
+// PermissionStore is injected at init time via setPermissionStore().
+// This replaces the old electron-store-based approach which was not wired
+// into the same PermissionStore used by the rest of the application.
+let permissionStore = null;
+
+function setPermissionStore(store) {
+  permissionStore = store;
+}
 
 function validateCommand(cmd) {
   if (!cmd || typeof cmd !== 'string') {
@@ -53,15 +59,89 @@ function explainCommand(cmd) {
   return cmds[firstWord] || `Execute command: ${firstWord}`;
 }
 
+/**
+ * Check whether a shell command is permitted.
+ *
+ * Resolves the tiering documented in the Security Model:
+ *   - critical risk  → always denied (must go through biometric approval)
+ *   - high risk      → denied unless the command (or 'shell_high') is granted
+ *   - medium risk    → denied unless the command (or 'shell_medium'/'shell_all') is granted
+ *   - low risk       → denied unless the command (or 'shell_low'/'shell_medium'/'shell_all') is granted
+ *
+ * Returns true only when an explicit grant exists in the PermissionStore.
+ * When no PermissionStore is configured the function returns false (safe default).
+ *
+ * Audit-doc line item: section 3d (command-validator.js) — replaced no-op
+ * `return true` with real permission-store check.
+ */
 function checkShellPermission(command, reason, riskLevel = 'medium') {
-  const cmdKey = `command_${command.split(' ')[0]}`;
-  if (permissionStore.get(cmdKey)) {
+  if (!permissionStore) {
+    console.warn('[CommandValidator] No PermissionStore configured — denying shell command');
+    return false;
+  }
+
+  const normalizedRisk = String(riskLevel || 'medium').toLowerCase();
+
+  // Critical-risk commands are never auto-approved through this gate;
+  // they must go through the biometric / high-risk QR approval flow.
+  if (normalizedRisk === 'critical') {
+    return false;
+  }
+
+  const firstWord = (command || '').trim().split(/\s+/)[0].toLowerCase();
+
+  // Check command-specific grant first
+  const cmdKey = `SHELL_CMD:${firstWord}`;
+  if (permissionStore.isGranted(cmdKey)) {
+    // Verify the grant's level is sufficient for the risk level
+    const level = permissionStore.getLevel(cmdKey);
+    if (isLevelSufficient(level, normalizedRisk)) {
+      return true;
+    }
+  }
+
+  // Check category-level grants (shell_high, shell_medium, shell_low, shell_all)
+  const riskToPermKey = {
+    high: 'SHELL_HIGH',
+    medium: 'SHELL_MEDIUM',
+    low: 'SHELL_LOW',
+  };
+  const requiredKey = riskToPermKey[normalizedRisk] || 'SHELL_MEDIUM';
+
+  // For a given risk level, any higher-level grant is also sufficient
+  const sufficientKeys = [];
+  if (normalizedRisk === 'low') {
+    sufficientKeys.push('SHELL_LOW', 'SHELL_MEDIUM', 'SHELL_HIGH', 'SHELL_ALL');
+  } else if (normalizedRisk === 'medium') {
+    sufficientKeys.push('SHELL_MEDIUM', 'SHELL_HIGH', 'SHELL_ALL');
+  } else if (normalizedRisk === 'high') {
+    sufficientKeys.push('SHELL_HIGH', 'SHELL_ALL');
+  }
+
+  for (const key of sufficientKeys) {
+    if (permissionStore.isGranted(key)) {
+      return true;
+    }
+  }
+
+  // Also check the auto-approval settings (respects user's auto-approve policy)
+  if (permissionStore.canAutoExecute && permissionStore.canAutoExecute(command, normalizedRisk)) {
     return true;
   }
-  if (permissionStore.get('shell_all')) {
-    return true;
-  }
+
   return false;
+}
+
+/**
+ * Map a PermissionStore level string to a numeric score so we can compare
+ * whether a grant is sufficient for the requested risk level.
+ */
+function isLevelSufficient(level, riskLevel) {
+  const levelScores = { read: 1, interact: 2, write: 3, execute: 4, send: 5 };
+  const riskMinScores = { low: 1, medium: 2, high: 3 };
+  const score = levelScores[level] || 0;
+  const min = riskMinScores[riskLevel] || 2;
+  return score >= min;
 }
 
 module.exports = {
@@ -69,5 +149,5 @@ module.exports = {
   analyzeCommandRisk,
   explainCommand,
   checkShellPermission,
-  permissionStore
+  setPermissionStore,
 };
