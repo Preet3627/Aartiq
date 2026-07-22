@@ -2,7 +2,7 @@
 
 import React, { useState, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Brain, Loader2, ChevronRight, Check, X, Zap } from 'lucide-react';
+import { Loader2, ChevronRight, Check, X, Zap } from 'lucide-react';
 
 export interface ThinkingStep {
   id: string;
@@ -46,11 +46,10 @@ const ThinkingPanel = memo(function ThinkingPanel({ steps = [], thinkText, initi
         {hasRunning ? (
           <>
             <motion.div
-              animate={{ opacity: [0.5, 1, 0.5] }}
+              className="w-2 h-2 rounded-full bg-sky-400"
+              animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
               transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <Brain size={11} />
-            </motion.div>
+            />
             <span>Thinking</span>
             <motion.div
               className="ml-1 flex items-center gap-0.5"

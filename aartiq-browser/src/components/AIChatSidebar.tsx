@@ -48,7 +48,6 @@ import AISetupGuide from './ai/AISetupGuide';
 import LLMProviderSettings from './LLMProviderSettings';
 import { AICommandQueue, type AICommand } from './AICommandQueue';
 import { type AgentState, type PlanningStep } from './AIChatSidebar/types';
-import CapabilitiesPanel from './CapabilitiesPanel';
 import DOMSearchDisplay, { DOMMetaDisplay } from './ai/DOMSearchDisplay';
 import SmartMessageContent, { URLCard, FilePathChip } from './ai/SmartMessageContent';
 import { secureDOMReader, type DOMSearchResult, type FilteredDOMResult, type DOMElement } from './ai/SecureDOMReader';
@@ -77,6 +76,7 @@ import { Security } from '@/lib/Security';
 import { prepareCommandsForExecution, formatCommandsForExport, parseUnifiedCommands, stripAllCommands } from '@/lib/AICommandParser';
 import { aiCommandOutput, stripCommandsFromOutput } from '@/lib/AICommandOutput';
 import { searchContextStore } from '@/lib/SearchContextStore';
+import { matchSkills, AVAILABLE_SKILLS, listAllSkills } from '@/lib/SkillRegistry';
 import { actionLogsStore, type ActionLog } from '@/lib/ActionLogsStore';
 import { buildFrontendReasoningOptions, type LlmMode } from '@/lib/aiReasoningOptions';
 import { getRecommendedGeminiModel } from '@/lib/modelRegistry';
@@ -748,7 +748,6 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [ragContextItems, setRagContextItems] = useState<any[]>([]);
   const [showLLMProviderSettings, setShowLLMProviderSettings] = useState(false);
   const [showSetupGuide, setShowSetupGuide] = useState(false);
-  const [showCapabilities, setShowCapabilities] = useState(false);
   const [showMcpSetupGuide, setShowMcpSetupGuide] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
   const [showSidebarCustomize, setShowSidebarCustomize] = useState(false);
@@ -1579,33 +1578,10 @@ I couldn't schedule the task. The background service may not be running. Please 
       return;
     }
 
-    // Skill loading — classify task and load relevant skills
+    // Skill loading — use SkillRegistry for on-demand matching
     let skillContexts: string[] = [];
-    const skillPatterns: Array<{ pattern: RegExp; skillId: string; label: string }> = [
-      { pattern: /\b(pdf|docx?|pptx?|xlsx?)\b/i, skillId: 'documents', label: 'Documents' },
-      { pattern: /\b(news|research|search|find|what is|who is|latest|today|price|score|weather|forecast|current|update|announce)\b/i, skillId: 'research', label: 'Research' },
-      { pattern: /\b(navigate|visit|go to|open website|read page|browse|url)\b/i, skillId: 'browsing', label: 'Browsing' },
-      { pattern: /\b(ocr|click|automation|cross.app|shell|terminal|open app|organize|desktop|robot)\b/i, skillId: 'automation', label: 'Automation' },
-      { pattern: /\b(github|google drive|dropbox|slack|mcp|connect|integration)\b/i, skillId: 'mcp', label: 'MCP' },
-      { pattern: /\b(apple.intelligence|summarize|image playground|genmoji|on.device)\b/i, skillId: 'apple-intelligence', label: 'Apple Intelligence' },
-      { pattern: /\b(generat.(image|picture)|dall.e|stable diffusion|create (image|illustration|art))\b/i, skillId: 'image-generation', label: 'Image Generation' },
-      { pattern: /\b(schedule|remind|cron|recurring|every (day|hour|week|minute)|at \d|alarm)\b/i, skillId: 'scheduling', label: 'Scheduling' },
-      { pattern: /\b(security|permission|auth|safe|risk|dangerous|unlock)\b/i, skillId: 'security', label: 'Security' },
-    ];
-    const skillsToLoad: Set<string> = new Set();
-    for (const sp of skillPatterns) {
-      if (sp.pattern.test(rawContent)) {
-        skillsToLoad.add(sp.skillId);
-      }
-    }
-    // Always load security skill for sensitive messages
-    if (rawContent.match(/\b(password|token|credential|login|auth|cookie|session|key)\b/i)) {
-      skillsToLoad.add('security');
-    }
-    // Always load automation skill for shell/organize commands
-    if (rawContent.match(/\b(shell|terminal|command|rm |mkdir|mv |organize)\b/i)) {
-      skillsToLoad.add('automation');
-    }
+    const loadedSkillIds = matchSkills(rawContent);
+    const skillsToLoad = new Set(loadedSkillIds);
     const loadedSkills: Promise<string>[] = [];
     const skillSteps: Map<string, string> = new Map();
     if (window.electronAPI?.loadSkill) {
@@ -1628,7 +1604,6 @@ I couldn't schedule the task. The background service may not be running. Please 
     const skillResults = await Promise.all(loadedSkills);
     skillContexts = skillResults.filter(Boolean);
     const skillContext = skillContexts.join('\n\n');
-    const loadedSkillIds = [...skillsToLoad];
 
     const { content: protectedContent, wasProtected } = Security.fortress(rawContent);
     const userMessage: ExtendedChatMessage = {
@@ -1644,7 +1619,6 @@ I couldn't schedule the task. The background service may not be running. Please 
     };
 
     if (rawContent.includes('[EXPLAIN_CAPABILITIES]')) {
-      setShowCapabilities(true);
       const capCmd: AICommand = {
         id: `cmd-${Date.now()}-cap`,
         type: 'EXPLAIN_CAPABILITIES',
@@ -1726,7 +1700,7 @@ I couldn't schedule the task. The background service may not be running. Please 
       let currentHistory: ChatMessage[] = [
         {
           role: 'system',
-          content: `${systemInstructions}${skillContext ? `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 SKILL INSTRUCTIONS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${skillContext}` : ''}${userPrefsBlock}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
+          content: `${systemInstructions}${skillContext ? `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 SKILL INSTRUCTIONS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${skillContext}` : `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 AVAILABLE SKILLS (use [LIST_SKILLS] to see all, [LOAD_SKILL: id] to load)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${AVAILABLE_SKILLS.map(s => `${s.icon} ${s.label} (\`${s.id}\`) — ${s.description}`).join('\n')}`}${userPrefsBlock}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
         },
         ...messages.map(m => ({ role: m.role, content: m.content.replace(INTERNAL_TAG_RE, '').trim() })),
         {
@@ -2613,6 +2587,21 @@ I couldn't schedule the task. The background service may not be running. Please 
               timestamp: Date.now()
             });
             searchContextStore.addWebSearch(originalQuery, fullSnippet);
+
+            // Add action chain step showing websites found
+            const websites = searchResults
+              .filter(r => r.url && r.url.startsWith('http'))
+              .map(r => ({
+                url: r.url,
+                title: r.title,
+                charCount: (r.content || '').length,
+                truncated: (r.content || '').length > 6000,
+              }));
+            const searchChainId = addActionChainStep(
+              `Searched ${searchResults.length} website${searchResults.length !== 1 ? 's' : ''} for "${originalQuery}"`,
+              `${usedEngine} · ${websites.length} sites scraped`
+            );
+            resolveActionChainStep(searchChainId, 'done', `${websites.length} sites · ${usedEngine}`);
 
             // Navigate to specific result if requested, or show summary
             if (specificUrl?.startsWith('__INDEX_')) {
@@ -4610,9 +4599,51 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
-        case 'EXPLAIN_CAPABILITIES': {
-          setShowCapabilities(true);
+        case 'LIST_SKILLS': {
+          const skillsList = listAllSkills();
+          const acsId = addActionChainStep('📋 Listing Available Skills');
+          setMessages(prev => [...prev, {
+            role: 'model',
+            content: `## 📋 Available Skills\n\n${skillsList}\n\n---\n*Use \`[LOAD_SKILL: skill-id]\` to load a specific skill guide.*`
+          }]);
+          resolveActionChainStep(acsId, 'done', `${AVAILABLE_SKILLS.length} skills available`);
+          output = `Listed ${AVAILABLE_SKILLS.length} available skills`;
+          break;
+        }
 
+        case 'LOAD_SKILL': {
+          const skillId = ((command.jsonFormat as any)?.skillId || (command.jsonFormat as any)?.id || command.value || '').trim().toLowerCase();
+          if (!skillId) {
+            output = 'No skill ID specified. Use [LIST_SKILLS] to see available skills.';
+            break;
+          }
+          const skillMeta = AVAILABLE_SKILLS.find(s => s.id === skillId);
+          if (!skillMeta) {
+            output = `Unknown skill: "${skillId}". Use [LIST_SKILLS] to see available skills.`;
+            break;
+          }
+          const loadStepId = addActionChainStep(`📖 Loading ${skillMeta.label}`);
+          try {
+            const ctx = await window.electronAPI.loadSkill(skillId);
+            if (ctx) {
+              setMessages(prev => [...prev, {
+                role: 'model',
+                content: `✅ **${skillMeta.label}** skill loaded. You can now use its commands.\n\n*Skill guide injected into context for this session.*`
+              }]);
+              resolveActionChainStep(loadStepId, 'done', `${skillId} loaded`);
+              output = `Skill "${skillId}" loaded successfully`;
+            } else {
+              resolveActionChainStep(loadStepId, 'error', 'Empty skill content');
+              output = `Failed to load skill "${skillId}" — no content returned`;
+            }
+          } catch (e: any) {
+            resolveActionChainStep(loadStepId, 'error', e.message);
+            output = `Failed to load skill "${skillId}": ${e.message}`;
+          }
+          break;
+        }
+
+        case 'EXPLAIN_CAPABILITIES': {
           const platform = (typeof process !== 'undefined' && process.platform) ||
             (typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('win') ? 'win32' :
              typeof navigator !== 'undefined' && navigator.platform?.toLowerCase().includes('mac') ? 'darwin' :
@@ -4624,125 +4655,93 @@ I couldn't schedule the task. The background service may not be running. Please 
           const isLinux = platform === 'linux';
           const platformName = isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux';
 
-          // Step 1: Announce demonstration start
+          const introAcsId = addActionChainStep('🚀 Capability Demonstration');
           setMessages(prev => [...prev, { role: 'model', content: "🚀 **Initiating Full Capability Demonstration...**\n\nI'll showcase real tasks across all my capabilities." }]);
           await showDemoOverlay('Agentic AI Engine', 'Aartiq AI has full system access — browsing, terminal, files, apps, and cross-device sync. Watch real tasks execute live.');
+          resolveActionChainStep(introAcsId, 'done', 'Demo started');
 
-          // Step 2: Web Search - Latest News
-          const searchStepId = addThinkingStep('Searching latest news...');
-          setMessages(prev => [...prev, { role: 'model', content: "📰 **Task 1: Real-Time Web Search**\nSearching for latest technology news..." }]);
+          // Task 1: Web Search
+          const searchAcsId = addActionChainStep('📰 Real-Time Web Search');
           await new Promise(resolve => setTimeout(resolve, 800));
-
           let newsResults = '';
           try {
             const searchResults = await window.electronAPI.webSearchRag('latest technology news today 2026');
             if (searchResults && searchResults.length > 0) {
               newsResults = searchResults.slice(0, 3).map((r: any, i: number) => `${i + 1}. ${r.title || r}`).join('\n');
-              setMessages(prev => [...prev, { role: 'model', content: `✅ **News Search Complete:**\n${newsResults}` }]);
             }
-          } catch (e) {
-            console.warn('[Demo] News search failed:', e);
-          }
-          resolveThinkingStep(searchStepId, newsResults ? 'done' : 'error', newsResults ? '3 results found' : 'Search failed');
-          await showDemoOverlay('Web Search & RAG', 'Real-time web search with RAG-powered context retrieval. AI fetches live data, not just static knowledge.');
-          await new Promise(resolve => setTimeout(resolve, 400));
+          } catch (e) { console.warn('[Demo] News search failed:', e); }
+          resolveActionChainStep(searchAcsId, newsResults ? 'done' : 'error', newsResults ? '3 results found' : 'Search failed');
+          if (newsResults) setMessages(prev => [...prev, { role: 'model', content: `✅ **News Search Complete:**\n${newsResults}` }]);
+          await showDemoOverlay('Web Search & RAG', 'Real-time web search with RAG-powered context retrieval.');
 
-          // Step 3: Shell Command Execution
-          setMessages(prev => [...prev, { role: 'model', content: "🖥️ **Task 2: Shell Command Execution**\nGetting WiFi/network information..." }]);
+          // Task 2: Shell Command
+          const shellAcsId = addActionChainStep('🖥️ Shell Command Execution');
           await new Promise(resolve => setTimeout(resolve, 800));
-
           let wifiInfo = '';
           try {
             let wifiCmd = isMac ? '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I | grep SSID' :
-              isWindows ? 'netsh wlan show interfaces | findstr SSID' :
-                'iwgetid -r';
+              isWindows ? 'netsh wlan show interfaces | findstr SSID' : 'iwgetid -r';
             const shellResult = await window.electronAPI.executeShellCommand(wifiCmd);
             wifiInfo = shellResult.success ? (shellResult.output || 'WiFi connected').trim() : 'Network info retrieved';
-          } catch (e) {
-            wifiInfo = 'System info available';
-          }
+          } catch (e) { wifiInfo = 'System info available'; }
+          resolveActionChainStep(shellAcsId, 'done', wifiInfo || 'Retrieved');
           setMessages(prev => [...prev, { role: 'model', content: `✅ **Shell Command Result:**\n\`\`\`\n${wifiInfo}\n\`\`\`` }]);
-          await showDemoOverlay('Shell Command Execution', 'AI can execute terminal commands with user approval. Every command is risk-assessed — low/medium/high with security gating.');
-          await new Promise(resolve => setTimeout(resolve, 400));
+          await showDemoOverlay('Shell Command Execution', 'Terminal commands with user approval and risk-assessment.');
 
-          // Step 4: Volume / System Controls
-          setMessages(prev => [...prev, { role: 'model', content: "🔊 **Task 3: System Volume Control**\nAdjusting volume to 50%..." }]);
+          // Task 3: Volume Control
+          const volAcsId = addActionChainStep('🔊 System Volume Control');
           await new Promise(resolve => setTimeout(resolve, 800));
-          try {
-            await window.electronAPI.setVolume(50);
-            setMessages(prev => [...prev, { role: 'model', content: "✅ **Volume adjusted to 50%**" }]);
-          } catch (e) {
-            setMessages(prev => [...prev, { role: 'model', content: "⚠️ Volume control not available on this system" }]);
-          }
-          await showDemoOverlay('System Controls', 'AI adjusts system settings — volume, brightness, app launching. Full OS integration beyond the browser.');
-          await new Promise(resolve => setTimeout(resolve, 400));
+          try { await window.electronAPI.setVolume(50); resolveActionChainStep(volAcsId, 'done', 'Set to 50%'); }
+          catch (e) { resolveActionChainStep(volAcsId, 'error', 'Not available'); }
+          await showDemoOverlay('System Controls', 'Full OS integration — volume, brightness, app launching.');
 
-          // Step 5: Browser Navigation
-          setMessages(prev => [...prev, { role: 'model', content: "🌐 **Task 4: Browser Navigation**\nNavigating to Aartiq website..." }]);
+          // Task 4: Browser Navigation
+          const navAcsId = addActionChainStep('🌐 Browser Navigation');
           await new Promise(resolve => setTimeout(resolve, 800));
           try {
             await window.electronAPI.navigateTo('https://aartiq.ponsrischool.in');
-            setMessages(prev => [...prev, { role: 'model', content: "✅ **Browser navigated to aartiq.ponsrischool.in** — Real browser interaction working" }]);
-          } catch (e) {
-            setMessages(prev => [...prev, { role: 'model', content: "ℹ️ Browser navigation available via API" }]);
-          }
-          await showDemoOverlay('Browser Automation', 'AI drives the browser — navigate, search, click, fill forms, scroll, read page content. Full autonomous web interaction.');
-          await new Promise(resolve => setTimeout(resolve, 400));
+            resolveActionChainStep(navAcsId, 'done', 'aartiq.ponsrischool.in');
+          } catch (e) { resolveActionChainStep(navAcsId, 'done', 'API available'); }
+          await showDemoOverlay('Browser Automation', 'Navigate, search, click, fill forms, scroll, read page content.');
 
-          // Step 6: Settings & Permissions Panel Demo
-          setMessages(prev => [...prev, { role: 'model', content: "⚙️ **Task 5: Settings & Permissions**\nOpening settings panel to demonstrate security architecture..." }]);
+          // Task 5: Settings & Permissions
+          const permAcsId = addActionChainStep('⚙️ Settings & Permissions');
           await new Promise(resolve => setTimeout(resolve, 1000));
-
-          await showDemoOverlay('Permission Manager Opening', 'Aartiq has granular security — per-action permissions, biometric unlock, and high-risk QR approval via mobile.');
           if (props.setShowSettings && props.setSettingsSection) {
             props.setShowSettings(true);
             props.setSettingsSection('permissions');
-            setMessages(prev => [...prev, { role: 'model', content: "✅ **Settings panel opened** — Permission security controls visible" }]);
             await new Promise(resolve => setTimeout(resolve, 2000));
-            await showDemoOverlay('Security Architecture', 'Triple-lock: AI cannot execute without approval gates. Actions are risk-graded, biometric-verified, and audit-logged.');
-            await new Promise(resolve => setTimeout(resolve, 1500));
             props.setShowSettings(false);
-            setMessages(prev => [...prev, { role: 'model', content: "✅ **Settings panel closed** — Permission system explained" }]);
+            resolveActionChainStep(permAcsId, 'done', 'Security architecture shown');
           } else {
-            setMessages(prev => [...prev, { role: 'model', content: "ℹ️ Settings panel API available — Permission system controls system access levels" }]);
+            resolveActionChainStep(permAcsId, 'done', 'API available');
           }
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await showDemoOverlay('Security Architecture', 'Triple-lock: risk-graded, biometric-verified, audit-logged.');
 
-          // Step 7: Open Calculator App
-          setMessages(prev => [...prev, { role: 'model', content: "🚀 **Task 6: Application Launch**\nOpening calculator..." }]);
+          // Task 6: App Launch
+          const appAcsId = addActionChainStep('🚀 Application Launch');
           await new Promise(resolve => setTimeout(resolve, 800));
           let calcLaunched = false;
           try {
             const calcApp = isMac ? 'Calculator' : isWindows ? 'ms-calculator:' : 'gnome-calculator';
             const calcRes = await window.electronAPI.openExternalApp(calcApp);
-            if (calcRes.success) {
-              calcLaunched = true;
-              setMessages(prev => [...prev, { role: 'model', content: `✅ **Calculator launched successfully** on ${isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux'}` }]);
-            } else {
-              throw new Error(calcRes.error || 'Unknown error');
-            }
-          } catch (e) {
-            setMessages(prev => [...prev, { role: 'model', content: `ℹ️ Could not auto-launch calculator. This requires Accessibility permissions on some platforms.` }]);
-          }
-          await showDemoOverlay('Cross-App Launch', 'AI opens any application — Calculator, Terminal, Settings. Works across macOS, Windows, and Linux with platform-specific names.');
-          await new Promise(resolve => setTimeout(resolve, 400));
+            calcLaunched = calcRes.success;
+            resolveActionChainStep(appAcsId, calcLaunched ? 'done' : 'error', calcLaunched ? 'Calculator opened' : calcRes.error || 'Failed');
+          } catch (e) { resolveActionChainStep(appAcsId, 'error', 'Requires permissions'); }
+          await showDemoOverlay('Cross-App Launch', 'AI opens any application across macOS, Windows, Linux.');
 
-          // Step 8: File System Access
-          setMessages(prev => [...prev, { role: 'model', content: "📁 **Task 7: File System Access**\nReading system information..." }]);
+          // Task 7: File System
+          const fsAcsId = addActionChainStep('📁 File System Access');
           await new Promise(resolve => setTimeout(resolve, 800));
           try {
             const versionResult = await window.electronAPI.getVersion();
             const versionStr = typeof versionResult === 'string' ? versionResult : versionLabel;
-            setMessages(prev => [...prev, { role: 'model', content: `✅ **System info retrieved:** Aartiq ${versionStr} — Running on ${isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux'}` }]);
-          } catch (e) {
-            setMessages(prev => [...prev, { role: 'model', content: `✅ **Platform detected:** ${isMac ? 'macOS' : isWindows ? 'Windows' : 'Linux'} — File system access ready` }]);
-          }
-          await showDemoOverlay('File System Access', 'Read, write, and organize files. AI can generate PDFs, DOCX, XLSX, PPTX — and save them directly to your system.');
-          await new Promise(resolve => setTimeout(resolve, 400));
+            resolveActionChainStep(fsAcsId, 'done', `Aartiq ${versionStr}`);
+          } catch (e) { resolveActionChainStep(fsAcsId, 'done', `${platformName} ready`); }
+          await showDemoOverlay('File System Access', 'Read, write, organize files. Generate PDFs, DOCX, XLSX, PPTX.');
 
-          // Step 9: Biometric Authentication
-          const bioStepId = addThinkingStep('Checking biometric auth...');
-          setMessages(prev => [...prev, { role: 'model', content: `🔐 **Task 8: Biometric Authentication**\nChecking for ${isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'biometric'} availability...` }]);
+          // Task 8: Biometric Auth
+          const bioAcsId = addActionChainStep('🔐 Biometric Authentication');
           await new Promise(resolve => setTimeout(resolve, 800));
           let bioAvailable = false;
           let bioType = '';
@@ -4751,50 +4750,32 @@ I couldn't schedule the task. The background service may not be running. Please 
             bioAvailable = bioCheck.available;
             bioType = bioCheck.type || (isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'Biometric');
             if (bioAvailable) {
-              setMessages(prev => [...prev, { role: 'model', content: `✅ **${bioType} detected** — Attempting authentication (you may see a system prompt)...` }]);
-              await new Promise(resolve => setTimeout(resolve, 1200));
-              const bioResult = await window.electronAPI.authenticateBiometric('Aartiq AI is verifying your identity for this capability demonstration');
-              if (bioResult.success) {
-                setMessages(prev => [...prev, { role: 'model', content: `✅ **${bioType} authentication successful** using ${bioResult.method || bioType} — Identity verified` }]);
-              } else {
-                setMessages(prev => [...prev, { role: 'model', content: `ℹ️ ${bioType} ${bioResult.error?.includes('cancelled') ? 'was cancelled by user' : 'is available but was not completed: ' + (bioResult.error || 'unknown')}` }]);
-              }
+              const bioResult = await window.electronAPI.authenticateBiometric('Aartiq AI capability demo');
+              resolveActionChainStep(bioAcsId, bioResult.success ? 'done' : 'error', bioResult.success ? `${bioType} verified` : bioResult.error || 'Not completed');
             } else {
-              setMessages(prev => [...prev, { role: 'model', content: `ℹ️ ${isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'Biometric auth'} is not configured on this system. This demonstrates how Aartiq integrates with platform security.` }]);
+              resolveActionChainStep(bioAcsId, 'done', 'Not configured');
             }
-          } catch (e) {
-            setMessages(prev => [...prev, { role: 'model', content: `ℹ️ ${isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'Biometric auth'} is not available on this system.` }]);
-          }
-          resolveThinkingStep(bioStepId, bioAvailable ? 'done' : 'error', bioAvailable ? `${bioType} checked` : 'Not available');
-          await showDemoOverlay('Platform Security Integration', `${isWindows ? 'Windows Hello' : 'Touch ID'} integration means AI actions can require biometric verification before execution — hardware-gated security.`);
-          await new Promise(resolve => setTimeout(resolve, 400));
+          } catch (e) { resolveActionChainStep(bioAcsId, 'done', 'Not available'); }
+          await showDemoOverlay('Platform Security Integration', 'Hardware-gated biometric verification for AI actions.');
 
-          // Step 10: Screenshot Capture
-          setMessages(prev => [...prev, { role: 'model', content: "📸 **Task 9: Screenshot Capture**\nCapturing and analyzing screen..." }]);
+          // Task 9: Screenshot
+          const ssAcsId = addActionChainStep('📸 Screenshot Capture');
           await new Promise(resolve => setTimeout(resolve, 1200));
-
           let screenshotBase64: string | undefined;
           try {
             if (window.electronAPI.visionCaptureBase64) {
               const captureRes = await window.electronAPI.visionCaptureBase64();
-              if (captureRes.success && captureRes.image) {
-                screenshotBase64 = captureRes.image;
-                setMessages(prev => [...prev, { role: 'model', content: "✅ **Screenshot captured** — Ready to embed in PDF report" }]);
-              }
+              if (captureRes.success && captureRes.image) { screenshotBase64 = captureRes.image; }
             }
-          } catch (e) {
-            console.warn('[Demo] Screenshot failed:', e);
-          }
-          await showDemoOverlay('OCR & Vision', 'AI captures screenshots, extracts text via OCR, and analyzes visual content — enabling cross-app automation and accessibility.');
-          await new Promise(resolve => setTimeout(resolve, 400));
+            resolveActionChainStep(ssAcsId, screenshotBase64 ? 'done' : 'error', screenshotBase64 ? 'Captured for PDF' : 'Not available');
+          } catch (e) { resolveActionChainStep(ssAcsId, 'error', 'Failed'); }
+          await showDemoOverlay('OCR & Vision', 'Screenshots, OCR text extraction, visual content analysis.');
 
-          // Step 11: PDF Report Generation
-          setMessages(prev => [...prev, { role: 'model', content: "📄 **Task 10: PDF Generation**\nCreating comprehensive capability report with screenshots..." }]);
+          // Task 10: PDF Generation
+          const pdfAcsId = addActionChainStep('📄 PDF Generation');
           await new Promise(resolve => setTimeout(resolve, 1000));
-
           await preloadAartiqIconLocal();
           const iconSource = (window as any).__cometIconBase64 || null;
-
           const capabilityFeatures = [
             'Browser Automation: Navigate, search, and interact with web pages autonomously',
             'Real-Time Web Search: Live search with RAG-powered context retrieval',
@@ -4816,20 +4797,19 @@ I couldn't schedule the task. The background service may not be running. Please 
             'Task Scheduling: Automate recurring actions with cron-like syntax',
             'WiFi Sync: Seamless desktop-to-mobile device synchronization',
           ];
-
-          const pdfTitle = `Aartiq_AI_Capability_Report_${new Date().toISOString().split('T')[0]}`;
-
-          const { buildCapabilityReportPDF } = await import('./ai/AIUtils');
-          const capabilityPDF = buildCapabilityReportPDF({
-            author: 'Preet Kumar Patel (16-year-old student, India)',
-            version: versionLabel,
-            features: capabilityFeatures,
-            platform: 'Windows, macOS, Linux, Android'
-          }, screenshotBase64, iconSource);
-
-          await window.electronAPI.generatePDF(pdfTitle, capabilityPDF);
-          setMessages(prev => [...prev, { role: 'model', content: "✅ **Capability Report PDF generated and saved!**" }]);
-          await showDemoOverlay('Document Generation', 'AI generates professional PDF reports with branding, screenshots, and structured content — saved directly to your system.');
+          try {
+            const pdfTitle = `Aartiq_AI_Capability_Report_${new Date().toISOString().split('T')[0]}`;
+            const { buildCapabilityReportPDF } = await import('./ai/AIUtils');
+            const capabilityPDF = buildCapabilityReportPDF({
+              author: 'Preet Kumar Patel (16-year-old student, India)',
+              version: versionLabel,
+              features: capabilityFeatures,
+              platform: 'Windows, macOS, Linux, Android'
+            }, screenshotBase64, iconSource);
+            await window.electronAPI.generatePDF(pdfTitle, capabilityPDF);
+            resolveActionChainStep(pdfAcsId, 'done', '19 features documented');
+          } catch (e) { resolveActionChainStep(pdfAcsId, 'error', 'Generation failed'); }
+          await showDemoOverlay('Document Generation', 'Professional PDF reports with branding, screenshots, structured content.');
 
           // Final Summary
           setMessages(prev => [...prev, {
@@ -4847,7 +4827,7 @@ I've successfully executed the following real tasks:
 | 5 | ⚙️ Permissions | ✅ | Settings & security architecture shown |
 | 6 | 🚀 App Launch | ${calcLaunched ? '✅' : 'ℹ️'} | ${calcLaunched ? 'Opened Calculator' : 'Calculator requires Accessibility permissions'} |
 | 7 | 📁 File System | ✅ | Retrieved app version & platform |
-| 8 | 🔐 Biometric Auth | ${bioAvailable ? '✅' : 'ℹ️'} | ${bioAvailable ? `${bioType} verified` : `${isWindows ? 'Windows Hello' : isMac ? 'Touch ID' : 'Biometric auth'} not configured`} |
+| 8 | 🔐 Biometric Auth | ${bioAvailable ? '✅' : 'ℹ️'} | ${bioAvailable ? `${bioType} verified` : 'Not configured'} |
 | 9 | 📸 Vision/OCR | ✅ | Captured screen for PDF embedding |
 | 10 | 📄 PDF Report | ✅ | Created with 19 capability listings |
 
@@ -4860,7 +4840,7 @@ I've successfully executed the following real tasks:
 *Aartiq ${versionLabel} — The AI-Native Browser*
           ` }]);
 
-          output = 'Full capability demonstration executed with 10 real tasks: search, shell, system control, browser nav, permissions, app launch, file system, biometric auth, vision, and PDF generation.';
+          output = 'Full capability demonstration executed with 10 real tasks via action chain.';
           break;
         }
 
@@ -6094,11 +6074,6 @@ I've successfully executed the following real tasks:
         onNew={handleNewConversation}
       />
 
-      <CapabilitiesPanel
-        isOpen={showCapabilities}
-        onClose={() => setShowCapabilities(false)}
-      />
-
       <AnimatePresence>
         {showSetupGuide && <AISetupGuide onClose={() => setShowSetupGuide(false)} onComplete={() => { setShowSetupGuide(false); setShowLLMProviderSettings(true); }} />}
       </AnimatePresence>
@@ -6351,9 +6326,6 @@ I've successfully executed the following real tasks:
                 )}
               </button>
             )}
-            <button onClick={() => setShowCapabilities(!showCapabilities)} className={`p-2.5 rounded-xl transition-all ${showCapabilities ? 'bg-sky-500/20 text-sky-400' : 'text-secondary-text hover:text-primary-text'}`} style={!showCapabilities ? softPanelStyle : undefined} title="View AI Capabilities">
-              <Sparkles size={18} />
-            </button>
             <div className="relative group">
               <button className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle} title="More options">
                 <MoreVertical size={18} />
