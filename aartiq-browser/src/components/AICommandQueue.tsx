@@ -35,6 +35,7 @@ export interface AICommand {
     riskLevel?: 'low' | 'medium' | 'high' | 'critical';
     reason?: string;
     jsonFormat?: object;
+    params?: Record<string, any>;
 }
 
 interface AICommandQueueProps {

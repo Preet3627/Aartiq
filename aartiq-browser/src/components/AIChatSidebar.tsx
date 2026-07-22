@@ -1580,9 +1580,25 @@ I couldn't schedule the task. The background service may not be running. Please 
       return;
     }
 
+    // ── Natural Language Skill Loading: "load X skill" ──
+    const loadSkillPattern = /^(?:load|use|activate|enable)\s+(?:the\s+)?(.+?)(?:\s+skill)?$/i;
+    const loadMatch = rawContent.match(loadSkillPattern);
+    let explicitLoadSkillId: string | null = null;
+    if (loadMatch) {
+      const skillName = loadMatch[1].trim().toLowerCase();
+      const matchedSkill = AVAILABLE_SKILLS.find(
+        s => s.id === skillName || s.label.toLowerCase().includes(skillName) || skillName.includes(s.id)
+      );
+      if (matchedSkill) {
+        explicitLoadSkillId = matchedSkill.id;
+      }
+    }
+
     // Skill loading — use SkillRegistry for on-demand matching
     let skillContexts: string[] = [];
-    const loadedSkillIds = matchSkills(rawContent);
+    const loadedSkillIds = explicitLoadSkillId
+      ? [...new Set([...matchSkills(rawContent), explicitLoadSkillId])]
+      : matchSkills(rawContent);
     const skillsToLoad = new Set(loadedSkillIds);
     const loadedSkills: Promise<string>[] = [];
     const skillSteps: Map<string, string> = new Map();
@@ -1606,6 +1622,19 @@ I couldn't schedule the task. The background service may not be running. Please 
     const skillResults = await Promise.all(loadedSkills);
     skillContexts = skillResults.filter(Boolean);
     const skillContext = skillContexts.join('\n\n');
+
+    // If the user explicitly asked to load a skill and we handled it, respond directly
+    if (explicitLoadSkillId && skillContexts.length > 0) {
+      const loadedMeta = AVAILABLE_SKILLS.find(s => s.id === explicitLoadSkillId);
+      const responseMsg = loadedMeta
+        ? `✅ **${loadedMeta.label}** skill loaded. You can now use its commands.\n\n*Try asking me to manage settings, view bookmarks, or customize your experience.*`
+        : `✅ **${explicitLoadSkillId}** skill loaded.`;
+      setMessages(prev => [...prev, { id: createMessageId('assistant'), role: 'model', content: responseMsg } as ExtendedChatMessage]);
+      setIsLoading(false);
+      setIsThinking(false);
+      setAgentState('idle');
+      return;
+    }
 
     const { content: protectedContent, wasProtected } = Security.fortress(rawContent);
     const userMessage: ExtendedChatMessage = {
@@ -1702,7 +1731,7 @@ I couldn't schedule the task. The background service may not be running. Please 
       let currentHistory: ChatMessage[] = [
         {
           role: 'system',
-          content: `${systemInstructions}${skillContext ? `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 SKILL INSTRUCTIONS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${skillContext}` : `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 AVAILABLE SKILLS (use [LIST_SKILLS] to see all, [LOAD_SKILL: id] to load)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${AVAILABLE_SKILLS.map(s => `${s.icon} ${s.label} (\`${s.id}\`) — ${s.description}`).join('\n')}`}${userPrefsBlock}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
+          content: `${systemInstructions}${skillContext ? `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 SKILL INSTRUCTIONS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${skillContext}\n\n✅ Required skills are already loaded above. Do NOT use the [LOAD_SKILL] command — the skill guide is already in context.` : `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 AVAILABLE SKILLS (use [LIST_SKILLS] to see all, [LOAD_SKILL: id] to load)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${AVAILABLE_SKILLS.map(s => `${s.icon} ${s.label} (\`${s.id}\`) — ${s.description}`).join('\n')}`}${userPrefsBlock}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
         },
         ...messages.map(m => ({ role: m.role, content: m.content.replace(INTERNAL_TAG_RE, '').trim() })),
         {
