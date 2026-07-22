@@ -181,20 +181,18 @@ function HighRiskQrSection({
                   setPinVerified(false);
                 }
               }}
-              disabled={!mobileApproved}
+              disabled={false}
               maxLength={expectedPin.length || 6}
               inputMode="numeric"
               pattern="[0-9]*"
               autoComplete="off"
               placeholder={`Enter ${expectedPin.length || 6}-digit PIN`}
               className={`w-full rounded-lg border px-3 py-2.5 text-center font-mono text-sm font-semibold tracking-widest outline-none transition-colors ${
-                !mobileApproved
-                  ? 'border-white/10 bg-white/5 text-secondary-text/50 cursor-not-allowed'
-                  : pinVerified
-                    ? 'border-emerald-500/50 bg-emerald-500/5 text-emerald-400'
-                    : pinInput.length === expectedPin.length
-                      ? 'border-red-500/50 bg-red-500/5 text-red-400'
-                      : 'border-white/20 bg-white/5 text-primary-text focus:border-[var(--accent)]'
+                pinVerified
+                  ? 'border-emerald-500/50 bg-emerald-500/5 text-emerald-400'
+                  : pinInput.length === expectedPin.length
+                    ? 'border-red-500/50 bg-red-500/5 text-red-400'
+                    : 'border-white/20 bg-white/5 text-primary-text focus:border-[var(--accent)]'
               }`}
             />
             {pinInput.length === expectedPin.length && !pinVerified && (
@@ -294,14 +292,26 @@ function SinglePermissionCard({
 
   const canApprove = isHighRisk ? (mobileApproved && pinVerified) : true;
   const approveLabel = isHighRisk
-    ? !mobileApproved
-      ? 'Awaiting Mobile Approval'
-      : !pinVerified
-        ? 'Enter Matching PIN'
-        : 'Approve (QR + PIN)'
+    ? (!mobileApproved || !pinVerified)
+      ? (!mobileApproved ? 'Scan QR on Mobile' : 'Enter PIN to Approve')
+      : 'Approve (Verified)'
     : alwaysAllow
       ? 'Always Allow'
       : 'Allow Once';
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.shiftKey && event.key === 'Tab') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (canApprove) {
+          onAllow(false); // Triggers "Allow Once"
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKey, true);
+    return () => window.removeEventListener('keydown', handleKey, true);
+  }, [canApprove, onAllow]);
 
   return (
     <PermissionShell>
@@ -456,6 +466,20 @@ function BatchPermissionCard({
       return next;
     });
   };
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.shiftKey && event.key === 'Tab') {
+        event.preventDefault();
+        event.stopPropagation();
+        if (selected.size > 0) {
+          onAllowBatch(Array.from(selected));
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKey, true);
+    return () => window.removeEventListener('keydown', handleKey, true);
+  }, [selected, onAllowBatch]);
 
   return (
     <PermissionShell wide>

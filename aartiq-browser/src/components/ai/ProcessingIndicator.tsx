@@ -31,14 +31,14 @@ interface ProcessingIndicatorProps {
 }
 
 interface PhaseConfig {
-  icon: React.FC<any>;
+  icon: React.FC<any> | null;
   color: string;
   dotColor: string;
   label: string;
 }
 
 const PHASE_MAP: Record<string, PhaseConfig> = {
-  thinking:   { icon: Brain,            color: 'text-indigo-400', dotColor: 'bg-indigo-400', label: 'Thinking' },
+  thinking:   { icon: null,             color: 'text-indigo-400', dotColor: 'bg-indigo-400', label: 'Thinking' },
   searching:  { icon: Search,           color: 'text-cyan-400',   dotColor: 'bg-cyan-400',   label: 'Searching' },
   executing:  { icon: Zap,              color: 'text-sky-400',    dotColor: 'bg-sky-400',     label: 'Executing' },
   waiting:    { icon: Clock,            color: 'text-orange-400', dotColor: 'bg-orange-400',  label: 'Waiting' },
@@ -171,19 +171,23 @@ const ProcessingIndicator = memo(function ProcessingIndicator({
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="flex items-center gap-1.5 min-w-0"
           >
-            <motion.div
-              animate={agentState === 'executing' || agentState === 'searching'
-                ? { rotate: [0, 10, -10, 0] }
-                : { scale: [1, 1.1, 1] }
-              }
-              transition={{
-                duration: agentState === 'executing' ? 0.6 : 2,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-            >
-              <IconComponent size={12} className={phase.color} />
-            </motion.div>
+            {IconComponent && (
+              <motion.div
+                animate={agentState === 'thinking'
+                  ? { rotate: 360 }
+                  : agentState === 'executing' || agentState === 'searching'
+                    ? { rotate: [0, 10, -10, 0] }
+                    : { scale: [1, 1.1, 1] }
+                }
+                transition={{
+                  duration: agentState === 'thinking' ? 1.2 : (agentState === 'executing' ? 0.6 : 2),
+                  repeat: Infinity,
+                  ease: agentState === 'thinking' ? 'linear' : 'easeInOut',
+                }}
+              >
+                <IconComponent size={12} className={phase.color} />
+              </motion.div>
+            )}
 
             <span className={`text-[12px] font-medium ${phase.color} truncate`}>
               {displayLabel}

@@ -224,6 +224,10 @@ declare global {
 
             // Shell Commands
             executeShellCommand: (args: string | { rawCommand: string, preApproved?: boolean, reason?: string, riskLevel?: string }) => Promise<{ success: boolean; output?: string; error?: string }>;
+            onShellPermissionRequest: (callback: (payload: { requestId: string; command: string; reason: string; riskLevel: string }) => void) => () => void;
+            respondShellPermission: (requestId: string, granted: boolean, remember?: boolean) => void;
+            getCliToken: () => Promise<{ success: boolean; token?: string; tokenPath?: string; error?: string }>;
+            regenerateCliToken: () => Promise<{ success: boolean; token?: string; tokenPath?: string; error?: string }>;
 
             // Cross-App Control APIs
             captureScreenRegion: (coords: { x: number; y: number; width: number; height: number }) => Promise<{ success: boolean; image?: string; error?: string }>;
@@ -320,6 +324,12 @@ declare global {
             onTriggerTranslationDialog: (callback: () => void) => () => void;
             onAutomationShellApproval: (callback: (payload: { requestId: string; command: string; risk: string; reason?: string; highRiskQr?: string; requiresDeviceUnlock?: boolean; actionType?: string; action?: string }) => void) => () => void;
             respondAutomationShellApproval: (response: { requestId: string; allowed: boolean; deviceUnlockValidated?: boolean }) => void;
+            // Directory permission panel — shown when LLM command accesses a blocked path
+            onDirectoryPermissionRequest: (callback: (payload: { requestId: string; blockedPath: string; command: string }) => void) => () => void;
+            respondDirectoryPermission: (requestId: string, granted: boolean) => void;
+            getDirectoryAllowlist: () => Promise<Array<{ path: string; access: string; recursive: boolean }>>;
+            addDirectoryToAllowlist: (dirPath: string, options?: { access?: string; recursive?: boolean }) => Promise<{ success: boolean; error?: string }>;
+            removeDirectoryFromAllowlist: (dirPath: string) => Promise<{ success: boolean; error?: string }>;
             toggleAdblocker: (enable: boolean) => void;
             translateText: (args: { text: string; to: string; from?: string }) => Promise<{ success: boolean; translated?: string; error?: string }>;
             openSettingsPopup: (section?: string) => void;
@@ -542,6 +552,12 @@ declare global {
             uninstallService: (options: { userMode?: boolean }) => Promise<{ success: boolean; message?: string; error?: string }>;
             onAutomationShellApproval: (callback: (payload: { requestId: string, command: string, risk: string, reason: string, highRiskQr?: string, requiresDeviceUnlock?: boolean, actionType?: string, action?: string }) => void) => () => void;
             submitShellApprovalResponse: (requestId: string, allowed: boolean, deviceUnlockValidated?: boolean) => void;
+            // Directory permission panel
+            onDirectoryPermissionRequest: (callback: (payload: { requestId: string; blockedPath: string; command: string }) => void) => () => void;
+            respondDirectoryPermission: (requestId: string, granted: boolean) => void;
+            getDirectoryAllowlist: () => Promise<Array<{ path: string; access: string; recursive: boolean }>>;
+            addDirectoryToAllowlist: (dirPath: string, options?: { access?: string; recursive?: boolean }) => Promise<{ success: boolean; error?: string }>;
+            removeDirectoryFromAllowlist: (dirPath: string) => Promise<{ success: boolean; error?: string }>;
 
             // Auto-update APIs
             checkForUpdates: () => Promise<{ updateAvailable?: boolean; updateInfo?: any }>;

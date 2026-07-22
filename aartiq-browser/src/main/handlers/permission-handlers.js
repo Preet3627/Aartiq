@@ -56,9 +56,9 @@ module.exports = function registerPermissionHandlers(ipcMain, handlers) {
     }
   });
 
-  ipcMain.handle('directory-allowlist-add', async (event, { dirPath }) => {
+  ipcMain.handle('directory-allowlist-add', async (event, { dirPath, ...options }) => {
     try {
-      const added = permissionStore.addAllowedDirectory(dirPath);
+      const added = permissionStore.addAllowedDirectory(dirPath, options);
       if (added) {
         return { success: true, directories: permissionStore.getAllowedDirectories() };
       }
@@ -153,6 +153,42 @@ module.exports = function registerPermissionHandlers(ipcMain, handlers) {
       permissionStore.updateSettings(updates);
     }
     return { success: true };
+  });
+
+  // --- CLI Authentication Token Management ---
+  ipcMain.handle('get-cli-token', async () => {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const os = require('os');
+      const crypto = require('crypto');
+      const tokenPath = path.join(os.homedir(), '.aartiq-token');
+      if (fs.existsSync(tokenPath)) {
+        const token = fs.readFileSync(tokenPath, 'utf-8').trim();
+        return { success: true, token, tokenPath };
+      } else {
+        const newToken = crypto.randomBytes(24).toString('hex');
+        fs.writeFileSync(tokenPath, newToken, { mode: 0o600 });
+        return { success: true, token: newToken, tokenPath };
+      }
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('regenerate-cli-token', async () => {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const os = require('os');
+      const crypto = require('crypto');
+      const tokenPath = path.join(os.homedir(), '.aartiq-token');
+      const newToken = crypto.randomBytes(24).toString('hex');
+      fs.writeFileSync(tokenPath, newToken, { mode: 0o600 });
+      return { success: true, token: newToken, tokenPath };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
   });
 
   console.log('[Handlers] Permission handlers registered');

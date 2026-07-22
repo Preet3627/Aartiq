@@ -111,6 +111,18 @@ export const COMMAND_REGISTRY = {
     MULTI_FILL_FORM: { desc: 'Fill multiple form fields atomically from JSON map', example: '[MULTI_FILL_FORM: {"#name":"John","#email":"a@b.com"}]' },
     RECORD_WORKFLOW: { desc: 'Start or stop workflow recording', example: '[RECORD_WORKFLOW: start]' },
     PLAY_WORKFLOW: { desc: 'Replay a previously recorded workflow', example: '[PLAY_WORKFLOW: my-workflow]' },
+    LIST_SKILLS: { desc: 'List all available skill guides with descriptions', example: '{"type": "LIST_SKILLS"}' },
+    LOAD_SKILL: { desc: 'Load a specific skill guide into context for the current session', example: '{"type": "LOAD_SKILL", "skillId": "settings"}' },
+    SETTINGS_QUERY: { desc: 'Read current settings for a category (webSearch, ai, ui, permissions)', example: '{"type": "SETTINGS_QUERY", "category": "webSearch"}' },
+    SETTINGS_UPDATE: { desc: 'Request a settings change (requires user approval)', example: '{"type": "SETTINGS_UPDATE", "category": "webSearch", "updates": {"maxPages": 5}}' },
+    LIST_BOOKMARKS: { desc: 'List browser bookmarks with optional limit and offset', example: '{"type": "LIST_BOOKMARKS", "limit": 10, "offset": 0}' },
+    ADD_BOOKMARK: { desc: 'Add a bookmark', example: '{"type": "ADD_BOOKMARK", "url": "https://example.com", "title": "Example"}' },
+    REMOVE_BOOKMARK: { desc: 'Remove a bookmark by URL', example: '{"type": "REMOVE_BOOKMARK", "url": "https://example.com"}' },
+    CLEAR_BOOKMARKS: { desc: 'Remove all browser bookmarks', example: '{"type": "CLEAR_BOOKMARKS"}' },
+    LIST_HISTORY: { desc: 'List and search browsing history with optional limit, query, startDate, and endDate (ISO strings)', example: '{"type": "LIST_HISTORY", "limit": 20, "query": "google", "startDate": "2026-07-22T00:00:00Z"}' },
+    CLEAR_HISTORY: { desc: 'Clear all browser history', example: '{"type": "CLEAR_HISTORY"}' },
+    SET_CHAT_STYLE: { desc: 'Customize chat font size, glow mode and preset', example: '{"type": "SET_CHAT_STYLE", "fontSize": 14, "glowMode": "gradient", "glowPreset": "sunset-fire"}' },
+    OPEN_SETTINGS_PANEL: { desc: 'Open a settings panel for the user', example: '{"type": "OPEN_SETTINGS_PANEL", "panel": "vault"}' },
 } as const;
 
 export const SUPPORTED_COMMANDS = Object.keys(COMMAND_REGISTRY) as Array<keyof typeof COMMAND_REGISTRY>;
@@ -139,6 +151,10 @@ function getCategoryForType(type: string): string {
         GMAIL_SEND_MESSAGE: 'gmail', GMAIL_ADD_LABEL: 'gmail',
         THINK: 'meta', PLAN: 'meta', EXPLAIN_CAPABILITIES: 'meta',
         ORGANIZE_TABS: 'automation', CLOSE_TAB: 'browser', SWITCH_TAB: 'browser', ENABLE_CLI: 'automation',
+        LIST_SKILLS: 'skills', LOAD_SKILL: 'skills', SETTINGS_QUERY: 'settings', SETTINGS_UPDATE: 'settings',
+        LIST_BOOKMARKS: 'bookmarks', ADD_BOOKMARK: 'bookmarks', REMOVE_BOOKMARK: 'bookmarks', CLEAR_BOOKMARKS: 'bookmarks',
+        LIST_HISTORY: 'history', CLEAR_HISTORY: 'history',
+        SET_CHAT_STYLE: 'ui', OPEN_SETTINGS_PANEL: 'settings',
     };
     return catMap[type] || 'utility';
 }

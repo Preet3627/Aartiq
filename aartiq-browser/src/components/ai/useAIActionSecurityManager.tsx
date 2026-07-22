@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
+import { FolderLock, Terminal, X } from 'lucide-react';
 import ClickPermissionModal from './ClickPermissionModal';
 import {
   getActionPermissionKey,
@@ -55,11 +57,45 @@ async function getSecuritySettingsSafe() {
   }
 }
 
+interface DirectoryPermissionRequest {
+  requestId: string;
+  blockedPath: string;
+  blockedPaths?: string[];
+  command: string;
+}
+
+interface ShellPermissionRequest {
+  requestId: string;
+  command: string;
+  reason?: string;
+  riskLevel?: string;
+}
+
 export function useAIActionSecurityManager() {
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
+  const [dirPermissionRequest, setDirPermissionRequest] = useState<DirectoryPermissionRequest | null>(null);
+  const [dirPermissionLoading, setDirPermissionLoading] = useState(false);
+  const [shellPermissionRequest, setShellPermissionRequest] = useState<ShellPermissionRequest | null>(null);
+  const [shellPermissionLoading, setShellPermissionLoading] = useState(false);
   const biometricVerifiedRef = useRef(false);
   const batchResolveRef = useRef<((allowed: boolean[]) => void) | null>(null);
   const batchInputsLengthRef = useRef(0);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onDirectoryPermissionRequest) return;
+    const unsubDir = window.electronAPI.onDirectoryPermissionRequest((req) => {
+      setDirPermissionRequest(req);
+    });
+    return () => unsubDir();
+  }, []);
+
+  useEffect(() => {
+    if (!window.electronAPI?.onShellPermissionRequest) return;
+    const unsubShell = window.electronAPI.onShellPermissionRequest((req) => {
+      setShellPermissionRequest(req);
+    });
+    return () => unsubShell();
+  }, []);
 
   const requestPermission = useCallback(async (input: PermissionRequestInput): Promise<boolean> => {
     const actionType = normalizeActionType(input.actionType);
@@ -242,8 +278,8 @@ export function useAIActionSecurityManager() {
             const authResult = await window.electronAPI.authenticateBiometric(
               `Approve shell command: ${payload.command}`
             );
-            if (!authResult?.success) {
-              return;
+            if (authResult?.error === 'Authentication cancelled') {
+              allowed = false;
             }
           }
 
@@ -252,10 +288,10 @@ export function useAIActionSecurityManager() {
               requestId: payload.requestId,
               allowed,
             });
-            return;
+          } else {
+            window.electronAPI?.submitShellApprovalResponse?.(payload.requestId, allowed);
           }
-
-          window.electronAPI?.submitShellApprovalResponse?.(payload.requestId, allowed);
+          setPendingPermission(null);
         },
         context: {
           actionType: payload.actionType || 'SHELL_COMMAND',
@@ -290,21 +326,122 @@ export function useAIActionSecurityManager() {
     return cleanup;
   }, []);
 
-  useEffect(() => {
-    const handleGlobalKeyDown = (event: KeyboardEvent) => {
-      if (!pendingPermission) {
-        return;
-      }
 
-      if (event.shiftKey && event.key === 'Tab') {
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    };
 
-    window.addEventListener('keydown', handleGlobalKeyDown, true);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
-  }, [pendingPermission]);
+  // Directory permission warning panel
+  const directoryPermissionPanel = dirPermissionRequest ? (
+    <div className="fixed inset-0 z-[10002] flex items-start justify-center overflow-y-auto py-6 px-4 bg-black/60 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 10 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
+        className="mx-auto max-h-[88vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[color-mix(in_srgb,var(--border-color)_70%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_96%,transparent)] text-primary-text shadow-[0_24px_70px_rgba(0,0,0,0.28)] backdrop-blur-2xl"
+        role="dialog"
+        aria-modal="true"
+      >
+        {/* Header */}
+        <div className="p-5">
+          <div className="mb-5 flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-500">
+              <FolderLock size={19} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] text-secondary-text">Allow Aartiq to</div>
+              <h2 className="mt-0.5 text-lg font-semibold leading-tight text-primary-text">
+                Access {(dirPermissionRequest.blockedPaths ?? [dirPermissionRequest.blockedPath]).length > 1
+                  ? `${(dirPermissionRequest.blockedPaths ?? []).length} directories`
+                  : 'restricted directory'}
+              </h2>
+              <div className="mt-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium text-red-500 bg-red-500/10 border-red-500/20">
+                Outside allowed directories
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                window.electronAPI?.respondDirectoryPermission?.(dirPermissionRequest.requestId, false);
+                setDirPermissionRequest(null);
+              }}
+              className="rounded-md p-2 text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text"
+              title="Deny"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {/* Reason */}
+            <div>
+              <div className="mb-1 text-[12px] font-medium text-secondary-text">Reason</div>
+              <p className="text-[14px] leading-relaxed text-primary-text">
+                The AI wants to run a command that accesses {(dirPermissionRequest.blockedPaths ?? [dirPermissionRequest.blockedPath]).length > 1 ? 'paths' : 'a path'} outside the allowed directory list.
+              </p>
+            </div>
+
+            {/* All blocked paths */}
+            <div>
+              <div className="mb-2 text-[12px] font-medium text-secondary-text">
+                Blocked {(dirPermissionRequest.blockedPaths ?? [dirPermissionRequest.blockedPath]).length > 1 ? 'Paths' : 'Path'}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {(dirPermissionRequest.blockedPaths ?? [dirPermissionRequest.blockedPath]).map((p) => (
+                  <span
+                    key={p}
+                    className="block rounded-md bg-red-500/10 border border-red-500/20 px-2.5 py-1.5 font-mono text-[11px] text-red-400 break-all"
+                  >
+                    {p}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Command */}
+            <div className="rounded-lg border border-[color-mix(in_srgb,var(--border-color)_55%,transparent)]">
+              <div className="px-3 py-2 text-[12px] text-secondary-text font-medium">Command</div>
+              <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-words rounded-b-lg bg-black/30 px-3 pb-3 font-mono text-[11px] text-secondary-text">
+                {dirPermissionRequest.command}
+              </pre>
+            </div>
+
+            {/* Info */}
+            <p className="text-[12px] leading-relaxed text-secondary-text">
+              Granting access adds {(dirPermissionRequest.blockedPaths ?? [dirPermissionRequest.blockedPath]).length > 1 ? 'these directories' : 'this directory'} to the AI allowlist permanently. Manage in{' '}
+              <strong className="text-primary-text">Settings › Permissions › Directory Allowlist</strong>.
+            </p>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-2 border-t border-[color-mix(in_srgb,var(--border-color)_50%,transparent)] p-5 pt-4">
+          <button
+            type="button"
+            disabled={dirPermissionLoading}
+            onClick={() => {
+              window.electronAPI?.respondDirectoryPermission?.(dirPermissionRequest.requestId, false);
+              setDirPermissionRequest(null);
+            }}
+            className="flex-1 rounded-lg border border-[color-mix(in_srgb,var(--border-color)_65%,transparent)] px-4 py-2.5 text-sm font-medium text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_6%,transparent)] hover:text-primary-text"
+          >
+            Deny
+          </button>
+          <button
+            type="button"
+            disabled={dirPermissionLoading}
+            onClick={async () => {
+              setDirPermissionLoading(true);
+              window.electronAPI?.respondDirectoryPermission?.(dirPermissionRequest.requestId, true);
+              setDirPermissionRequest(null);
+              setDirPermissionLoading(false);
+            }}
+            className="flex-1 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {dirPermissionLoading ? 'Granting…' : '✓ Grant Access'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  ) : null;
 
   const approvalModal = useMemo(() => {
     if (!pendingPermission) {
@@ -347,7 +484,9 @@ export function useAIActionSecurityManager() {
                 const authResult = await window.electronAPI.authenticateBiometric(
                   `Approve action: ${context.action}`
                 );
-                if (!authResult?.success) {
+                if (authResult?.error === 'Authentication cancelled') {
+                  pendingPermission.resolve(false);
+                  setPendingPermission(null);
                   return;
                 }
               }
@@ -381,10 +520,118 @@ export function useAIActionSecurityManager() {
     );
   }, [pendingPermission]);
 
+  const shellPermissionPanel = shellPermissionRequest ? (
+    <div className="fixed inset-0 z-[10002] flex items-start justify-center overflow-y-auto py-6 px-4 bg-black/60 backdrop-blur-md">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.97, y: 10 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
+        className="mx-auto max-h-[88vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[color-mix(in_srgb,var(--border-color)_70%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_96%,transparent)] text-primary-text shadow-[0_24px_70px_rgba(0,0,0,0.28)] backdrop-blur-2xl"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="p-5">
+          {/* Header */}
+          <div className="mb-5 flex items-start gap-4">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-500/20 bg-amber-500/10 text-amber-500">
+              <Terminal size={19} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] text-secondary-text">Allow Aartiq to</div>
+              <h2 className="mt-0.5 text-lg font-semibold leading-tight text-primary-text">Shell Command Execution</h2>
+              <div className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                shellPermissionRequest.riskLevel === 'high'
+                  ? 'text-red-500 bg-red-500/10 border-red-500/20'
+                  : shellPermissionRequest.riskLevel === 'medium'
+                    ? 'text-amber-500 bg-amber-500/10 border-amber-500/20'
+                    : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
+              }`}>
+                {shellPermissionRequest.riskLevel === 'high' ? 'High risk' : shellPermissionRequest.riskLevel === 'medium' ? 'Needs approval' : 'Low risk'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                window.electronAPI?.respondShellPermission?.(shellPermissionRequest.requestId, false, false);
+                setShellPermissionRequest(null);
+              }}
+              className="rounded-md p-2 text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text"
+              title="Deny"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {/* Reason */}
+            <div>
+              <div className="mb-1 text-[12px] font-medium text-secondary-text">Reason</div>
+              <p className="text-[14px] leading-relaxed text-primary-text">
+                {shellPermissionRequest.reason || 'Command needs authorization before running in the sandboxed shell.'}
+              </p>
+            </div>
+
+            {/* Command */}
+            <div>
+              <div className="mb-1 text-[12px] font-medium text-secondary-text">Command</div>
+              <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-3 font-mono text-[12px] text-secondary-text">
+                {shellPermissionRequest.command}
+              </pre>
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons — Deny | Allow Once | Always Allow */}
+        <div className="flex gap-2 border-t border-[color-mix(in_srgb,var(--border-color)_50%,transparent)] p-5 pt-4">
+          <button
+            type="button"
+            disabled={shellPermissionLoading}
+            onClick={() => {
+              window.electronAPI?.respondShellPermission?.(shellPermissionRequest.requestId, false, false);
+              setShellPermissionRequest(null);
+            }}
+            className="flex-1 rounded-lg border border-[color-mix(in_srgb,var(--border-color)_65%,transparent)] px-4 py-2.5 text-sm font-medium text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_6%,transparent)] hover:text-primary-text"
+          >
+            Deny
+          </button>
+          <button
+            type="button"
+            disabled={shellPermissionLoading}
+            onClick={() => {
+              setShellPermissionLoading(true);
+              window.electronAPI?.respondShellPermission?.(shellPermissionRequest.requestId, true, false);
+              setShellPermissionRequest(null);
+              setShellPermissionLoading(false);
+            }}
+            className="flex-1 rounded-lg border border-[color-mix(in_srgb,var(--accent)_35%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-4 py-2.5 text-sm font-semibold text-[var(--accent)] hover:bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] disabled:opacity-50"
+          >
+            Allow Once
+          </button>
+          <button
+            type="button"
+            disabled={shellPermissionLoading}
+            onClick={() => {
+              setShellPermissionLoading(true);
+              window.electronAPI?.respondShellPermission?.(shellPermissionRequest.requestId, true, true);
+              setShellPermissionRequest(null);
+              setShellPermissionLoading(false);
+            }}
+            className="flex-1 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            ✓ Always Allow
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  ) : null;
+
   return {
     pendingPermission,
     requestPermission,
     requestBatchPermission,
     approvalModal,
+    directoryPermissionPanel,
+    shellPermissionPanel,
   };
 }

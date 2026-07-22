@@ -86,85 +86,87 @@ function generateSeatbeltProfile(options = {}) {
 
   // Build filesystem rules from allowlist or fallback to workspace-only
   let writeClauses = '';
-  let readClauses = '';
+  let extraReadClauses = '';
 
   if (allowlist && Array.isArray(allowlist) && allowlist.length > 0) {
     const { readDirs, writeDirs } = getSandboxDirs(allowlist);
     writeClauses = writeDirs
-      .map(d => `  (subpath "${d.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`)
+      .map(d => `  (subpath "${d.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`) 
       .join('\n');
-    readClauses = readDirs
+    // Read-only dirs go directly into the same file-read* block — no nesting
+    extraReadClauses = readDirs
       .filter(d => !writeDirs.includes(d))
-      .map(d => `  (subpath "${d.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`)
+      .map(d => `  (subpath "${d.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`) 
       .join('\n');
   } else {
     // Fallback: workspace-only access
     writeClauses = `  (subpath "${workspace}")`;
-    readClauses = '';
+    extraReadClauses = '';
   }
 
   let networkFilter = '';
   if (networkAllowlist.length > 0) {
-    networkFilter = `
-      (deny network*)
-      (allow network-outbound
-        (require-not (require-any
-          ${networkAllowlist.map(d => `(require-regex "${d.replace(/\./g, '\\.')}")`).join('\n')}
-        ))
-      )
-    `;
+    networkFilter = `(deny network*)
+(allow network-outbound
+  (require-not (require-any
+    ${networkAllowlist.map(d => `(require-regex "${d.replace(/\./g, '\\.')}")`).join('\n    ')}
+  ))
+)`;
   } else {
     networkFilter = '(deny network*)';
   }
 
+  // Write clauses include the workspace, /tmp, and user-allowlisted write dirs
+  const writeBlock = [
+    writeClauses,
+    `  (subpath "/tmp")`,
+    `  (subpath "${os.tmpdir()}")`,
+    // Also allow writing to the real home dir (needed for ~/Downloads, etc.)
+    `  (subpath "${(process.env.HOME || os.homedir()).replace(/"/g, '\\"')}")`,
+  ].filter(Boolean).join('\n');
+
+  // All readable paths go into ONE file-read* block — nested blocks are invalid Seatbelt syntax
+  const readBlock = [
+    `  (subpath "/usr")`,
+    `  (subpath "/bin")`,
+    `  (subpath "/sbin")`,
+    `  (subpath "/System")`,
+    `  (subpath "/Library")`,
+    `  (subpath "/System/Library")`,
+    `  (subpath "/dev")`,
+    `  (subpath "/private/tmp")`,
+    `  (subpath "/etc")`,
+    // User home (covers ~/Downloads, ~/Documents, ~/Desktop, etc.)
+    `  (subpath "${(process.env.HOME || os.homedir()).replace(/"/g, '\\"')}")`,
+    extraReadClauses,
+  ].filter(Boolean).join('\n');
+
   return `
 (version 1)
 (allow default)
-(deny process*)
-(deny sysctl*)
-(deny mach-lookup)
-(deny system-mac-syscall)
 
 ; Filesystem: deny writes outside allowlisted directories
 (deny file-write*)
 (allow file-write*
-${writeClauses || `  (subpath "${workspace}")`}
-  (subpath "/tmp")
-  (subpath "${os.tmpdir()}")
+${writeBlock}
 )
 
-; Filesystem: allow reads for common system paths
+; Filesystem: allow reads for system paths + user home
 (allow file-read*
+${readBlock}
+)
+
+; Network
+${networkFilter}
+
+; Process execution — allow standard system binaries and sh for pipes
+(allow process-exec
   (subpath "/usr")
   (subpath "/bin")
   (subpath "/sbin")
   (subpath "/System")
-  (subpath "/Library")
-  (subpath "/System/Library")
-  (subpath "/dev")
-  (subpath "/private/tmp")
-${readClauses ? `; Additional read-only paths from allowlist\n(allow file-read*\n${readClauses}\n)\n` : ''}
-)
-
-; Network: deny by default, allow explicit destinations
-${networkFilter}
-
-; Deny dangerous operations
-(deny process-exec)
-(deny process-fork)
-(allow process-exec
-  (require-any
-    (subpath "/usr")
-    (subpath "/bin")
-    (subpath "/sbin")
-    (subpath "/System")
-  )
 )
 (allow process-fork)
-
-(deny device*)
-(allow device-null)
-(allow device-tty)
 `.trim();
 }
 
@@ -550,17 +552,17 @@ function generateNetworkRestrictionScript(allowlistDomains = [], ruleDurationMin
 $ruleName = "${ruleName}"
 
 # Block all outbound by default
-New-NetFirewallRule -DisplayName "$ruleName-BlockOut" `
-    -Direction Outbound -Action Block `
-    -Profile Any -Enabled True `
-    -Description "Aartiq sandbox: block outbound network" `
+New-NetFirewallRule -DisplayName "$ruleName-BlockOut" \`
+    -Direction Outbound -Action Block \`
+    -Profile Any -Enabled True \`
+    -Description "Aartiq sandbox: block outbound network" \`
     -ErrorAction SilentlyContinue
 
 # Block all inbound by default
-New-NetFirewallRule -DisplayName "$ruleName-BlockIn" `
-    -Direction Inbound -Action Block `
-    -Profile Any -Enabled True `
-    -Description "Aartiq sandbox: block inbound network" `
+New-NetFirewallRule -DisplayName "$ruleName-BlockIn" \`
+    -Direction Inbound -Action Block \`
+    -Profile Any -Enabled True \`
+    -Description "Aartiq sandbox: block inbound network" \`
     -ErrorAction SilentlyContinue
 
 ${allowlistDomains.length > 0 ? `
@@ -777,9 +779,11 @@ function buildSafeEnv(options = {}) {
     }
   }
 
-  // Explicitly add workspace path
-  safeEnv.HOME = workspace;
-  safeEnv.TMPDIR = path.join(workspace, 'tmp');
+  // Keep HOME as the real user home directory so that ~ expands correctly
+  // inside sandboxed processes (e.g. ls ~/Downloads, mkdir ~/Downloads/Images).
+  // We set cwd=workspace separately to confine the working directory.
+  safeEnv.HOME = process.env.HOME || os.homedir();
+  safeEnv.TMPDIR = process.env.TMPDIR || os.tmpdir();
 
   // Add any explicitly allowed extra env vars
   for (const [key, value] of Object.entries(extraEnv)) {
@@ -822,10 +826,18 @@ function executeSandboxed(command, args = [], options = {}) {
     // Workspace may already exist
   }
 
+  // Reconstruct the full shell command string from binary + args.
+  // We always run via sh -c so that shell features work: pipes (|), redirects
+  // (>, >>), glob expansion (*), process substitution, shell builtins, etc.
+  // Without this, spawn('find', ['~/Downloads', '|', 'sort']) passes '|' as a
+  // literal argument to find, breaking every piped command.
+  const originalCommand = args.length > 0
+    ? `${command} ${args.map(a => (a.includes(' ') && !a.startsWith('"') ? `"${a}"` : a)).join(' ')}`
+    : command;
+
   return new Promise((resolve) => {
-    let child;
-    let effectiveCommand = command;
-    let effectiveArgs = args;
+    let effectiveCommand = 'sh';
+    let effectiveArgs = ['-c', originalCommand];
     let spawnOptions = {
       env: buildSafeEnv(options),
       timeout,
@@ -840,31 +852,28 @@ function executeSandboxed(command, args = [], options = {}) {
         networkAllowlist: options.networkAllowlist || DEFAULT_NETWORK_ALLOWLIST,
       });
 
-      // Write profile to temp file
       const profilePath = path.join(os.tmpdir(), `aartiq-sandbox-${Date.now()}.sb`);
+      let profileWritten = false;
       try {
         fs.writeFileSync(profilePath, profile, 'utf8');
+        profileWritten = true;
       } catch (e) {
         console.warn('[Sandbox] Failed to write Seatbelt profile:', e.message);
-        // Fall through to unsandboxed execution
       }
 
-      if (fs.existsSync(profilePath)) {
+      if (profileWritten && fs.existsSync(profilePath)) {
+        // sandbox-exec -f <profile> sh -c <command>
         effectiveCommand = 'sandbox-exec';
-        effectiveArgs = ['-f', profilePath, command, ...args];
-        // Clean up profile after execution
-        const originalClose = spawnOptions;
-        spawnOptions = {
-          ...spawnOptions,
-        };
+        effectiveArgs = ['-f', profilePath, 'sh', '-c', originalCommand];
       }
+      // If profile write failed, fall through to unsandboxed sh -c execution
     } else if (useSandbox && platform === 'linux') {
       // Linux: Use bubblewrap if available
       try {
         const bwrapCheck = spawnSync('which', ['bwrap'], { encoding: 'utf8' });
         if (bwrapCheck.status === 0) {
           effectiveCommand = 'bwrap';
-          effectiveArgs = buildBubblewrapArgs(command, args, {
+          effectiveArgs = buildBubblewrapArgs('sh', ['-c', originalCommand], {
             workspace,
             directoryAllowlist: options.directoryAllowlist,
           });
@@ -876,7 +885,7 @@ function executeSandboxed(command, args = [], options = {}) {
       }
     } else if (useSandbox && platform === 'win32') {
       // Windows: Use AppContainer sandbox (Job Objects + ACLs + Firewall)
-      createWindowsSandbox(command, args, {
+      createWindowsSandbox('sh', ['-c', originalCommand], {
         workspace,
         directoryAllowlist: options.directoryAllowlist,
         networkAllowlist: options.networkAllowlist || DEFAULT_NETWORK_ALLOWLIST,
@@ -885,23 +894,22 @@ function executeSandboxed(command, args = [], options = {}) {
         effectiveArgs = sandboxConfig.args;
         spawnOptions = { ...spawnOptions, ...sandboxConfig.spawnOptions };
 
-        child = spawn(effectiveCommand, effectiveArgs, spawnOptions);
+        const child = spawn(effectiveCommand, effectiveArgs, spawnOptions);
         setupChildHandlers(child, resolve, platform, effectiveCommand, effectiveArgs);
       }).catch((err) => {
         console.warn('[Sandbox] Windows AppContainer setup failed, falling back:', err.message);
-        // Fallback to sync version
-        const syncConfig = createWindowsSandboxSync(command, args, { workspace });
+        const syncConfig = createWindowsSandboxSync('sh', ['-c', originalCommand], { workspace });
         effectiveCommand = syncConfig.command;
         effectiveArgs = syncConfig.args;
         spawnOptions = { ...spawnOptions, ...syncConfig.spawnOptions };
 
-        child = spawn(effectiveCommand, effectiveArgs, spawnOptions);
+        const child = spawn(effectiveCommand, effectiveArgs, spawnOptions);
         setupChildHandlers(child, resolve, platform, effectiveCommand, effectiveArgs);
       });
       return; // Early return since we handle the promise in the .then()
     }
 
-    child = spawn(effectiveCommand, effectiveArgs, spawnOptions);
+    const child = spawn(effectiveCommand, effectiveArgs, spawnOptions);
     setupChildHandlers(child, resolve, platform, effectiveCommand, effectiveArgs);
   });
 }

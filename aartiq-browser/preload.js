@@ -127,6 +127,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setActiveLLMProvider: (providerId) => ipcRenderer.invoke('llm-set-active-provider', providerId),
   configureLLMProvider: (providerId, options) => ipcRenderer.invoke('llm-configure-provider', providerId, options),
   getStoredApiKeys: () => ipcRenderer.invoke('get-stored-api-keys'),
+  getAISettings: (category) => ipcRenderer.invoke('get-ai-settings', category),
+  updateAISettings: (category, updates) => ipcRenderer.invoke('update-ai-settings', category, updates),
+  triggerShortcut: (action) => ipcRenderer.invoke('trigger-shortcut', action),
   getOnboardingState: () => ipcRenderer.invoke('get-onboarding-state'),
   setOnboardingState: (partial) => ipcRenderer.invoke('set-onboarding-state', partial),
   generateChatContent: (messages, options) => ipcRenderer.invoke('llm-generate-chat-content', messages, options),
@@ -592,6 +595,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDirectoryAllowlist: () => ipcRenderer.invoke('directory-allowlist-get'),
   addDirectoryToAllowlist: (dirPath, options) => ipcRenderer.invoke('directory-allowlist-add', { dirPath, ...options }),
   removeDirectoryFromAllowlist: (dirPath) => ipcRenderer.invoke('directory-allowlist-remove', { dirPath }),
+
+  // Directory permission request panel — fired by main when a blocked path is encountered
+  onDirectoryPermissionRequest: (callback) => {
+    const subscription = (event, payload) => callback(payload);
+    ipcRenderer.on('directory-permission-request', subscription);
+    return () => ipcRenderer.removeListener('directory-permission-request', subscription);
+  },
+  respondDirectoryPermission: (requestId, granted) =>
+    ipcRenderer.send('directory-permission-response', { requestId, granted }),
+
+  // Shell permission approval prompt bridge — fired by main when unauthorized shell command is executed
+  onShellPermissionRequest: (callback) => {
+    const subscription = (event, payload) => callback(payload);
+    ipcRenderer.on('shell-permission-request', subscription);
+    return () => ipcRenderer.removeListener('shell-permission-request', subscription);
+  },
+  respondShellPermission: (requestId, granted, remember = false) =>
+    ipcRenderer.send('shell-permission-response', { requestId, granted, remember }),
+
+  // CLI Token Management
+  getCliToken: () => ipcRenderer.invoke('get-cli-token'),
+  regenerateCliToken: () => ipcRenderer.invoke('regenerate-cli-token'),
   
   // File Management (routes around shell sandbox)
   moveFile: (source, dest) => ipcRenderer.invoke('file-move', { source, dest }),

@@ -7,10 +7,16 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Eye,
+  EyeOff,
   FolderOpen,
   FolderPlus,
+  Key,
   Lock,
   Monitor,
+  Plus,
+  RotateCw,
   Settings2,
   Shield,
   SunMedium,
@@ -118,6 +124,11 @@ const PermissionSettings = () => {
   const [newDirectoryAccess, setNewDirectoryAccess] = useState<'read'|'read-write'>('read-write');
   const [newDirectoryRecursive, setNewDirectoryRecursive] = useState(true);
   const [directoryError, setDirectoryError] = useState('');
+  const [cliToken, setCliToken] = useState<string>('');
+  const [cliTokenPath, setCliTokenPath] = useState<string>('');
+  const [showCliToken, setShowCliToken] = useState<boolean>(false);
+  const [cliTokenCopied, setCliTokenCopied] = useState<boolean>(false);
+  const [customCommandInput, setCustomCommandInput] = useState<string>('');
 
   const loadSettings = async () => {
     try {
@@ -157,10 +168,33 @@ const PermissionSettings = () => {
       } catch (dirErr) {
         console.error('[PermissionSettings] Failed to load directory allowlist:', dirErr);
       }
+
+      // Load CLI Token
+      try {
+        const tokenRes = await (window as any).electronAPI?.getCliToken?.();
+        if (tokenRes?.success && tokenRes.token) {
+          setCliToken(tokenRes.token);
+          setCliTokenPath(tokenRes.tokenPath || '');
+        }
+      } catch (tokenErr) {
+        console.error('[PermissionSettings] Failed to load CLI token:', tokenErr);
+      }
     } catch (error) {
       console.error('[PermissionSettings] Failed to load settings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRegenerateCliToken = async () => {
+    try {
+      const res = await (window as any).electronAPI?.regenerateCliToken?.();
+      if (res?.success && res.token) {
+        setCliToken(res.token);
+        if (res.tokenPath) setCliTokenPath(res.tokenPath);
+      }
+    } catch (e) {
+      console.error('[PermissionSettings] Failed to regenerate CLI token:', e);
     }
   };
 
@@ -599,27 +633,146 @@ const PermissionSettings = () => {
         )}
       </div>
 
+      {/* CLI & Automation Token Management Section */}
+      <div className="bg-white/5 rounded-3xl p-6 border border-white/10 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Key size={20} className="text-amber-400" />
+            <div>
+              <h4 className="text-lg font-bold text-white">CLI Authentication Token</h4>
+              <p className="text-xs text-white/40">
+                Token used by <code className="text-amber-300 font-mono">aartiq-cli</code> and external shell automation scripts.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.3em] bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-bold">
+            Active & Secured
+          </span>
+        </div>
+
+        <div className="bg-black/30 border border-white/10 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between text-xs text-white/50">
+            <span>Token File Location:</span>
+            <code className="text-white/80 font-mono text-[11px] bg-white/5 px-2 py-0.5 rounded">{cliTokenPath || '~/.aartiq-token'}</code>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showCliToken ? "text" : "password"}
+                readOnly
+                value={cliToken || '••••••••••••••••••••••••••••••••'}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm font-mono text-amber-300 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCliToken(!showCliToken)}
+                className="absolute right-3 top-2.5 p-1 text-white/40 hover:text-white transition-all"
+                title={showCliToken ? "Hide token" : "Show token"}
+              >
+                {showCliToken ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (cliToken) {
+                  navigator.clipboard.writeText(cliToken);
+                  setCliTokenCopied(true);
+                  setTimeout(() => setCliTokenCopied(false), 2000);
+                }
+              }}
+              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs text-white font-semibold transition-all flex items-center gap-1.5 shrink-0"
+            >
+              <Copy size={15} />
+              {cliTokenCopied ? 'Copied!' : 'Copy Token'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleRegenerateCliToken}
+              className="px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-xl text-xs text-amber-300 font-bold transition-all flex items-center gap-1.5 shrink-0"
+              title="Regenerate CLI authentication token"
+            >
+              <RotateCw size={15} />
+              Regenerate
+            </button>
+          </div>
+        </div>
+
+        <div className="text-[11px] text-white/40 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5">
+          💡 Use this token in automated shell scripts or terminal tools via: <code className="text-amber-300/80 font-mono">aartiq --token &lt;TOKEN&gt; "exec &lt;command&gt;"</code> or setting <code className="text-amber-300/80 font-mono">AARTIQ_TOKEN</code> in your environment.
+        </div>
+      </div>
+
       <div className="bg-white/5 rounded-3xl p-6 border border-white/10 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-lg font-bold text-white">Shell Command Policies</h4>
-            <p className="text-xs text-white/40">Per-command overrides for the shell approval lane.</p>
+            <h4 className="text-lg font-bold text-white">Shell Command Policies & Allowlist</h4>
+            <p className="text-xs text-white/40">Manage auto-approved shell binaries and per-command execution policies.</p>
           </div>
           <span className="text-[11px] uppercase tracking-[0.4em] text-white/40">
             {settings.autoApprovedCommands.length} command overrides
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        {/* Custom Command Input */}
+        <div className="flex gap-2 items-center">
+          <input
+            type="text"
+            value={customCommandInput}
+            onChange={(e) => setCustomCommandInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && customCommandInput.trim()) {
+                const cmdKey = normalizeCommandKey(customCommandInput.trim());
+                if (cmdKey) {
+                  void toggleAutoCommand(cmdKey);
+                  setCustomCommandInput('');
+                }
+              }
+            }}
+            placeholder="Add custom command binary (e.g. docker, grep, npm, python3, find)"
+            className="flex-1 min-w-[200px] bg-black/30 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-sky-500/50 transition-all"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              if (customCommandInput.trim()) {
+                const cmdKey = normalizeCommandKey(customCommandInput.trim());
+                if (cmdKey) {
+                  void toggleAutoCommand(cmdKey);
+                  setCustomCommandInput('');
+                }
+              }
+            }}
+            disabled={!customCommandInput.trim()}
+            className="px-4 py-2.5 bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/30 rounded-xl text-sm text-sky-300 font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
+          >
+            <Plus size={16} />
+            Add Command
+          </button>
+        </div>
+
+        {/* Active Auto-approved Command Tags */}
+        <div className="flex flex-wrap gap-2 pt-1">
           {settings.autoApprovedCommands.length === 0 ? (
-            <span className="text-[10px] text-white/60">No command overrides yet.</span>
+            <span className="text-[11px] text-white/40">No custom shell command overrides configured yet.</span>
           ) : (
             settings.autoApprovedCommands.map((command) => (
               <span
                 key={command}
-                className="px-3 py-1 rounded-full border border-white/10 text-[10px] uppercase tracking-[0.35em] text-white/60"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 text-xs font-mono text-sky-300"
               >
-                {command}
+                <span>{command}</span>
+                <button
+                  type="button"
+                  onClick={() => void toggleAutoCommand(command)}
+                  className="p-0.5 hover:text-red-400 text-white/40 transition-colors"
+                  title={`Remove ${command} from auto-approve list`}
+                >
+                  <Trash2 size={12} />
+                </button>
               </span>
             ))
           )}
@@ -759,6 +912,25 @@ const PermissionSettings = () => {
             placeholder="/path/to/directory"
             className="flex-1 min-w-[200px] bg-black/30 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-emerald-500/50 transition-all"
           />
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const dirPath = await (window as any).electronAPI?.selectLocalFile?.({ properties: ['openDirectory'] });
+                if (dirPath) {
+                  setNewDirectoryPath(dirPath);
+                  setDirectoryError('');
+                }
+              } catch (e) {
+                console.error('Failed to browse directory:', e);
+              }
+            }}
+            className="px-3 py-2.5 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs text-white/90 font-semibold transition-all flex items-center gap-1.5 shrink-0"
+            title="Browse folder from system"
+          >
+            <FolderOpen size={15} />
+            Browse...
+          </button>
           <select
             value={newDirectoryAccess}
             onChange={(e) => setNewDirectoryAccess(e.target.value as 'read' | 'read-write')}

@@ -149,10 +149,15 @@ exports.execShellCommand = async function(rawCommand, preApproved, reason, riskL
   const { validateCommand: securityValidate } = require('../../lib/SecurityValidator');
   const { executeSandboxed } = require('../../core/sandbox-executor');
 
-  // 1. Basic validation (empty, too long, dangerous patterns, blocked commands)
   let command;
   try {
-    command = validateCommand(rawCommand);
+    if (preApproved) {
+      command = rawCommand.trim();
+      if (!command) throw new Error('Invalid command: empty command');
+      if (command.length > 10000) throw new Error('Command too long (max 10000 characters)');
+    } else {
+      command = validateCommand(rawCommand);
+    }
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -160,22 +165,52 @@ exports.execShellCommand = async function(rawCommand, preApproved, reason, riskL
   // 2. Determine risk level if not provided
   const effectiveRisk = riskLevel || analyzeCommandRisk(command);
 
-  // 3. Directory allowlist check
+  // 3. Directory allowlist check — if blocked, collect all blocked paths and request interactive permission at once
   try {
     const { PermissionStore } = require('../../lib/permission-store');
+    const bridge = require('../../core/directory-permission-bridge');
     const store = new PermissionStore();
     await store.load();
     const allowedDirs = store.getAllowedDirectories();
     const paths = extractPathsFromCommand(command);
+
+    const blockedPaths = [];
     for (const p of paths) {
       if (!store.isDirectoryAllowed(p)) {
-        store.logAudit(`directory-allowlist.blocked: ${p} in command: ${command}`);
+        blockedPaths.push(p);
+      }
+    }
+
+    if (blockedPaths.length > 0) {
+      store.logAudit(`directory-allowlist.blocked: ${blockedPaths.join(', ')} in command: ${command}`);
+
+      // Ask renderer to show a permission panel for all blocked paths at once
+      const granted = await bridge.requestDirectoryPermission(blockedPaths, command);
+
+      if (!granted) {
         return {
           success: false,
-          error: `Access denied: "${p}" is outside the allowed directories. Add it in Settings > Permissions > Directory Allowlist.`,
-          blockedPath: p,
+          error: `Access denied: "${blockedPaths.join(', ')}" is outside allowed directories. Add in Settings > Permissions > Directory Allowlist.`,
+          blockedPath: blockedPaths[0],
+          blockedPaths,
           allowedDirectories: allowedDirs,
         };
+      }
+
+      // User granted — add all blocked directories (parent folders) to the allowlist
+      const nodePath = require('path');
+      const fs = require('fs');
+      const os = require('os');
+      for (const p of blockedPaths) {
+        let dirToAdd;
+        try {
+          const expanded = p.replace(/^~(?=\/|$)/, os.homedir());
+          dirToAdd = (fs.existsSync(expanded) && fs.statSync(expanded).isDirectory()) ? expanded : nodePath.dirname(expanded);
+        } catch (e) {
+          dirToAdd = nodePath.dirname(p);
+        }
+        store.addAllowedDirectory(dirToAdd, { access: 'read-write', recursive: true });
+        store.logAudit(`directory-allowlist.granted-via-panel: ${dirToAdd} for command: ${command}`);
       }
     }
   } catch (e) {
@@ -183,11 +218,26 @@ exports.execShellCommand = async function(rawCommand, preApproved, reason, riskL
     console.warn('[execShellCommand] Directory allowlist check skipped:', e.message);
   }
 
-  // 4. Permission check — blocks execution unless explicitly granted
+  // 4. Permission check — prompt user via permission dialog if not authorized
   if (!preApproved) {
-    const authorized = checkShellPermission(command, reason, effectiveRisk);
+    let authorized = checkShellPermission(command, reason, effectiveRisk);
     if (!authorized) {
-      return { success: false, error: 'Shell command not authorized. Grant permission in Settings > Permissions or approve via the permission dialog.' };
+      const shellBridge = require('../../core/shell-permission-bridge');
+      const { granted, remember } = await shellBridge.requestShellPermission(command, reason, effectiveRisk);
+      if (!granted) {
+        return { success: false, error: 'Shell command execution denied by user.' };
+      }
+      if (remember) {
+        try {
+          const { PermissionStore } = require('../../lib/permission-store');
+          const store = new PermissionStore();
+          await store.load();
+          const cmdBinary = command.trim().split(/\s+/)[0].toLowerCase();
+          store.setAutoCommand(cmdBinary, true);
+        } catch (e) {
+          console.warn('[execShellCommand] Failed to save auto-approved command:', e.message);
+        }
+      }
     }
   }
 
@@ -209,12 +259,30 @@ exports.execShellCommand = async function(rawCommand, preApproved, reason, riskL
     // Fall through with null allowlist (sandbox will use workspace-only fallback)
   }
 
-  return await executeSandboxed(cmdBinary, cmdArgs, {
+  const raw = await executeSandboxed(cmdBinary, cmdArgs, {
     useSandbox,
     timeout: 30000,
     directoryAllowlist,
     networkAllowlist: effectiveRisk === 'high' || effectiveRisk === 'critical' ? [] : undefined,
   });
+
+  // Normalize stdout → output so the frontend (res.output) always gets a value.
+  // executeSandboxed returns { success, code, stdout, stderr } but the frontend
+  // and shell-executor.js both use { success, output, error }.
+  if (raw.stdout !== undefined || raw.stderr !== undefined) {
+    const combinedOutput = [
+      raw.stdout ? raw.stdout.trim() : '',
+      !raw.success && raw.stderr ? raw.stderr.trim() : '',
+    ].filter(Boolean).join('\n');
+    return {
+      success: raw.success,
+      output: combinedOutput || (raw.success ? '(no output)' : undefined),
+      error: raw.error || (!raw.success && raw.stderr ? raw.stderr.trim() : undefined) || (raw.success ? undefined : `Command exited with code ${raw.code ?? 'unknown'}`),
+      code: raw.code,
+    };
+  }
+
+  return raw;
 };
 
 exports.deriveKey = async function(passphrase, salt) {

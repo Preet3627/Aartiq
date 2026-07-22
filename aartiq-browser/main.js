@@ -814,6 +814,20 @@ ipcMain.handle('get-app-icon', async (event, appPath) => {
 
 
 const permissionStore = new PermissionStore();
+// Load saved security settings and permissions from disk on startup
+permissionStore.load().then(() => {
+  // Grant session-level permissions for low and medium risk shell commands so
+  // common AI commands (ls, mkdir, find, echo, mv, cp, etc.) execute without
+  // showing an approval dialog on every invocation.
+  // These are session-only grants (expire in 8h) and do NOT persist to disk.
+  // The user can promote them to permanent grants via Settings > Permissions.
+  if (!permissionStore.isGranted('SHELL_LOW')) {
+    permissionStore.grant('SHELL_LOW', 'execute', 'Default session grant for low-risk shell commands', true);
+  }
+  if (!permissionStore.isGranted('SHELL_MEDIUM')) {
+    permissionStore.grant('SHELL_MEDIUM', 'execute', 'Default session grant for medium-risk shell commands', true);
+  }
+}).catch(e => console.error('[Main] Failed to load PermissionStore:', e));
 // Wire PermissionStore into command-validator so checkShellPermission() uses the
 // same store as the rest of the application (replacing the old electron-store-based approach).
 setCommandValidatorPermissionStore(permissionStore);
@@ -5323,6 +5337,145 @@ ipcMain.handle('get-stored-api-keys', () => {
     active_llm_provider: store.get('active_llm_provider') || 'ollama',
   };
 });
+
+// AI Settings Query — returns categorised settings for the SETTINGS_QUERY command.
+// Sensitive keys (API keys, tokens) are always masked.
+ipcMain.handle('get-ai-settings', (_event, category) => {
+  const SENSITIVE = ['api_key', 'token', 'secret', 'password', 'session', 'credential'];
+  const mask = (key, val) => SENSITIVE.some(s => key.toLowerCase().includes(s)) ? (val ? '***SET***' : null) : val;
+
+  const webSearchSettings = {
+    category: 'webSearch',
+    label: 'Web Search',
+    settings: {
+      maxPages: store.get('webSearchMaxPages') ?? 5,
+      searchDepth: store.get('webSearchDepth') ?? 'medium',
+      searchEngine: store.get('webSearchEngine') ?? 'auto',
+      extractionMode: store.get('webSearchExtractionMode') ?? 'full',
+      budget: store.get('webSearchBudget') ?? 'standard',
+      safeSearch: store.get('webSearchSafeSearch') ?? true,
+      language: store.get('webSearchLanguage') ?? 'auto',
+    },
+  };
+
+  const aiSettings = {
+    category: 'ai',
+    label: 'AI Engine',
+    settings: {
+      activeProvider: store.get('active_llm_provider') ?? 'ollama',
+      activeModel: getConfiguredProviderModel(store.get('active_llm_provider') ?? 'ollama'),
+      streamingEnabled: store.get('aiStreaming') !== false,
+      thinkingEnabled: store.get('aiThinking') !== false,
+      maxTokens: store.get('aiMaxTokens') ?? 8192,
+      temperature: store.get('aiTemperature') ?? 0.7,
+      systemPromptEnabled: store.get('aiSystemPromptEnabled') !== false,
+      memoryEnabled: store.get('aiMemoryEnabled') !== false,
+      skillAutoLoad: store.get('aiSkillAutoLoad') !== false,
+    },
+  };
+
+  const uiSettings = {
+    category: 'ui',
+    label: 'User Interface',
+    settings: {
+      theme: store.get('theme') ?? 'dark',
+      fontSize: store.get('uiFontSize') ?? 14,
+      sidebarWidth: store.get('sidebarWidth') ?? 380,
+      showTerminal: store.get('showTerminal') ?? false,
+      showActionChain: store.get('showActionChain') ?? true,
+      compactMode: store.get('uiCompactMode') ?? false,
+      language: store.get('uiLanguage') ?? 'en',
+      notifications: store.get('uiNotifications') !== false,
+    },
+  };
+
+  const permissionsSettings = {
+    category: 'permissions',
+    label: 'Permissions & Allowlist',
+    settings: {
+      allowedDirectories: permissionStore.getAllowedDirectories().map(d => ({
+        path: d.path,
+        recursive: d.recursive,
+        access: d.access
+      })),
+      grants: Array.from(permissionStore.permissions.entries()).map(([k, v]) => ({
+        permission: k,
+        level: v.level,
+        grantedAt: v.granted_at,
+        grantedVia: v.granted_via,
+        expiresAt: v.expires_at
+      })),
+      autoApproveLowRisk: permissionStore.settings.autoApproveLowRisk,
+      autoApproveMidRisk: permissionStore.settings.autoApproveMidRisk,
+    }
+  };
+
+  const allCategories = { webSearch: webSearchSettings, ai: aiSettings, ui: uiSettings, permissions: permissionsSettings };
+  if (category && allCategories[category]) {
+    return allCategories[category];
+  }
+  return allCategories;
+});
+
+// Shortcut activation IPC handler for the AI settings skill
+ipcMain.handle('trigger-shortcut', (_event, action) => {
+  triggerShortcut(action);
+  return { success: true };
+});
+
+// AI Settings Update — applies a partial settings update for a given category.
+// Requires explicit user action — the AI calls this only after the user approves.
+ipcMain.handle('update-ai-settings', (_event, category, updates) => {
+  if (!category || typeof updates !== 'object' || !updates) {
+    return { success: false, error: 'Invalid category or updates object' };
+  }
+
+  const KEY_MAP = {
+    webSearch: {
+      maxPages: 'webSearchMaxPages',
+      searchDepth: 'webSearchDepth',
+      searchEngine: 'webSearchEngine',
+      extractionMode: 'webSearchExtractionMode',
+      budget: 'webSearchBudget',
+      safeSearch: 'webSearchSafeSearch',
+      language: 'webSearchLanguage',
+    },
+    ai: {
+      activeProvider: 'active_llm_provider',
+      streamingEnabled: 'aiStreaming',
+      thinkingEnabled: 'aiThinking',
+      maxTokens: 'aiMaxTokens',
+      temperature: 'aiTemperature',
+      systemPromptEnabled: 'aiSystemPromptEnabled',
+      memoryEnabled: 'aiMemoryEnabled',
+      skillAutoLoad: 'aiSkillAutoLoad',
+    },
+    ui: {
+      theme: 'theme',
+      fontSize: 'uiFontSize',
+      sidebarWidth: 'sidebarWidth',
+      showTerminal: 'showTerminal',
+      showActionChain: 'showActionChain',
+      compactMode: 'uiCompactMode',
+      language: 'uiLanguage',
+      notifications: 'uiNotifications',
+    },
+  };
+
+  const map = KEY_MAP[category];
+  if (!map) return { success: false, error: `Unknown settings category: ${category}` };
+
+  const applied = {};
+  for (const [uiKey, storeKey] of Object.entries(map)) {
+    if (uiKey in updates) {
+      store.set(storeKey, updates[uiKey]);
+      applied[uiKey] = updates[uiKey];
+    }
+  }
+
+  return { success: true, applied, category };
+});
+
 
 // Onboarding / first-run flags — persisted in electron-store so .dmg/.exe builds
 // keep state even when renderer localStorage partition or origin differs from dev.

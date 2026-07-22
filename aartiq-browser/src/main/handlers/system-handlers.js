@@ -36,6 +36,42 @@ module.exports = function registerSystemHandlers(ipcMain, handlers) {
     return await execShellCommand(rawCommand, preApproved, reason, riskLevel);
   });
 
+  // =========================================================================
+  // Directory Permission Bridge — interactive path-access requests
+  //
+  // When a shell command tries to access a path outside the allowlist the
+  // bridge emits 'directory-permission-request' to the renderer, which shows
+  // a warning panel.  The renderer responds via 'directory-permission-response'.
+  // =========================================================================
+  (() => {
+    const bridge = require('../../core/directory-permission-bridge');
+    // Give the bridge a reference to the window so it can emit events
+    if (mainWindow) {
+      bridge.setMainWindow(mainWindow);
+    }
+
+    // Handle renderer response (granted or denied)
+    ipcMain.on('directory-permission-response', (event, { requestId, granted }) => {
+      bridge.resolvePermission(requestId, !!granted);
+    });
+  })();
+
+  // =========================================================================
+  // Shell Permission Bridge — interactive command execution requests
+  // =========================================================================
+  (() => {
+    const shellBridge = require('../../core/shell-permission-bridge');
+    if (mainWindow) {
+      shellBridge.setMainWindow(mainWindow);
+    }
+
+    ipcMain.on('shell-permission-response', (event, { requestId, granted, remember }) => {
+      shellBridge.resolvePermission(requestId, !!granted, !!remember);
+    });
+  })();
+
+
+
   ipcMain.handle('get-extensions', async () => {
     const extensions = session.defaultSession.getAllExtensions();
     return extensions.map(ext => ({
@@ -261,16 +297,28 @@ module.exports = function registerSystemHandlers(ipcMain, handlers) {
   // BIOMETRIC AUTHENTICATION (Windows Hello + Touch ID + Linux)
   // ============================================================================
   try {
-    const { WindowsHelloAuth, CrossPlatformBiometricAuth } = require('../../service/windows-hello-auth.js');
-    const windowsHello = new WindowsHelloAuth();
+    const { BiometricAuthManager, CrossPlatformBiometricAuth } = require('../../service/biometric-auth.js');
+    const biometricAuth = new BiometricAuthManager();
     const crossPlatformAuth = new CrossPlatformBiometricAuth();
 
-    ipcMain.handle('biometric-check', async () => await windowsHello.quickCheck());
-    ipcMain.handle('biometric-authenticate', async (event, reason) => await windowsHello.authenticate(reason || 'Authenticate to proceed'));
-    ipcMain.handle('biometric-execute', async (event, actions, reason) => await crossPlatformAuth.executeWithAuth(actions, reason || 'Execute critical action'));
-    console.log('[Handlers] Windows Hello + Cross-platform biometric authentication registered');
+    ipcMain.handle('biometric-check', async () => {
+      try { return await biometricAuth.quickCheck(); }
+      catch { return { available: false, type: 'none' }; }
+    });
+    ipcMain.handle('biometric-authenticate', async (event, reason) => {
+      try { return await biometricAuth.authenticate(reason || 'Authenticate to proceed'); }
+      catch (err) { return { success: false, error: err.message }; }
+    });
+    ipcMain.handle('biometric-execute', async (event, actions, reason) => {
+      try { return await crossPlatformAuth.executeWithAuth(actions, reason || 'Execute critical action'); }
+      catch (err) { return { success: false, error: err.message }; }
+    });
+    console.log('[Handlers] Cross-platform biometric authentication registered');
   } catch (error) {
-    console.warn('[Handlers] Biometric auth unavailable:', error.message);
+    console.warn('[Handlers] Biometric auth initialization failed, registering fallback handlers:', error.message);
+    ipcMain.handle('biometric-check', async () => ({ available: false, type: 'none' }));
+    ipcMain.handle('biometric-authenticate', async () => ({ success: false, error: 'Biometric authentication unavailable' }));
+    ipcMain.handle('biometric-execute', async () => ({ success: false, error: 'Biometric execution unavailable' }));
   }
 
   ipcMain.on('raycast-update-state', (event, state) => {

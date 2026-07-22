@@ -311,6 +311,8 @@ Supported command types with their JSON parameters:
 **SETTINGS_QUERY** — { category: string } — Read current settings for webSearch, ai, or ui.
 **SETTINGS_UPDATE** — { category: string, updates: object } — Request a settings change (requires user approval via dialog).
 
+NOTE: If you need to manage bookmarks, view/clear browsing history, customize chat styles/gradients, view allowlisted directories/permissions, or open settings panels, you MUST load the "settings" skill using {"type": "LOAD_SKILL", "skillId": "settings"}.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FORM AUTOMATION — REQUIRED RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

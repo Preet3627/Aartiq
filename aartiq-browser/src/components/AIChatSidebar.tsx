@@ -892,6 +892,8 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     requestPermission: requestActionPermission,
     requestBatchPermission,
     approvalModal,
+    directoryPermissionPanel,
+    shellPermissionPanel,
   } = useAIActionSecurityManager();
 
   // Update agent state when permission is pending
@@ -3462,6 +3464,7 @@ I couldn't schedule the task. The background service may not be running. Please 
                 rawCommand: cmd.value,
                 reason: cmd.reason,
                 riskLevel: getShellCommandRisk(cmd.value),
+                preApproved: true,
               });
               const cmdOutput2 = res2.success ? (res2.output || '(no output)') : `Error: ${res2.error}`;
               setTerminalLogs(prev => prev.map(l => l.id === logId2
@@ -3509,7 +3512,8 @@ I couldn't schedule the task. The background service may not be running. Please 
           const res = await window.electronAPI.executeShellCommand({
             rawCommand: command.value,
             reason: command.reason,
-            riskLevel: getShellCommandRisk(command.value)
+            riskLevel: getShellCommandRisk(command.value),
+            preApproved: true,
           });
           const cmdOutput = res.success ? (res.output || '(no output)') : `Error: ${res.error}`;
           setTerminalLogs(prev => prev.map(l => l.id === logId
@@ -4639,6 +4643,384 @@ I couldn't schedule the task. The background service may not be running. Please 
           } catch (e: any) {
             resolveActionChainStep(loadStepId, 'error', e.message);
             output = `Failed to load skill "${skillId}": ${e.message}`;
+          }
+          break;
+        }
+
+        case 'SETTINGS_QUERY': {
+          // Read a specific settings category (webSearch | ai | ui) or all categories.
+          // JSON: {"type":"SETTINGS_QUERY","category":"webSearch"}
+          const queryCategory = (command.params?.category || command.value || '').trim().toLowerCase() || undefined;
+          const sqStepId = addActionChainStep(`⚙️ Reading ${queryCategory || 'all'} settings`);
+          try {
+            const result = await window.electronAPI.getAISettings(queryCategory);
+            const formatSection = (sec: any) => {
+              if (!sec?.settings) return '';
+              const lines = Object.entries(sec.settings)
+                .map(([k, v]) => `  • **${k}**: \`${JSON.stringify(v)}\``)
+                .join('\n');
+              return `### ⚙️ ${sec.label} (\`${sec.category}\`)\n${lines}`;
+            };
+            let formatted = '';
+            if (result && (result.category)) {
+              // Single category
+              formatted = formatSection(result);
+            } else if (result && typeof result === 'object') {
+              // All categories
+              formatted = Object.values(result).map((s: any) => formatSection(s)).filter(Boolean).join('\n\n');
+            }
+            if (formatted) {
+              setMessages(prev => [...prev, {
+                role: 'model',
+                content: `## Current Settings\n\n${formatted}\n\n---\n*Use \`{"type":"SETTINGS_UPDATE","category":"...","updates":{...}}\` to change a setting.*`
+              }]);
+            }
+            resolveActionChainStep(sqStepId, 'done', `Settings read`);
+            output = `Settings queried: ${queryCategory || 'all'}`;
+          } catch (e: any) {
+            resolveActionChainStep(sqStepId, 'error', e.message);
+            output = `Failed to read settings: ${e.message}`;
+          }
+          break;
+        }
+
+        case 'SETTINGS_UPDATE': {
+          // Update settings for a specific category after the user approves the dialog.
+          // JSON: {"type":"SETTINGS_UPDATE","category":"webSearch","updates":{"maxPages":10}}
+          const updateCategory = (command.params?.category || command.value || '').trim().toLowerCase();
+          let updatesObj: Record<string, any> = {};
+          try {
+            const rawUpdates = command.params?.updates;
+            updatesObj = rawUpdates ? (typeof rawUpdates === 'string' ? JSON.parse(rawUpdates) : rawUpdates) : {};
+          } catch {
+            output = 'Invalid updates JSON in SETTINGS_UPDATE command.';
+            break;
+          }
+          if (!updateCategory || Object.keys(updatesObj).length === 0) {
+            output = 'SETTINGS_UPDATE requires a category and at least one update field.';
+            break;
+          }
+          const suStepId = addActionChainStep(`⚙️ Updating ${updateCategory} settings`);
+          const updateKeys = Object.keys(updatesObj).join(', ');
+          const updateConfirmed = await requestPermission({
+            actionType: 'SETTINGS_UPDATE',
+            action: 'Update Settings',
+            target: updateCategory,
+            what: `Change ${updateCategory} settings: ${updateKeys}`,
+            reason: command.reason || 'The AI wants to update app settings.',
+            risk: 'medium',
+          });
+          if (!updateConfirmed) {
+            resolveActionChainStep(suStepId, 'error', 'Denied');
+            output = 'Settings update denied by user.';
+            break;
+          }
+          try {
+            const res = await window.electronAPI.updateAISettings(updateCategory, updatesObj);
+            if (res?.success) {
+              const appliedKeys = Object.keys(res.applied || {}).map(k => `**${k}** → \`${JSON.stringify(res.applied[k])}\``).join(', ');
+              setMessages(prev => [...prev, {
+                role: 'model',
+                content: `✅ **Settings Updated** (${updateCategory})\n\n${appliedKeys}`
+              }]);
+              resolveActionChainStep(suStepId, 'done', `Applied: ${Object.keys(res.applied || {}).join(', ')}`);
+              output = `Settings updated: ${Object.keys(res.applied || {}).join(', ')}`;
+            } else {
+              resolveActionChainStep(suStepId, 'error', res?.error || 'Update failed');
+              output = `Settings update failed: ${res?.error || 'unknown error'}`;
+            }
+          } catch (e: any) {
+            resolveActionChainStep(suStepId, 'error', e.message);
+            output = `Failed to update settings: ${e.message}`;
+          }
+          break;
+        }
+
+        case 'LIST_BOOKMARKS': {
+          const limitVal = parseInt(command.params?.limit || '50', 10);
+          const offsetVal = parseInt(command.params?.offset || '0', 10);
+          const limit = isNaN(limitVal) ? 50 : limitVal;
+          const offset = isNaN(offsetVal) ? 0 : offsetVal;
+          const lbStepId = addActionChainStep(`🔖 Listing bookmarks (limit ${limit}, offset ${offset})`);
+          try {
+            const bookmarks = useAppStore.getState().bookmarks || [];
+            const sliced = bookmarks.slice(offset, offset + limit);
+            let formatted = '';
+            if (sliced.length === 0) {
+              formatted = '_No bookmarks found in this range._';
+            } else {
+              formatted = sliced.map((b: any) => `• [${b.title || b.url}](${b.url})`).join('\n');
+            }
+            setMessages(prev => [...prev, {
+              role: 'model',
+              content: `### 🔖 Bookmarks (showing ${sliced.length} of ${bookmarks.length})\n\n${formatted}`
+            }]);
+            resolveActionChainStep(lbStepId, 'done', `Listed ${sliced.length} bookmarks`);
+            output = `Listed ${sliced.length} bookmarks`;
+          } catch (e: any) {
+            resolveActionChainStep(lbStepId, 'error', e.message);
+            output = `Failed to list bookmarks: ${e.message}`;
+          }
+          break;
+        }
+
+        case 'ADD_BOOKMARK': {
+          const rawUrl = (command.params?.url || command.value || '').trim();
+          const rawTitle = (command.params?.title || '').trim();
+          if (!rawUrl) {
+            output = 'ADD_BOOKMARK requires a url parameter.';
+            break;
+          }
+          const abStepId = addActionChainStep(`🔖 Bookmarking ${rawUrl}`);
+          const confirmed = await requestPermission({
+            actionType: 'ADD_BOOKMARK',
+            action: 'Add Bookmark',
+            target: rawUrl,
+            what: `Bookmark "${rawTitle || rawUrl}"`,
+            reason: command.reason || 'The AI wants to bookmark this page.',
+            risk: 'low',
+          });
+          if (!confirmed) {
+            resolveActionChainStep(abStepId, 'error', 'Denied');
+            output = 'Add bookmark denied by user.';
+            break;
+          }
+          try {
+            useAppStore.getState().addBookmark({ url: rawUrl, title: rawTitle || rawUrl });
+            setMessages(prev => [...prev, {
+              role: 'model',
+              content: `✅ **Bookmark Added**: [${rawTitle || rawUrl}](${rawUrl})`
+            }]);
+            resolveActionChainStep(abStepId, 'done', 'Added');
+            output = `Added bookmark for ${rawUrl}`;
+          } catch (e: any) {
+            resolveActionChainStep(abStepId, 'error', e.message);
+            output = `Failed to add bookmark: ${e.message}`;
+          }
+          break;
+        }
+
+        case 'REMOVE_BOOKMARK': {
+          const rawUrl = (command.params?.url || command.value || '').trim();
+          if (!rawUrl) {
+            output = 'REMOVE_BOOKMARK requires a url parameter.';
+            break;
+          }
+          const rbStepId = addActionChainStep(`🔖 Removing bookmark for ${rawUrl}`);
+          const confirmed = await requestPermission({
+            actionType: 'REMOVE_BOOKMARK',
+            action: 'Remove Bookmark',
+            target: rawUrl,
+            what: `Remove bookmark for ${rawUrl}`,
+            reason: command.reason || 'The AI wants to remove a bookmark.',
+            risk: 'low',
+          });
+          if (!confirmed) {
+            resolveActionChainStep(rbStepId, 'error', 'Denied');
+            output = 'Remove bookmark denied by user.';
+            break;
+          }
+          try {
+            useAppStore.getState().removeBookmark(rawUrl);
+            setMessages(prev => [...prev, {
+              role: 'model',
+              content: `✅ **Bookmark Removed**: ${rawUrl}`
+            }]);
+            resolveActionChainStep(rbStepId, 'done', 'Removed');
+            output = `Removed bookmark for ${rawUrl}`;
+          } catch (e: any) {
+            resolveActionChainStep(rbStepId, 'error', e.message);
+            output = `Failed to remove bookmark: ${e.message}`;
+          }
+          break;
+        }
+
+        case 'CLEAR_BOOKMARKS': {
+          const cbStepId = addActionChainStep('🔖 Clearing all bookmarks');
+          const confirmed = await requestPermission({
+            actionType: 'CLEAR_BOOKMARKS',
+            action: 'Clear All Bookmarks',
+            target: 'All Bookmarks',
+            what: 'Delete all browser bookmarks',
+            reason: command.reason || 'The AI wants to clear your bookmarks library.',
+            risk: 'medium',
+          });
+          if (!confirmed) {
+            resolveActionChainStep(cbStepId, 'error', 'Denied');
+            output = 'Clear bookmarks denied by user.';
+            break;
+          }
+          try {
+            useAppStore.setState({ bookmarks: [] });
+            setMessages(prev => [...prev, {
+              role: 'model',
+              content: '✅ **All Bookmarks Cleared**'
+            }]);
+            resolveActionChainStep(cbStepId, 'done', 'Cleared');
+            output = 'Cleared all bookmarks';
+          } catch (e: any) {
+            resolveActionChainStep(cbStepId, 'error', e.message);
+            output = `Failed to clear bookmarks: ${e.message}`;
+          }
+          break;
+        }
+
+        case 'LIST_HISTORY': {
+          const limitVal = parseInt(command.params?.limit || command.value || '50', 10);
+          const limit = isNaN(limitVal) ? 50 : limitVal;
+          const query = (command.params?.query || '').trim().toLowerCase();
+          const startDateStr = (command.params?.startDate || '').trim();
+          const endDateStr = (command.params?.endDate || '').trim();
+
+          const lhStepId = addActionChainStep(`📅 Listing history`);
+          try {
+            let history = useAppStore.getState().history || [];
+            
+            // 1. Filter by text query if provided
+            if (query) {
+              history = history.filter((h: any) => 
+                (h.title || '').toLowerCase().includes(query) || 
+                (h.url || '').toLowerCase().includes(query)
+              );
+            }
+
+            // 2. Filter by date/time ranges if provided
+            if (startDateStr) {
+              const startTimestamp = new Date(startDateStr).getTime();
+              if (!isNaN(startTimestamp)) {
+                history = history.filter((h: any) => h.lastVisited >= startTimestamp);
+              }
+            }
+            if (endDateStr) {
+              const endTimestamp = new Date(endDateStr).getTime();
+              if (!isNaN(endTimestamp)) {
+                history = history.filter((h: any) => h.lastVisited <= endTimestamp);
+              }
+            }
+
+            const totalFiltered = history.length;
+            const sliced = [...history].reverse().slice(0, limit);
+
+            let formatted = '';
+            if (sliced.length === 0) {
+              formatted = '_No browsing history found matching criteria._';
+            } else {
+              formatted = sliced.map((h: any) => {
+                const dateStr = h.lastVisited ? new Date(h.lastVisited).toLocaleString() : '';
+                const timeSpan = dateStr ? ` *(${dateStr})*` : '';
+                return `• [${h.title || h.url}](${h.url})${timeSpan}`;
+              }).join('\n');
+            }
+            
+            let heading = `### 📅 Browsing History (showing ${sliced.length} of ${totalFiltered})`;
+            if (query) heading += ` for "${query}"`;
+            
+            setMessages(prev => [...prev, {
+              role: 'model',
+              content: `${heading}\n\n${formatted}`
+            }]);
+            resolveActionChainStep(lhStepId, 'done', `${sliced.length} history items listed`);
+            output = `Listed ${sliced.length} history items`;
+          } catch (e: any) {
+            resolveActionChainStep(lhStepId, 'error', e.message);
+            output = `Failed to list history: ${e.message}`;
+          }
+          break;
+        }
+
+        case 'CLEAR_HISTORY': {
+          const chStepId = addActionChainStep('📅 Clearing browsing history');
+          const confirmed = await requestPermission({
+            actionType: 'CLEAR_HISTORY',
+            action: 'Clear Browsing History',
+            target: 'All History',
+            what: 'Delete all browser history',
+            reason: command.reason || 'The AI wants to clear your browsing history.',
+            risk: 'medium',
+          });
+          if (!confirmed) {
+            resolveActionChainStep(chStepId, 'error', 'Denied');
+            output = 'Clear history denied by user.';
+            break;
+          }
+          try {
+            useAppStore.getState().clearHistory();
+            setMessages(prev => [...prev, {
+              role: 'model',
+              content: '✅ **Browsing History Cleared**'
+            }]);
+            resolveActionChainStep(chStepId, 'done', 'Cleared');
+            output = 'Cleared browsing history';
+          } catch (e: any) {
+            resolveActionChainStep(chStepId, 'error', e.message);
+            output = `Failed to clear history: ${e.message}`;
+          }
+          break;
+        }
+
+        case 'SET_CHAT_STYLE': {
+          const fontSizeVal = command.params?.fontSize ? parseInt(command.params.fontSize, 10) : undefined;
+          const glowModeVal = command.params?.glowMode as GlowMode | undefined;
+          const glowPresetVal = command.params?.glowPreset as GlowPreset | undefined;
+          const scsStepId = addActionChainStep('🎨 Adjusting chat appearance');
+          try {
+            const updates: Partial<SidebarWorkspacePreferences> = {};
+            if (fontSizeVal && !isNaN(fontSizeVal)) updates.fontSize = fontSizeVal;
+            if (glowModeVal && ['off', 'gradient', 'rgb'].includes(glowModeVal)) updates.glowMode = glowModeVal;
+            if (glowPresetVal && ['purple-cosmos', 'ocean-blue', 'emerald-forest', 'sunset-fire', 'rose-gold', 'arctic-ice', 'custom'].includes(glowPresetVal)) updates.glowPreset = glowPresetVal;
+
+            if (Object.keys(updates).length > 0) {
+              updateWorkspacePrefs(updates);
+              const changeStr = Object.entries(updates).map(([k, v]) => `**${k}** → \`${v}\``).join(', ');
+              setMessages(prev => [...prev, {
+                role: 'model',
+                content: `🎨 **Chat Style Updated**\n\n${changeStr}`
+              }]);
+              resolveActionChainStep(scsStepId, 'done', 'Style updated');
+              output = `Updated chat style: ${JSON.stringify(updates)}`;
+            } else {
+              resolveActionChainStep(scsStepId, 'skipped', 'No valid style updates specified');
+              output = 'Chat style update skipped: no valid updates provided';
+            }
+          } catch (e: any) {
+            resolveActionChainStep(scsStepId, 'error', e.message);
+            output = `Failed to update chat style: ${e.message}`;
+          }
+          break;
+        }
+
+        case 'OPEN_SETTINGS_PANEL': {
+          const panel = (command.params?.panel || command.value || '').trim().toLowerCase();
+          if (!panel) {
+            output = 'OPEN_SETTINGS_PANEL requires a panel parameter.';
+            break;
+          }
+          const ospStepId = addActionChainStep(`⚙️ Opening ${panel} panel`);
+          const map: Record<string, string> = {
+            vault: 'open-bookmarks',
+            bookmarks: 'open-bookmarks',
+            history: 'open-history',
+            extensions: 'open-extensions',
+            profile: 'open-settings',
+            settings: 'open-settings',
+            downloads: 'open-downloads',
+            clipboard: 'open-clipboard',
+            cart: 'open-cart',
+            workspace: 'open-workspace',
+          };
+          const action = map[panel];
+          if (!action) {
+            resolveActionChainStep(ospStepId, 'error', `Unknown panel: ${panel}`);
+            output = `Failed to open settings panel: unknown panel name "${panel}"`;
+            break;
+          }
+          try {
+            await window.electronAPI.triggerShortcut(action);
+            resolveActionChainStep(ospStepId, 'done', 'Opened');
+            output = `Opened settings panel: ${panel}`;
+          } catch (e: any) {
+            resolveActionChainStep(ospStepId, 'error', e.message);
+            output = `Failed to open settings panel: ${e.message}`;
           }
           break;
         }
@@ -6250,7 +6632,11 @@ I've successfully executed the following real tasks:
         )}
       </AnimatePresence>
 
-      <AnimatePresence>{approvalModal}</AnimatePresence>
+      <AnimatePresence>
+        {approvalModal}
+        {directoryPermissionPanel}
+        {shellPermissionPanel}
+      </AnimatePresence>
 
       {/* Demo Highlight Overlay */}
       <AnimatePresence>

@@ -1080,15 +1080,26 @@ onClick={() => {
                     />
                   </div>
 
-                  {/* AI Instructions */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] text-white/30 uppercase font-bold">Persistent AI Instructions</label>
-                    <textarea
-                      placeholder="Enter persistent instructions for the AI (e.g., 'Always respond in markdown')."
-                      className="w-full bg-black/20 border border-white/5 rounded-lg px-3 py-2.5 text-xs text-white placeholder:text-white/10 outline-none h-20 resize-none"
-                      value={store.additionalAIInstructions}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => store.setAdditionalAIInstructions(e.target.value)}
-                    />
+                  {/* Directory Allowlist for LLM */}
+                  <div className="space-y-1.5 pt-2 border-t border-white/5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[9px] text-white/30 uppercase font-bold">LLM Directory Allowlist</label>
+                    </div>
+                    <p className="text-[11px] text-white/40 leading-relaxed">
+                      Configure which local folders the LLM is permitted to read and write.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.electronAPI?.openSettingsPopup) {
+                          window.electronAPI.openSettingsPopup('permissions');
+                        }
+                      }}
+                      className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-all flex items-center justify-center gap-2"
+                    >
+                      <FolderOpen size={13} />
+                      Manage Allowed Directories
+                    </button>
                   </div>
                 </div>
               </CollapsibleSection>

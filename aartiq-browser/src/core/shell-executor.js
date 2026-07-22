@@ -4,7 +4,13 @@ const { validateCommand, checkShellPermission, permissionStore, analyzeCommandRi
 async function executeShellCommand({ rawCommand, preApproved, reason, riskLevel }) {
   let command;
   try {
-    command = validateCommand(rawCommand);
+    if (preApproved) {
+      command = rawCommand.trim();
+      if (!command) throw new Error('Invalid command: empty command');
+      if (command.length > 10000) throw new Error('Command too long (max 10000 characters)');
+    } else {
+      command = validateCommand(rawCommand);
+    }
   } catch (e) {
     return { success: false, error: e.message };
   }
