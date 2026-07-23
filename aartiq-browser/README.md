@@ -1,10 +1,12 @@
 # Aartiq Browser (Desktop)
 
+> **Aartiq — For the questions that matter.**
+
 The Electron desktop application for Aartiq — an AI-native browser with OS automation capabilities.
 
 ## Overview
 
-This package contains the desktop browser built with Electron + Next.js. It includes the main process, renderer UI, AI chat sidebar, security layer, MCP bridge, and native OS automation backends.
+This package contains the desktop browser built with Electron + Next.js. It includes the main process, renderer UI, AI chat sidebar, security layer, MCP bridge, DOM engine v2, and native OS automation backends.
 
 ## Quick Start
 
@@ -61,7 +63,8 @@ aartiq-browser/
 | `webauthn-service.js` | WebAuthn/FIDO2 native verification (Windows Hello, macOS Touch ID via caBLE) |
 | `AIChatSidebar.tsx` | Main AI chat interface |
 | `AICommandParser.ts` | Parses AI output into executable commands |
-| `DOMEngine.ts` | Centralized DOM interaction engine |
+| `DOMEngine.ts` | Centralized DOM interaction engine v2 with cascading fallbacks |
+| `skill-loader.js` | On-demand AI skill loading and management |
 | `AdvancedDocumentEngine.ts` | PDF/XLSX/PPTX generation |
 | `WiFiSyncService.ts` | WebSocket sync desktop↔mobile |
 | `P2PFileSyncService.ts` | Peer-to-peer file transfer |
@@ -70,18 +73,16 @@ aartiq-browser/
 | `tesseract-service.js` | OCR via Tesseract.js |
 | `plugin-manager.js` | Dynamic plugin loading |
 
-## Security: Native OS Verification
+## Security
+
+### Native OS Verification (WebAuthn/FIDO2)
 
 Aartiq uses **WebAuthn/FIDO2** for cryptographic identity verification when approving high-risk AI actions. This replaces older PowerShell-based verification with proper low-level OS verification.
-
-### How It Works
 
 1. **Challenge-Response**: Each verification generates a 256-bit random challenge
 2. **TPM-Backed Keys**: Private keys are stored in the device's TPM and never leave hardware
 3. **Biometric/PIN**: Windows Hello prompts for fingerprint, face recognition, or PIN
 4. **Attestation**: TPM 2.0 attestation verifies the key is genuine hardware-backed
-
-### Platform Support
 
 | Platform | Method | API |
 |----------|--------|-----|
@@ -89,16 +90,24 @@ Aartiq uses **WebAuthn/FIDO2** for cryptographic identity verification when appr
 | macOS 12+ | caBLE WebAuthn via AuthenticationServices | `cableRegister` / `cableAuthenticate` |
 | Linux | Falls back to password prompt | N/A |
 
-### Files
+### Directory Allowlist
 
-- `src/lib/webauthn-service.js` — Unified WebAuthn service wrapping `@beeper/webauthn-authenticator`
-- `src/lib/native-os-verifier.js` — Cross-platform verification gate (WebAuthn primary, PowerShell fallback)
-- `src/service/windows-hello-auth.js` — Windows Hello authentication class
-- `src/service/biometric-auth.js` — Cross-platform biometric manager
+AI file access is restricted to user-approved directories via a configurable allowlist. Shell commands that read or write outside allowed paths are blocked.
 
-### Credential Storage
+### Vault & Credentials
 
-WebAuthn credentials are stored locally in `~/.aartiq/webauthn-credentials.json` (mode `0600`). Public keys are stored — private keys remain in the TPM.
+- Vault encryption key stored in native OS keychain (not plaintext config)
+- Windows AppContainer sandbox for process isolation
+- WebAuthn credentials in `~/.aartiq/webauthn-credentials.json` (mode `0600`)
+
+## DOM Engine v2
+
+Centralized DOM interaction engine with cascading fallback strategies:
+
+- **Element Resolution**: CSS selector → text content → ARIA role → placeholder → broad scan
+- **Multi-field Forms**: `dom-multi-fill-form` for atomic form filling
+- **Click Hardening**: Default fallback strategies ensure buttons are found even with empty params
+- **110 Jest Tests**: Full coverage for engine v2, skill loading, and handler fallbacks
 
 ## Build
 

@@ -1,42 +1,87 @@
 # Aartiq Browser - Recent Changes
 
-## Version 0.3.5 - Native WebAuthn OS Verification (2026-07-23)
+## Version 0.3.5 — Aartiq — For the questions that matter. (2026-07-23)
 
 ### Overview
-Replaced all PowerShell-based Windows Hello verification with proper low-level WebAuthn/FIDO2 challenge-response using the native `webauthn.dll` API. This eliminates PowerShell process spawning, temp script files, and plaintext token storage in favor of TPM-backed cryptographic verification.
+A major release focused on security hardening, DOM automation reliability, native OS verification, and AI skill management. Replaces PowerShell-based biometrics with native WebAuthn/FIDO2, introduces a directory allowlist for AI file access, upgrades the DOM engine to v2 with cascading fallbacks, and adds deep research with execution tracking.
 
-### Changes
+### Security
 
-#### WebAuthn/FIDO2 Native Verification
+#### Native WebAuthn/FIDO2 Verification
 - **New `webauthn-service.js`**: Unified WebAuthn service wrapping `@beeper/webauthn-authenticator` (NAPI-RS bindings to `webauthn-authenticator-rs`)
 - **Challenge-Response**: Each verification generates a 256-bit random nonce; the authenticator signs it with a TPM-backed private key
 - **TPM-Backed Keys**: Private keys never leave the hardware security module — stored in TPM 2.0
-- **Attestation**: Direct attestation support for verifying key genuineness
 - **Credential Storage**: WebAuthn credentials stored in `~/.aartiq/webauthn-credentials.json` (mode 0600)
+- **No more PowerShell spawning**: Eliminated 1-3s PowerShell process overhead, temp `.ps1` files, and plaintext token storage
+- Platform support: Windows 10 1903+ (webauthn.dll), macOS 12+ (caBLE via AuthenticationServices), Linux (password fallback)
 
-#### Platform Support
-| Platform | Method | API |
-|----------|--------|-----|
-| Windows 10 1903+ | WebAuthn via `webauthn.dll` | `win10Register` / `win10Authenticate` |
-| macOS 12+ | caBLE WebAuthn via AuthenticationServices | `cableRegister` / `cableAuthenticate` |
-| Linux | Falls back to password prompt | N/A |
+#### Vault & Credential Security
+- **Vault encryption key moved to native OS keychain** — no longer stored in plaintext config files
+- **Vault migration** to AppContainer sandbox on Windows for process isolation
 
-#### Security Improvements
-- **No more PowerShell spawning**: Eliminated 1-3s PowerShell process overhead per verification
-- **No temp files**: Removed `.ps1` script creation/cleanup pattern
-- **Cryptographic verification**: Challenge-response with SHA-256/ECDSA instead of "did the user enter anything"
-- **No plaintext tokens**: Removed base64-only token storage in `~/.aartiq/windows-hello-token`
-- **No script injection**: Native API calls cannot be intercepted or modified
+#### Directory Allowlist for AI File Access
+- New allowlist system restricts which directories the AI can read/write via shell commands
+- Prevents unauthorized file access outside user-approved paths
 
-#### Files Changed
-- `src/lib/webauthn-service.js` — New: Unified WebAuthn service
-- `src/lib/native-os-verifier.js` — Updated: WebAuthn primary, PowerShell legacy fallback
-- `src/service/windows-hello-auth.js` — Rewritten: WebAuthn challenge-response replaces all PowerShell
-- `src/service/biometric-auth.js` — Updated: WebAuthn replaces PowerShell for Windows path
-- `main.js` — Removed redundant biometric IPC handler registration (handled by system-handlers.js)
-- `package.json` — Added `@beeper/webauthn-authenticator` dependency
+#### Security Patch
+- Patched shell injection vulnerability, credential storage exposure, and Shift+Tab permission bypass
 
-#### Dependencies Added
+### AI & Automation
+
+#### On-Demand Skill Loading
+- AI loads skills dynamically based on task context instead of loading all at startup
+- Action chain capabilities demo and settings management for skills
+- SkillLoader rewritten in pure JS with correct require paths (`.ts` → `.js`) and validation allowlist fixes
+
+#### Deep Research Pipeline
+- Upgraded deep research with execution tracking UI
+- Real-time progress visibility for multi-step research tasks
+
+#### AI Provider Settings
+- Configurable AI providers in settings UI
+- Tagline gradient styling
+
+### DOM Engine v2
+
+#### Cascading Fallbacks
+- `dom-fill-form` and `dom-multi-fill-form` upgraded to DOM engine v2
+- Multi-strategy fallback chain for element interaction — tries CSS selector, text content, ARIA role, placeholder, and broad element scan
+- `dom-click-element` hardened with default fallback strategies when no specific params match
+- YouTube-specific selectors for subscribe button and other common interactive elements
+
+#### Zoom Factor Guard
+- Fixed `NaN` crash when `getZoomFactor()` returns before view is ready
+- Guarded with `Number.isFinite()` check and try/catch
+
+#### Test Suite
+- 110 Jest tests for DOM engine v2, skill loading, and DOM handler cascading fallbacks
+
+### Settings & UI
+
+#### Dynamic Browser Controls
+- Settings panel triggers for real-time browser control adjustments
+- UI polish across settings panels
+
+#### MSIX / Windows Fixes
+- Fixed black taskbar icon background (cyan overlay) on Windows
+- AppContainer sandbox for Windows Store compliance
+
+### Files Changed (Key)
+
+| File | Change |
+|------|--------|
+| `src/lib/webauthn-service.js` | New: Unified WebAuthn/FIDO2 service |
+| `src/lib/native-os-verifier.js` | Updated: WebAuthn primary, PowerShell fallback |
+| `src/service/windows-hello-auth.js` | Rewritten: WebAuthn challenge-response |
+| `src/service/biometric-auth.js` | Updated: WebAuthn for Windows |
+| `src/main/handlers/browser-handlers.js` | DOM click fallback strategies, zoom guard |
+| `main.js` | DOM click fallbacks, zoom guard, skill loading |
+| `src/components/AIChatSidebar.tsx` | FIND_AND_CLICK / CLICK_ELEMENT param fallbacks |
+| `src/lib/skill-loader.js` | On-demand skill loading |
+| `src/service/permission-api.js` | Directory allowlist, permission gating |
+| `package.json` | Added `@beeper/webauthn-authenticator` |
+
+### Dependencies Added
 - `@beeper/webauthn-authenticator` — NAPI-RS bindings for WebAuthn/FIDO2 authenticator operations
 
 ---
