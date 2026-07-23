@@ -25,7 +25,7 @@ aartiq-browser/
 ├── package.json
 ├── next.config.js
 ├── src/
-│   ├── components/         # React UI (126 components)
+│   ├── components/         # React UI (126+ components)
 │   │   ├── AIChatSidebar.tsx
 │   │   ├── CommandPalette.tsx
 │   │   ├── ActionChain.tsx
@@ -34,11 +34,15 @@ aartiq-browser/
 │   │   ├── AICommandParser.ts
 │   │   ├── DOMEngine.ts
 │   │   ├── Security.ts
+│   │   ├── webauthn-service.js     # WebAuthn/FIDO2 native verification
 │   │   ├── AdvancedDocumentEngine.ts
 │   │   ├── WiFiSyncService.ts
 │   │   ├── tesseract-service.js
 │   │   └── plugin-manager.js
-│   ├── service/            # Background scheduler
+│   ├── service/            # Background services
+│   │   ├── biometric-auth.js        # Cross-platform biometric auth
+│   │   ├── windows-hello-auth.js    # Windows Hello WebAuthn
+│   │   └── ...
 │   ├── store/              # Zustand state + selectors
 │   ├── automation/         # Cross-platform OS automation
 │   │   ├── mac.js
@@ -54,6 +58,7 @@ aartiq-browser/
 | File | Purpose |
 |------|---------|
 | `Security.ts` / `SecurityValidator.js` | Command validation, risk levels, injection detection |
+| `webauthn-service.js` | WebAuthn/FIDO2 native verification (Windows Hello, macOS Touch ID via caBLE) |
 | `AIChatSidebar.tsx` | Main AI chat interface |
 | `AICommandParser.ts` | Parses AI output into executable commands |
 | `DOMEngine.ts` | Centralized DOM interaction engine |
@@ -64,6 +69,36 @@ aartiq-browser/
 | `SiriShortcutsIntegration.ts` | macOS Siri/Shortcuts bridge |
 | `tesseract-service.js` | OCR via Tesseract.js |
 | `plugin-manager.js` | Dynamic plugin loading |
+
+## Security: Native OS Verification
+
+Aartiq uses **WebAuthn/FIDO2** for cryptographic identity verification when approving high-risk AI actions. This replaces older PowerShell-based verification with proper low-level OS verification.
+
+### How It Works
+
+1. **Challenge-Response**: Each verification generates a 256-bit random challenge
+2. **TPM-Backed Keys**: Private keys are stored in the device's TPM and never leave hardware
+3. **Biometric/PIN**: Windows Hello prompts for fingerprint, face recognition, or PIN
+4. **Attestation**: TPM 2.0 attestation verifies the key is genuine hardware-backed
+
+### Platform Support
+
+| Platform | Method | API |
+|----------|--------|-----|
+| Windows 10 1903+ | WebAuthn via `webauthn.dll` | `win10Register` / `win10Authenticate` |
+| macOS 12+ | caBLE WebAuthn via AuthenticationServices | `cableRegister` / `cableAuthenticate` |
+| Linux | Falls back to password prompt | N/A |
+
+### Files
+
+- `src/lib/webauthn-service.js` — Unified WebAuthn service wrapping `@beeper/webauthn-authenticator`
+- `src/lib/native-os-verifier.js` — Cross-platform verification gate (WebAuthn primary, PowerShell fallback)
+- `src/service/windows-hello-auth.js` — Windows Hello authentication class
+- `src/service/biometric-auth.js` — Cross-platform biometric manager
+
+### Credential Storage
+
+WebAuthn credentials are stored locally in `~/.aartiq/webauthn-credentials.json` (mode `0600`). Public keys are stored — private keys remain in the TPM.
 
 ## Build
 

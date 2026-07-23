@@ -1,5 +1,46 @@
 # Aartiq Browser - Recent Changes
 
+## Version 0.3.5 - Native WebAuthn OS Verification (2026-07-23)
+
+### Overview
+Replaced all PowerShell-based Windows Hello verification with proper low-level WebAuthn/FIDO2 challenge-response using the native `webauthn.dll` API. This eliminates PowerShell process spawning, temp script files, and plaintext token storage in favor of TPM-backed cryptographic verification.
+
+### Changes
+
+#### WebAuthn/FIDO2 Native Verification
+- **New `webauthn-service.js`**: Unified WebAuthn service wrapping `@beeper/webauthn-authenticator` (NAPI-RS bindings to `webauthn-authenticator-rs`)
+- **Challenge-Response**: Each verification generates a 256-bit random nonce; the authenticator signs it with a TPM-backed private key
+- **TPM-Backed Keys**: Private keys never leave the hardware security module — stored in TPM 2.0
+- **Attestation**: Direct attestation support for verifying key genuineness
+- **Credential Storage**: WebAuthn credentials stored in `~/.aartiq/webauthn-credentials.json` (mode 0600)
+
+#### Platform Support
+| Platform | Method | API |
+|----------|--------|-----|
+| Windows 10 1903+ | WebAuthn via `webauthn.dll` | `win10Register` / `win10Authenticate` |
+| macOS 12+ | caBLE WebAuthn via AuthenticationServices | `cableRegister` / `cableAuthenticate` |
+| Linux | Falls back to password prompt | N/A |
+
+#### Security Improvements
+- **No more PowerShell spawning**: Eliminated 1-3s PowerShell process overhead per verification
+- **No temp files**: Removed `.ps1` script creation/cleanup pattern
+- **Cryptographic verification**: Challenge-response with SHA-256/ECDSA instead of "did the user enter anything"
+- **No plaintext tokens**: Removed base64-only token storage in `~/.aartiq/windows-hello-token`
+- **No script injection**: Native API calls cannot be intercepted or modified
+
+#### Files Changed
+- `src/lib/webauthn-service.js` — New: Unified WebAuthn service
+- `src/lib/native-os-verifier.js` — Updated: WebAuthn primary, PowerShell legacy fallback
+- `src/service/windows-hello-auth.js` — Rewritten: WebAuthn challenge-response replaces all PowerShell
+- `src/service/biometric-auth.js` — Updated: WebAuthn replaces PowerShell for Windows path
+- `main.js` — Removed redundant biometric IPC handler registration (handled by system-handlers.js)
+- `package.json` — Added `@beeper/webauthn-authenticator` dependency
+
+#### Dependencies Added
+- `@beeper/webauthn-authenticator` — NAPI-RS bindings for WebAuthn/FIDO2 authenticator operations
+
+---
+
 ## Version 0.3.3 - Claude Desktop MCP Server (2026-07-13)
 
 ### Overview

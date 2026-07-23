@@ -31,9 +31,9 @@ Aartiq/
 ## Version System
 
 ### Current Version
-- **Version:** `0.3.4` (stable)
+- **Version:** `0.3.5` (stable)
 - **Codename:** Nebula
-- **Release Date:** 2026-07-19
+- **Release Date:** 2026-07-23
 
 ### Version Pattern
 - Format: `Major.Minor.Patch` (e.g., `0.2.7`)
@@ -125,28 +125,61 @@ Aartiq uses structured JSON commands. Always respond with JSON format:
 | `NAVIGATE` | Navigation | Go to URL |
 | `SEARCH` | Navigation | Web search |
 | `WEB_SEARCH` | Navigation | Real-time search with RAG |
+| `SEARCH_RESULTS` | Navigation | Get search result URLs (no tab) |
 | `RELOAD` | Navigation | Refresh page |
 | `GO_BACK` | Navigation | Back in history |
 | `GO_FORWARD` | Navigation | Forward in history |
 | `READ_PAGE_CONTENT` | Browser | Extract page text |
 | `LIST_OPEN_TABS` | Browser | Get open tabs |
+| `SWITCH_TAB` | Browser | Switch to a tab |
+| `CLOSE_TAB` | Browser | Close a tab |
 | `CLICK_ELEMENT` | Browser | Click on page element |
 | `FIND_AND_CLICK` | Browser | Find text and click |
+| `CLICK_AT` | Browser | Click at screen coordinates |
 | `FILL_FORM` | Browser | Fill form fields |
+| `MULTI_FILL_FORM` | Browser | Fill multiple fields atomically |
+| `DOM_SEARCH` | Browser | Search within page DOM |
+| `DOM_READ_FILTERED` | Browser | Read DOM with filtering |
+| `SCROLL_TO` | Browser | Scroll to element |
+| `SCREENSHOT_AND_ANALYZE` | Browser | Capture and analyze screenshot |
+| `DEEP_RESEARCH` | Browser | Iterative deep research |
+| `ORGANIZE_TABS` | Browser | AI tab grouping |
 | `CREATE_PDF_JSON` | PDF | Generate PDF document |
-| `CREATE_FILE_JSON` | PDF | Create file |
+| `CREATE_FILE_JSON` | PDF | Create file (PDF/PPTX/DOCX) |
+| `GENERATE_PDF` | PDF | Create PDF from markdown |
+| `GENERATE_DIAGRAM` | PDF | Create Mermaid diagrams |
 | `SHELL_COMMAND` | Shell | Execute terminal command |
 | `SET_VOLUME` | System | Set system volume |
 | `SET_BRIGHTNESS` | System | Set display brightness |
 | `OPEN_APP` | System | Launch application |
+| `ENABLE_CLI` | System | Enable Aartiq CLI tool |
 | `OCR_SCREEN` | OCR | Screen recognition |
 | `OCR_COORDINATES` | OCR | Get element coordinates |
 | `CLICK_APP_ELEMENT` | OCR | Click in external app |
+| `GENERATE_IMAGE` | Media | Generate AI image |
+| `APPLE_INTELLIGENCE_IMAGE` | Media | Generate image (Apple local) |
+| `APPLE_INTELLIGENCE_SUMMARY` | Media | Summarize text (Apple local) |
+| `PLAY_VIDEO` | Media | Play YouTube inline |
+| `SEARCH_VIDEO` | Media | Search and play YouTube |
 | `SCHEDULE_TASK` | Scheduling | Schedule automation task |
 | `LIST_AUTOMATIONS` | Automation | List scheduled tasks |
 | `DELETE_AUTOMATION` | Automation | Remove scheduled task |
+| `RECORD_WORKFLOW` | Automation | Record user workflow |
+| `PLAY_WORKFLOW` | Automation | Replay recorded workflow |
+| `LIST_BOOKMARKS` | Bookmarks | List saved bookmarks |
+| `ADD_BOOKMARK` | Bookmarks | Add a bookmark |
+| `REMOVE_BOOKMARK` | Bookmarks | Remove a bookmark |
+| `CLEAR_BOOKMARKS` | Bookmarks | Clear all bookmarks |
+| `LIST_HISTORY` | History | List/search browsing history |
+| `CLEAR_HISTORY` | History | Clear all history |
+| `LIST_SKILLS` | Skills | List available skill guides |
+| `LOAD_SKILL` | Skills | Load a skill guide |
+| `SETTINGS_QUERY` | Settings | Read current settings |
+| `SETTINGS_UPDATE` | Settings | Change a setting |
+| `OPEN_SETTINGS_PANEL` | Settings | Open settings panel |
 | `THINK` | Meta | Chain-of-thought reasoning |
 | `PLAN` | Meta | Plan execution steps |
+| `EXPLAIN_CAPABILITIES` | Meta | List AI features |
 | `PLUGIN_COMMAND` | Integration | Execute plugin command |
 
 ---
