@@ -111,6 +111,7 @@ export const COMMAND_REGISTRY = {
     MULTI_FILL_FORM: { desc: 'Fill multiple form fields atomically from JSON map', example: '[MULTI_FILL_FORM: {"#name":"John","#email":"a@b.com"}]' },
     RECORD_WORKFLOW: { desc: 'Start or stop workflow recording', example: '[RECORD_WORKFLOW: start]' },
     PLAY_WORKFLOW: { desc: 'Replay a previously recorded workflow', example: '[PLAY_WORKFLOW: my-workflow]' },
+    DEEP_RESEARCH: { desc: 'Conduct deep research with iterative search, source ranking, and coverage analysis', example: '{"type": "DEEP_RESEARCH", "query": "AI news today", "engine": "duckduckgo", "maxResults": 12}' },
     LIST_SKILLS: { desc: 'List all available skill guides with descriptions', example: '{"type": "LIST_SKILLS"}' },
     LOAD_SKILL: { desc: 'Load a specific skill guide into context for the current session', example: '{"type": "LOAD_SKILL", "skillId": "settings"}' },
     SETTINGS_QUERY: { desc: 'Read current settings for a category (webSearch, ai, ui, permissions)', example: '{"type": "SETTINGS_QUERY", "category": "webSearch"}' },

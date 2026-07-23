@@ -1,15 +1,15 @@
 {
-  "generated": "2026-07-13T15:01:48.334Z",
-  "version": "0.3.3",
+  "generated": "2026-07-23T03:55:02.610Z",
+  "version": "0.3.5",
   "desktop": {
-    "total": 126,
-    "totalLines": 38065,
+    "total": 138,
+    "totalLines": 43762,
     "byCategory": {
-      "components": 87,
+      "components": 97,
       "core": 0,
       "automation": 0,
       "service": 0,
-      "lib": 39
+      "lib": 41
     },
     "components": [
       {
@@ -102,14 +102,14 @@
       {
         "name": "types.ts",
         "path": "AIChatSidebar/types.ts",
-        "lines": 151,
+        "lines": 162,
         "description": "Types",
         "tags": [
           "AI",
           "PDF",
           "OCR"
         ],
-        "lastModified": "2026-07-12",
+        "lastModified": "2026-07-18",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [
@@ -118,11 +118,41 @@
           ],
           "interfaces": [
             {
+              "name": "PlanningStep",
+              "properties": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "icon",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "risk",
+                  "type": "'low' | 'medium' | 'high'",
+                  "required": true
+                },
+                {
+                  "name": "estimatedTime",
+                  "type": "number",
+                  "required": false
+                }
+              ]
+            },
+            {
               "name": "Attachment",
               "properties": [
                 {
                   "name": "type",
-                  "type": "'image' | 'pdf'",
+                  "type": "'image' | 'pdf' | 'text' | 'markdown'",
                   "required": true
                 },
                 {
@@ -404,6 +434,8 @@
             "MediaItem",
             "ExtendedChatMessage",
             "VisualStage",
+            "AgentState",
+            "PlanningStep",
             "Attachment",
             "FileAttachment",
             "MessageSource",
@@ -426,7 +458,7 @@
       {
         "name": "AIChatSidebar.tsx",
         "path": "AIChatSidebar.tsx",
-        "lines": 5747,
+        "lines": 7519,
         "description": "Chat Sidebar",
         "tags": [
           "React",
@@ -443,7 +475,7 @@
           "Windows",
           "Linux"
         ],
-        "lastModified": "2026-07-12",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -460,18 +492,21 @@
           ],
           "importsInternal": [
             "./ai/ThinkingPanel",
+            "./ai/ActionChainTimeline",
             "./ai/CollapsibleOCRMessage",
+            "./ai/ProcessingIndicator",
+            "./ai/CollapsibleSkillMessage",
             "./ai/MessageActions",
             "./ai/ConversationHistoryPanel",
             "./ai/useAIActionSecurityManager",
             "@/lib/ai-action-security",
             "@/lib/useAppVersion",
             "./ai/AISetupGuide",
-            "./ThinkingIndicator",
             "./LLMProviderSettings",
             "./AICommandQueue",
-            "./CapabilitiesPanel",
+            "./AIChatSidebar/types",
             "./ai/DOMSearchDisplay",
+            "./ai/SmartMessageContent",
             "./ai/SecureDOMReader",
             "./ai/SchedulingIntentDetector",
             "./ai/SchedulingModal",
@@ -480,13 +515,13 @@
             "./ai/FlowchartDiagram",
             "./ai/ChartDiagram",
             "./ai/YouTubePlayer",
-            "@/stores/uiStore",
             "@/lib/AICommandParser",
             "@/store/useAppStore",
             "@/lib/BrowserAI",
             "@/lib/Security",
             "@/lib/AICommandOutput",
             "@/lib/SearchContextStore",
+            "@/lib/SkillRegistry",
             "@/lib/ActionLogsStore",
             "@/lib/aiReasoningOptions",
             "@/lib/modelRegistry",
@@ -633,6 +668,91 @@
                   "required": true
                 }
               ]
+            },
+            {
+              "name": "GlowPresetScheme",
+              "properties": [
+                {
+                  "name": "label",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "primary",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "secondary",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "tertiary",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "SidebarWorkspacePreferences",
+              "properties": [
+                {
+                  "name": "fontFamily",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "fontSize",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "soundsEnabled",
+                  "type": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "gradientEffectsEnabled",
+                  "type": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "glowMode",
+                  "type": "GlowMode",
+                  "required": true
+                },
+                {
+                  "name": "glowPreset",
+                  "type": "GlowPreset",
+                  "required": true
+                },
+                {
+                  "name": "glowColorPrimary",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "glowColorSecondary",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "glowColorTertiary",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "visibleComposerIcons",
+                  "type": "Record<ComposerIconKey, boolean>",
+                  "required": true
+                },
+                {
+                  "name": "modelNicknames",
+                  "type": "Record<string, string>",
+                  "required": true
+                }
+              ]
             }
           ],
           "hooks": [
@@ -663,33 +783,46 @@
             "parseSearchResultEntry",
             "normalizeSearchResults",
             "FilePathLink",
+            "SourceLink",
             "renderMarkdownContent",
             "StreamingMarkdownMessage",
+            "collapseRawSearchDump",
+            "sanitizeVisibleMessage",
+            "ThinkingStatus",
+            "loadSidebarWorkspacePreferences",
+            "blobToBase64",
+            "hexToRgba",
             "sidebarShellStyle",
             "softPanelStyle",
             "popoverStyle",
             "userBubbleStyle",
-            "modelBubbleStyle",
             "findYouTubeLinkElement",
+            "next",
             "flushStreamText",
             "generateImage",
             "logEntry",
             "result",
             "addImage",
             "commonPayload",
+            "pdfMeta",
+            "formatSection",
             "formatMessageForExport",
             "merged",
             "convertTagsToHTML",
             "hOnline",
             "hOffline",
-            "handleGlobalKeyDown"
+            "handleGlobalKeyDown",
+            "handleFocusAI",
+            "handleAbort",
+            "handleToggleAutonomous",
+            "options"
           ]
         }
       },
       {
         "name": "AICommandQueue.tsx",
         "path": "AICommandQueue.tsx",
-        "lines": 405,
+        "lines": 481,
         "description": "Command Queue",
         "tags": [
           "React",
@@ -697,17 +830,16 @@
           "Automation",
           "PDF",
           "OCR",
-          "macOS"
+          "macOS",
+          "Windows"
         ],
-        "lastModified": "2026-07-08",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "react",
             "framer-motion"
           ],
-          "importsInternal": [
-            "@/lib/useAppVersion"
-          ],
+          "importsInternal": [],
           "interfaces": [
             {
               "name": "AICommand",
@@ -753,6 +885,16 @@
                   "required": true
                 },
                 {
+                  "name": "startTime",
+                  "type": "number",
+                  "required": false
+                },
+                {
+                  "name": "endTime",
+                  "type": "number",
+                  "required": false
+                },
+                {
                   "name": "category",
                   "type": "string",
                   "required": false
@@ -770,6 +912,11 @@
                 {
                   "name": "jsonFormat",
                   "type": "object",
+                  "required": false
+                },
+                {
+                  "name": "params",
+                  "type": "Record<string, any>",
                   "required": false
                 }
               ]
@@ -791,11 +938,24 @@
                   "name": "onCancel",
                   "type": "() => void",
                   "required": false
+                },
+                {
+                  "name": "onStopCurrent",
+                  "type": "() => void",
+                  "required": false
+                },
+                {
+                  "name": "cancelImmediately",
+                  "type": "() => void",
+                  "required": false
                 }
               ]
             }
           ],
-          "hooks": [],
+          "hooks": [
+            "useState",
+            "useMemo"
+          ],
           "componentType": "function-component",
           "exports": [
             "AICommand",
@@ -806,13 +966,19 @@
             "lucide-icons"
           ],
           "keyFunctions": [
-            "getCategoryIcon",
-            "getCategoryColor",
-            "getCategoryBg",
-            "getRiskBadge",
-            "getCommandIcon",
-            "getCommandCategory",
-            "getCommandLabel"
+            "commandGroup",
+            "formatDuration",
+            "formatTimestamp",
+            "elapsedForCommand",
+            "shellSummary",
+            "commandLabel",
+            "outputSummary",
+            "StatusMark",
+            "Timeline",
+            "ExpandableTechnicalDetails",
+            "ResultCard",
+            "ExecutionCard",
+            "toggleCommand"
           ]
         }
       },
@@ -1891,7 +2057,7 @@
       {
         "name": "LLMProviderSettings.tsx",
         "path": "LLMProviderSettings.tsx",
-        "lines": 1061,
+        "lines": 1153,
         "description": "Provider Settings",
         "tags": [
           "React",
@@ -1900,7 +2066,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-05",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -2061,6 +2227,7 @@
             "lucide-icons"
           ],
           "keyFunctions": [
+            "CollapsibleSection",
             "failedStatus",
             "renderCatalogControls",
             "getAppleIntelligenceErrorMessage"
@@ -2070,16 +2237,17 @@
       {
         "name": "LandingPage.tsx",
         "path": "LandingPage.tsx",
-        "lines": 221,
+        "lines": 264,
         "description": "Landing Page",
         "tags": [
           "React",
           "Security",
           "AI",
           "Automation",
-          "macOS"
+          "macOS",
+          "Windows"
         ],
-        "lastModified": "2026-07-11",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -2153,7 +2321,7 @@
           "Node.js",
           "macOS"
         ],
-        "lastModified": "2026-07-13",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "react"
@@ -2829,10 +2997,11 @@
       {
         "name": "PermissionSettings.tsx",
         "path": "PermissionSettings.tsx",
-        "lines": 744,
+        "lines": 1109,
         "description": "Permission Settings",
         "tags": [
           "React",
+          "Node.js",
           "Security",
           "AI",
           "Automation",
@@ -2840,7 +3009,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-11",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "react"
@@ -3295,7 +3464,7 @@
       {
         "name": "SettingsPanel.tsx",
         "path": "SettingsPanel.tsx",
-        "lines": 1152,
+        "lines": 1196,
         "description": "Settings Panel",
         "tags": [
           "React",
@@ -3309,7 +3478,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-10",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -3365,14 +3534,16 @@
       {
         "name": "SpotlightSearchOverlay.tsx",
         "path": "SpotlightSearchOverlay.tsx",
-        "lines": 305,
+        "lines": 345,
         "description": "Spotlight Search Overlay",
         "tags": [
           "React",
           "Node.js",
+          "AI",
+          "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-10",
+        "lastModified": "2026-07-18",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -3400,12 +3571,43 @@
                   "required": true
                 }
               ]
+            },
+            {
+              "name": "CommandItem",
+              "properties": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "category",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "icon",
+                  "type": "React.ReactNode",
+                  "required": true
+                },
+                {
+                  "name": "action",
+                  "type": "() => void",
+                  "required": true
+                }
+              ]
             }
           ],
           "hooks": [
             "useState",
             "useEffect",
-            "useRef"
+            "useRef",
+            "useMemo"
           ],
           "componentType": "function-component",
           "exports": [
@@ -3426,7 +3628,7 @@
       {
         "name": "StartupSetupUI.tsx",
         "path": "StartupSetupUI.tsx",
-        "lines": 793,
+        "lines": 960,
         "description": "Startup Setup",
         "tags": [
           "React",
@@ -3435,10 +3637,11 @@
           "AI",
           "Sync",
           "Automation",
+          "PDF",
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-07",
+        "lastModified": "2026-07-19",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -3795,22 +3998,21 @@
       {
         "name": "TitleBar.tsx",
         "path": "TitleBar.tsx",
-        "lines": 218,
+        "lines": 132,
         "description": "Title Bar",
         "tags": [
           "React",
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-11",
+        "lastModified": "2026-07-18",
         "codeAnalysis": {
           "importsExternal": [
             "react"
           ],
           "importsInternal": [
             "./VirtualizedTabBar",
-            "@/store/useAppStore",
-            "@/lib/firebaseConfigStorage"
+            "@/store/useAppStore"
           ],
           "interfaces": [
             {
@@ -3831,8 +4033,7 @@
           ],
           "hooks": [
             "useState",
-            "useEffect",
-            "useCallback"
+            "useEffect"
           ],
           "componentType": "function-component",
           "exports": [
@@ -3840,9 +4041,7 @@
           ],
           "apiUsage": [
             "electronAPI",
-            "router",
             "zustand-store",
-            "next-navigation",
             "lucide-icons"
           ],
           "keyFunctions": [
@@ -4001,7 +4200,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-11",
+        "lastModified": "2026-07-13",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -4325,7 +4524,7 @@
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-11",
+        "lastModified": "2026-07-13",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -4410,7 +4609,7 @@
       {
         "name": "AIConstants.ts",
         "path": "ai/AIConstants.ts",
-        "lines": 283,
+        "lines": 382,
         "description": "AIConstants",
         "tags": [
           "Node.js",
@@ -4421,7 +4620,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-07-12",
+        "lastModified": "2026-07-23",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -4438,6 +4637,8 @@
             "INTERNAL_TAG_RE",
             "REQUIRES_SEARCH_PATTERNS",
             "queryRequiresSearch",
+            "SYSTEM_CORE",
+            "COMMAND_REFERENCE",
             "SYSTEM_INSTRUCTIONS",
             "LANGUAGE_MAP",
             "CLASSIFY_TABS_PROMPT",
@@ -4450,10 +4651,11 @@
       {
         "name": "AISetupGuide.tsx",
         "path": "ai/AISetupGuide.tsx",
-        "lines": 827,
+        "lines": 1023,
         "description": "Setup Guide",
         "tags": [
           "React",
+          "Node.js",
           "Security",
           "AI",
           "Automation",
@@ -4461,7 +4663,7 @@
           "macOS",
           "Windows"
         ],
-        "lastModified": "2026-07-10",
+        "lastModified": "2026-07-19",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -4491,6 +4693,7 @@
             "useState",
             "useEffect",
             "useCallback",
+            "useRef",
             "useMemo"
           ],
           "componentType": "function-component",
@@ -4608,7 +4811,7 @@
       {
         "name": "AIUtils.ts",
         "path": "ai/AIUtils.ts",
-        "lines": 1090,
+        "lines": 952,
         "description": "AIUtils",
         "tags": [
           "Security",
@@ -4618,7 +4821,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-07-10",
+        "lastModified": "2026-07-18",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [
@@ -4690,21 +4893,6 @@
                 },
                 {
                   "name": "caption",
-                  "type": "string",
-                  "required": false
-                }
-              ]
-            },
-            {
-              "name": "PDFStyles",
-              "properties": [
-                {
-                  "name": "outlineColor",
-                  "type": "string",
-                  "required": false
-                },
-                {
-                  "name": "accentColor",
                   "type": "string",
                   "required": false
                 }
@@ -4993,7 +5181,6 @@
             "detectHallucinatedContent",
             "sanitizePDFContent",
             "PDFImage",
-            "PDFStyles",
             "buildBodyFromMarkdown",
             "buildCleanPDFContent",
             "PDFActionLog",
@@ -5023,6 +5210,111 @@
             "flushList",
             "flushTable",
             "tryCanvas"
+          ]
+        }
+      },
+      {
+        "name": "ActionChainTimeline.tsx",
+        "path": "ai/ActionChainTimeline.tsx",
+        "lines": 268,
+        "description": "Action Chain Timeline",
+        "tags": [
+          "React",
+          "AI",
+          "Automation",
+          "macOS"
+        ],
+        "lastModified": "2026-07-22",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "framer-motion",
+            "lucide-react"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "ActionChainStep",
+              "properties": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "status",
+                  "type": "'pending' | 'running' | 'done' | 'error' | 'skipped'",
+                  "required": true
+                },
+                {
+                  "name": "detail",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "icon",
+                  "type": "React.ReactNode",
+                  "required": false
+                },
+                {
+                  "name": "timestamp",
+                  "type": "number",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "ActionChainTimelineProps",
+              "properties": [
+                {
+                  "name": "steps",
+                  "type": "ActionChainStep[]",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "initialOpen",
+                  "type": "boolean",
+                  "required": false
+                },
+                {
+                  "name": "onStepClick",
+                  "type": "(step: ActionChainStep) => void",
+                  "required": false
+                },
+                {
+                  "name": "compact",
+                  "type": "boolean",
+                  "required": false
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState"
+          ],
+          "componentType": "react-utility",
+          "exports": [
+            "default ActionChainTimeline",
+            "ActionChainStep",
+            "ActionChainTimelineProps"
+          ],
+          "apiUsage": [
+            "framer-motion",
+            "lucide-icons"
+          ],
+          "keyFunctions": [
+            "statusStyles",
+            "statusIcon"
           ]
         }
       },
@@ -5201,21 +5493,22 @@
       {
         "name": "ClickPermissionModal.tsx",
         "path": "ai/ClickPermissionModal.tsx",
-        "lines": 474,
+        "lines": 602,
         "description": "Click Permission Modal",
         "tags": [
           "React",
           "Node.js",
-          "AI",
           "Sync",
-          "macOS"
+          "Automation",
+          "macOS",
+          "Windows",
+          "Linux"
         ],
-        "lastModified": "2026-07-11",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "react",
-            "framer-motion",
-            "lucide-react"
+            "framer-motion"
           ],
           "importsInternal": [],
           "interfaces": [
@@ -5293,13 +5586,18 @@
                   "required": false
                 },
                 {
-                  "name": "highRiskQr",
-                  "type": "string | null",
+                  "name": "requiresDeviceUnlock",
+                  "type": "boolean",
                   "required": false
                 },
                 {
-                  "name": "requiresDeviceUnlock",
-                  "type": "boolean",
+                  "name": "affectedPaths",
+                  "type": "string[]",
+                  "required": false
+                },
+                {
+                  "name": "estimatedImpact",
+                  "type": "string",
                   "required": false
                 }
               ]
@@ -5307,41 +5605,46 @@
           ],
           "hooks": [
             "useState",
-            "useEffect"
+            "useEffect",
+            "useCallback",
+            "useRef"
           ],
           "componentType": "function-component",
           "exports": [
             "default ClickPermissionModal"
           ],
           "apiUsage": [
+            "electronAPI",
             "framer-motion",
             "lucide-icons"
           ],
           "keyFunctions": [
-            "RISK_CONFIG",
-            "IrreversibleWarning",
+            "riskTone",
+            "actionIcon",
+            "humanAction",
+            "TechnicalDetails",
+            "DangerousActionNotice",
+            "handleKey",
             "toggleIndex",
-            "toggleAll",
-            "handleKey"
+            "PermissionShell"
           ]
         }
       },
       {
         "name": "CollapsibleOCRMessage.tsx",
         "path": "ai/CollapsibleOCRMessage.tsx",
-        "lines": 225,
+        "lines": 159,
         "description": "CollapsibleOCRMessage",
         "tags": [
           "React",
-          "PDF",
+          "Node.js",
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-20",
         "codeAnalysis": {
           "importsExternal": [
             "react",
-            "framer-motion",
             "lucide-react"
           ],
           "importsInternal": [],
@@ -5364,22 +5667,65 @@
           ],
           "hooks": [
             "useState",
-            "useEffect",
-            "useRef"
+            "useCallback",
+            "useMemo"
           ],
           "componentType": "function-component",
           "exports": [
             "default CollapsibleOCRMessage"
           ],
           "apiUsage": [
-            "framer-motion",
+            "electronAPI",
             "lucide-icons"
           ],
           "keyFunctions": [
-            "onDragStart",
-            "onMove",
-            "onUp"
+            "openURL",
+            "openPath"
           ]
+        }
+      },
+      {
+        "name": "CollapsibleSkillMessage.tsx",
+        "path": "ai/CollapsibleSkillMessage.tsx",
+        "lines": 74,
+        "description": "Collapsible Skill Message",
+        "tags": [
+          "React",
+          "Security",
+          "Automation",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-07-22",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "lucide-react"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "CollapsibleSkillMessageProps",
+              "properties": [
+                {
+                  "name": "skills",
+                  "type": "string[]",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState"
+          ],
+          "componentType": "react-utility",
+          "exports": [
+            "default CollapsibleSkillMessage"
+          ],
+          "apiUsage": [
+            "lucide-icons"
+          ],
+          "keyFunctions": []
         }
       },
       {
@@ -5509,7 +5855,7 @@
       {
         "name": "DOMSearchDisplay.tsx",
         "path": "ai/DOMSearchDisplay.tsx",
-        "lines": 360,
+        "lines": 389,
         "description": "Search Display",
         "tags": [
           "React",
@@ -5517,7 +5863,7 @@
           "OCR",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-19",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -5658,13 +6004,15 @@
             }
           ],
           "hooks": [
-            "useState"
+            "useState",
+            "useMemo"
           ],
           "componentType": "function-component",
           "exports": [
             "default memo"
           ],
           "apiUsage": [
+            "electronAPI",
             "framer-motion",
             "lucide-icons"
           ],
@@ -5672,11 +6020,12 @@
             "getTypeIcon",
             "getTypeLabel",
             "getTypeColor",
-            "formatTimestamp",
+            "getTypeBg",
             "highlightMatch",
             "colors",
             "icons",
-            "formatUrl"
+            "openURL",
+            "stats"
           ]
         }
       },
@@ -5935,6 +6284,549 @@
             "lucide-icons"
           ],
           "keyFunctions": []
+        }
+      },
+      {
+        "name": "MoleculeRenderer.tsx",
+        "path": "ai/MoleculeRenderer.tsx",
+        "lines": 106,
+        "description": "Molecule Renderer",
+        "tags": [
+          "React",
+          "macOS"
+        ],
+        "lastModified": "2026-07-20",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "MoleculeRendererProps",
+              "properties": [
+                {
+                  "name": "smiles",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "width",
+                  "type": "number",
+                  "required": false
+                },
+                {
+                  "name": "height",
+                  "type": "number",
+                  "required": false
+                },
+                {
+                  "name": "theme",
+                  "type": "'light' | 'dark'",
+                  "required": false
+                },
+                {
+                  "name": "className",
+                  "type": "string",
+                  "required": false
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState",
+            "useEffect",
+            "useRef"
+          ],
+          "componentType": "react-utility",
+          "exports": [
+            "default MoleculeRenderer"
+          ],
+          "apiUsage": [],
+          "keyFunctions": [
+            "loadSmilesDrawer"
+          ]
+        }
+      },
+      {
+        "name": "ProcessingIndicator.tsx",
+        "path": "ai/ProcessingIndicator.tsx",
+        "lines": 212,
+        "description": "Processing Indicator",
+        "tags": [
+          "React",
+          "AI",
+          "PDF",
+          "macOS"
+        ],
+        "lastModified": "2026-07-22",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "framer-motion"
+          ],
+          "importsInternal": [
+            "../AIChatSidebar/types"
+          ],
+          "interfaces": [
+            {
+              "name": "ProcessingIndicatorProps",
+              "properties": [
+                {
+                  "name": "agentState",
+                  "type": "AgentState",
+                  "required": true
+                },
+                {
+                  "name": "customStatus",
+                  "type": "string",
+                  "required": false
+                }
+              ]
+            },
+            {
+              "name": "PhaseConfig",
+              "properties": [
+                {
+                  "name": "icon",
+                  "type": "React.FC<any> | null",
+                  "required": true
+                },
+                {
+                  "name": "color",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "dotColor",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useMemo"
+          ],
+          "componentType": "react-utility",
+          "exports": [
+            "default ProcessingIndicator"
+          ],
+          "apiUsage": [
+            "framer-motion",
+            "lucide-icons"
+          ],
+          "keyFunctions": [
+            "BouncingDots",
+            "SpinningLoader"
+          ]
+        }
+      },
+      {
+        "name": "ResearchExecutionCard.tsx",
+        "path": "ai/ResearchExecutionCard.tsx",
+        "lines": 174,
+        "description": "Research Execution Card",
+        "tags": [
+          "React",
+          "Node.js",
+          "macOS"
+        ],
+        "lastModified": "2026-07-23",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "framer-motion"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "ExecutionStepData",
+              "properties": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "stage",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "message",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "url",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "source",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "favicon",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "score",
+                  "type": "number",
+                  "required": false
+                },
+                {
+                  "name": "index",
+                  "type": "number",
+                  "required": false
+                },
+                {
+                  "name": "status",
+                  "type": "'running' | 'done' | 'error'",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "ResearchExecutionCardProps",
+              "properties": [
+                {
+                  "name": "steps",
+                  "type": "ExecutionStepData[]",
+                  "required": true
+                },
+                {
+                  "name": "isComplete",
+                  "type": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "query",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState"
+          ],
+          "componentType": "react-utility",
+          "exports": [
+            "ExecutionStepData",
+            "ResearchExecutionCard"
+          ],
+          "apiUsage": [
+            "framer-motion"
+          ],
+          "keyFunctions": [
+            "StepCard"
+          ]
+        }
+      },
+      {
+        "name": "ResearchReport.tsx",
+        "path": "ai/ResearchReport.tsx",
+        "lines": 262,
+        "description": "Research Report",
+        "tags": [
+          "React",
+          "Node.js",
+          "macOS"
+        ],
+        "lastModified": "2026-07-23",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "framer-motion"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "ReportSection",
+              "properties": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "icon",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "content",
+                  "type": "React.ReactNode",
+                  "required": true
+                },
+                {
+                  "name": "isCollapsible",
+                  "type": "boolean",
+                  "required": false
+                }
+              ]
+            },
+            {
+              "name": "ResearchReportProps",
+              "properties": [
+                {
+                  "name": "title",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "subtitle",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "executiveSummary",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "keyTakeaways",
+                  "type": "string[]",
+                  "required": false
+                },
+                {
+                  "name": "sections",
+                  "type": "ReportSection[]",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState"
+          ],
+          "componentType": "function-component",
+          "exports": [
+            "ResearchReport"
+          ],
+          "apiUsage": [
+            "framer-motion"
+          ],
+          "keyFunctions": [
+            "SourceCard",
+            "domain"
+          ]
+        }
+      },
+      {
+        "name": "ResearchSourceCard.tsx",
+        "path": "ai/ResearchSourceCard.tsx",
+        "lines": 84,
+        "description": "Research Source Card",
+        "tags": [
+          "React",
+          "macOS"
+        ],
+        "lastModified": "2026-07-23",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "framer-motion"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "ResearchSource",
+              "properties": [
+                {
+                  "name": "name",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "favicon",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "url",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "articleCount",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "avgScore",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "used",
+                  "type": "boolean",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "ResearchSourceCardProps",
+              "properties": [
+                {
+                  "name": "source",
+                  "type": "ResearchSource",
+                  "required": true
+                },
+                {
+                  "name": "index",
+                  "type": "number",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "ResearchSourceCarouselProps",
+              "properties": [
+                {
+                  "name": "sources",
+                  "type": "ResearchSource[]",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [],
+          "componentType": "function-component",
+          "exports": [
+            "ResearchSourceCard",
+            "ResearchSourceCarousel"
+          ],
+          "apiUsage": [
+            "framer-motion"
+          ],
+          "keyFunctions": [
+            "domain"
+          ]
+        }
+      },
+      {
+        "name": "ResearchTimeline.tsx",
+        "path": "ai/ResearchTimeline.tsx",
+        "lines": 195,
+        "description": "Research Timeline",
+        "tags": [
+          "React",
+          "Node.js",
+          "macOS"
+        ],
+        "lastModified": "2026-07-23",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "framer-motion"
+          ],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "ResearchStep",
+              "properties": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "stage",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "detail",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "status",
+                  "type": "'pending' | 'running' | 'done' | 'error'",
+                  "required": true
+                },
+                {
+                  "name": "icon",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "timestamp",
+                  "type": "number",
+                  "required": false
+                },
+                {
+                  "name": "source",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "favicon",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "url",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "score",
+                  "type": "number",
+                  "required": false
+                }
+              ]
+            },
+            {
+              "name": "ResearchTimelineProps",
+              "properties": [
+                {
+                  "name": "steps",
+                  "type": "ResearchStep[]",
+                  "required": true
+                },
+                {
+                  "name": "isComplete",
+                  "type": "boolean",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState"
+          ],
+          "componentType": "react-utility",
+          "exports": [
+            "ResearchStep",
+            "ResearchTimeline"
+          ],
+          "apiUsage": [
+            "framer-motion"
+          ],
+          "keyFunctions": [
+            "StepItem"
+          ]
         }
       },
       {
@@ -6253,14 +7145,14 @@
       {
         "name": "SecureDOMReader.ts",
         "path": "ai/SecureDOMReader.ts",
-        "lines": 361,
+        "lines": 363,
         "description": "SecureDOMReader",
         "tags": [
           "Security",
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-20",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [
@@ -6429,6 +7321,16 @@
                   "name": "element",
                   "type": "DOMElement",
                   "required": false
+                },
+                {
+                  "name": "navLike",
+                  "type": "boolean",
+                  "required": false
+                },
+                {
+                  "name": "linkDensity",
+                  "type": "number",
+                  "required": false
                 }
               ]
             }
@@ -6453,15 +7355,308 @@
         }
       },
       {
+        "name": "SettingsApprovalPanel.tsx",
+        "path": "ai/SettingsApprovalPanel.tsx",
+        "lines": 173,
+        "description": "Settings Approval Panel",
+        "tags": [
+          "React",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-07-22",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "framer-motion",
+            "lucide-react"
+          ],
+          "importsInternal": [
+            "@/lib/web-search-settings"
+          ],
+          "interfaces": [
+            {
+              "name": "SettingsChange",
+              "properties": [
+                {
+                  "name": "category",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "key",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "oldValue",
+                  "type": "any",
+                  "required": true
+                },
+                {
+                  "name": "newValue",
+                  "type": "any",
+                  "required": true
+                },
+                {
+                  "name": "description",
+                  "type": "string",
+                  "required": false
+                }
+              ]
+            },
+            {
+              "name": "SettingsApprovalPanelProps",
+              "properties": [
+                {
+                  "name": "changes",
+                  "type": "SettingsChange[]",
+                  "required": true
+                },
+                {
+                  "name": "onApprove",
+                  "type": "() => void",
+                  "required": true
+                },
+                {
+                  "name": "onDeny",
+                  "type": "() => void",
+                  "required": true
+                },
+                {
+                  "name": "onClose",
+                  "type": "() => void",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState",
+            "useEffect"
+          ],
+          "componentType": "function-component",
+          "exports": [
+            "default SettingsApprovalPanel"
+          ],
+          "apiUsage": [
+            "framer-motion",
+            "lucide-icons"
+          ],
+          "keyFunctions": [
+            "RISK_COLORS"
+          ]
+        }
+      },
+      {
+        "name": "SmartMessageContent.tsx",
+        "path": "ai/SmartMessageContent.tsx",
+        "lines": 785,
+        "description": "Smart Message Content",
+        "tags": [
+          "React",
+          "Node.js",
+          "AI",
+          "OCR",
+          "macOS"
+        ],
+        "lastModified": "2026-07-20",
+        "codeAnalysis": {
+          "importsExternal": [
+            "react",
+            "framer-motion"
+          ],
+          "importsInternal": [
+            "./MoleculeRenderer"
+          ],
+          "interfaces": [
+            {
+              "name": "URLCardProps",
+              "properties": [
+                {
+                  "name": "url",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "title",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "compact",
+                  "type": "boolean",
+                  "required": false
+                }
+              ]
+            },
+            {
+              "name": "FilePathChipProps",
+              "properties": [
+                {
+                  "name": "filePath",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "SearchResultItem",
+              "properties": [
+                {
+                  "name": "title",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "url",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "snippet",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "index",
+                  "type": "number",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "SearchResultsBlockProps",
+              "properties": [
+                {
+                  "name": "query",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "results",
+                  "type": "SearchResultItem[]",
+                  "required": true
+                },
+                {
+                  "name": "engine",
+                  "type": "string",
+                  "required": false
+                }
+              ]
+            },
+            {
+              "name": "ShellOutputItem",
+              "properties": [
+                {
+                  "name": "command",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "output",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "success",
+                  "type": "boolean",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "ParsedSegment",
+              "properties": [
+                {
+                  "name": "type",
+                  "type": "'text' | 'search-results' | 'shell-output'",
+                  "required": true
+                },
+                {
+                  "name": "content",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "searchQuery",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "searchResults",
+                  "type": "SearchResultItem[]",
+                  "required": false
+                },
+                {
+                  "name": "searchEngine",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "shellItems",
+                  "type": "ShellOutputItem[]",
+                  "required": false
+                }
+              ]
+            },
+            {
+              "name": "SmartMessageContentProps",
+              "properties": [
+                {
+                  "name": "content",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "animate",
+                  "type": "boolean",
+                  "required": false
+                },
+                {
+                  "name": "renderText",
+                  "type": "(text: string, animate: boolean) => React.ReactNode",
+                  "required": false
+                }
+              ]
+            }
+          ],
+          "hooks": [
+            "useState",
+            "useCallback",
+            "useMemo"
+          ],
+          "componentType": "react-utility",
+          "exports": [
+            "default memo"
+          ],
+          "apiUsage": [
+            "electronAPI",
+            "zustand-store",
+            "framer-motion",
+            "lucide-icons"
+          ],
+          "keyFunctions": [
+            "URLCard",
+            "FilePathChip",
+            "SearchResultCard",
+            "SearchResultsBlock",
+            "ShellOutputCard",
+            "ShellOutputBlock",
+            "SmartMessageContent"
+          ]
+        }
+      },
+      {
         "name": "ThinkingPanel.tsx",
         "path": "ai/ThinkingPanel.tsx",
-        "lines": 153,
+        "lines": 152,
         "description": "Thinking Panel",
         "tags": [
           "React",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "react",
@@ -6601,18 +7796,21 @@
       {
         "name": "useAIActionSecurityManager.tsx",
         "path": "ai/useAIActionSecurityManager.tsx",
-        "lines": 432,
+        "lines": 706,
         "description": "Action Security Manager",
         "tags": [
           "React",
+          "Node.js",
           "Security",
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-07-11",
+        "lastModified": "2026-07-23",
         "codeAnalysis": {
           "importsExternal": [
-            "react"
+            "react",
+            "framer-motion",
+            "lucide-react"
           ],
           "importsInternal": [
             "./ClickPermissionModal"
@@ -6652,13 +7850,18 @@
                   "required": true
                 },
                 {
-                  "name": "highRiskQr",
-                  "type": "string | null",
+                  "name": "requiresDeviceUnlock",
+                  "type": "boolean",
                   "required": false
                 },
                 {
-                  "name": "requiresDeviceUnlock",
-                  "type": "boolean",
+                  "name": "affectedPaths",
+                  "type": "string[]",
+                  "required": false
+                },
+                {
+                  "name": "estimatedImpact",
+                  "type": "string",
                   "required": false
                 }
               ]
@@ -6707,11 +7910,6 @@
                   "required": true
                 },
                 {
-                  "name": "mobileApproved",
-                  "type": "boolean",
-                  "required": true
-                },
-                {
                   "name": "context",
                   "type": "PermissionContext",
                   "required": true
@@ -6757,6 +7955,56 @@
                   "required": false
                 }
               ]
+            },
+            {
+              "name": "DirectoryPermissionRequest",
+              "properties": [
+                {
+                  "name": "requestId",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "blockedPath",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "blockedPaths",
+                  "type": "string[]",
+                  "required": false
+                },
+                {
+                  "name": "command",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            },
+            {
+              "name": "ShellPermissionRequest",
+              "properties": [
+                {
+                  "name": "requestId",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "command",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "reason",
+                  "type": "string",
+                  "required": false
+                },
+                {
+                  "name": "riskLevel",
+                  "type": "string",
+                  "required": false
+                }
+              ]
             }
           ],
           "hooks": [
@@ -6766,16 +8014,17 @@
             "useRef",
             "useMemo"
           ],
-          "componentType": "function-component",
+          "componentType": "react-utility",
           "exports": [
             "useAIActionSecurityManager"
           ],
           "apiUsage": [
-            "electronAPI"
+            "electronAPI",
+            "framer-motion",
+            "lucide-icons"
           ],
           "keyFunctions": [
-            "getSecuritySettingsSafe",
-            "handleGlobalKeyDown"
+            "getSecuritySettingsSafe"
           ]
         }
       },
@@ -6851,7 +8100,7 @@
       {
         "name": "AICommandParser.ts",
         "path": "AICommandParser.ts",
-        "lines": 738,
+        "lines": 847,
         "description": "Command Parser",
         "tags": [
           "Node.js",
@@ -6863,7 +8112,7 @@
           "Plugin",
           "macOS"
         ],
-        "lastModified": "2026-07-12",
+        "lastModified": "2026-07-23",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [
@@ -7280,14 +8529,14 @@
         }
       },
       {
-        "name": "ActionTagParser.d.ts",
-        "path": "ActionTagParser.d.ts",
+        "name": "ActionTagParser.ts",
+        "path": "ActionTagParser.ts",
         "lines": 7,
         "description": "Action Tag Parser",
         "tags": [
           "Automation"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-20",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -7497,13 +8746,13 @@
       {
         "name": "BrowserAI.ts",
         "path": "BrowserAI.ts",
-        "lines": 404,
+        "lines": 403,
         "description": "BrowserAI",
         "tags": [
           "AI",
           "macOS"
         ],
-        "lastModified": "2026-07-10",
+        "lastModified": "2026-07-20",
         "codeAnalysis": {
           "importsExternal": [
             "@tensorflow/tfjs"
@@ -7528,7 +8777,7 @@
       {
         "name": "CloudSyncService.ts",
         "path": "CloudSyncService.ts",
-        "lines": 530,
+        "lines": 532,
         "description": "Cloud Sync Service",
         "tags": [
           "Node.js",
@@ -7537,7 +8786,7 @@
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-20",
         "codeAnalysis": {
           "importsExternal": [
             "events",
@@ -7951,15 +9200,15 @@
         }
       },
       {
-        "name": "PDFCommandParser.d.ts",
-        "path": "PDFCommandParser.d.ts",
+        "name": "PDFCommandParser.ts",
+        "path": "PDFCommandParser.ts",
         "lines": 11,
         "description": "Command Parser",
         "tags": [
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-20",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -8220,12 +9469,12 @@
         }
       },
       {
-        "name": "ShellCommandParser.d.ts",
-        "path": "ShellCommandParser.d.ts",
+        "name": "ShellCommandParser.ts",
+        "path": "ShellCommandParser.ts",
         "lines": 8,
         "description": "Shell Command Parser",
         "tags": [],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-20",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -8273,14 +9522,14 @@
       {
         "name": "SkillLoader.ts",
         "path": "SkillLoader.ts",
-        "lines": 160,
+        "lines": 153,
         "description": "Skill Loader",
         "tags": [
           "Node.js",
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-10",
+        "lastModified": "2026-07-22",
         "codeAnalysis": {
           "importsExternal": [
             "fs",
@@ -8298,6 +9547,68 @@
           "componentType": "service",
           "exports": [
             "default skillLoader"
+          ],
+          "apiUsage": [],
+          "keyFunctions": []
+        }
+      },
+      {
+        "name": "SkillRegistry.ts",
+        "path": "SkillRegistry.ts",
+        "lines": 62,
+        "description": "Skill Registry",
+        "tags": [
+          "Security",
+          "AI",
+          "Automation",
+          "PDF",
+          "OCR",
+          "macOS"
+        ],
+        "lastModified": "2026-07-22",
+        "codeAnalysis": {
+          "importsExternal": [],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "SkillMeta",
+              "properties": [
+                {
+                  "name": "id",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "label",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "description",
+                  "type": "string",
+                  "required": true
+                },
+                {
+                  "name": "patterns",
+                  "type": "RegExp",
+                  "required": true
+                },
+                {
+                  "name": "icon",
+                  "type": "string",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [],
+          "componentType": "utility",
+          "exports": [
+            "SkillMeta",
+            "AVAILABLE_SKILLS",
+            "matchSkills",
+            "getSkillSummary",
+            "listAllSkills"
           ],
           "apiUsage": [],
           "keyFunctions": []
@@ -8537,7 +9848,7 @@
       {
         "name": "WiFiSyncService.ts",
         "path": "WiFiSyncService.ts",
-        "lines": 497,
+        "lines": 511,
         "description": "Wi Fi Sync Service",
         "tags": [
           "Node.js",
@@ -8545,7 +9856,7 @@
           "Sync",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-20",
         "codeAnalysis": {
           "importsExternal": [
             "events",
@@ -8637,7 +9948,7 @@
       {
         "name": "ai-action-security.ts",
         "path": "ai-action-security.ts",
-        "lines": 475,
+        "lines": 502,
         "description": "Ai Action Security",
         "tags": [
           "Security",
@@ -8650,7 +9961,7 @@
           "Windows",
           "Linux"
         ],
-        "lastModified": "2026-07-13",
+        "lastModified": "2026-07-20",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -8938,14 +10249,14 @@
       {
         "name": "constants.ts",
         "path": "constants.ts",
-        "lines": 47,
+        "lines": 53,
         "description": "Constants",
         "tags": [
           "AI",
           "PDF",
           "macOS"
         ],
-        "lastModified": "2026-07-04",
+        "lastModified": "2026-07-19",
         "codeAnalysis": {
           "importsExternal": [],
           "importsInternal": [],
@@ -9565,6 +10876,86 @@
             "fallbackVersion"
           ]
         }
+      },
+      {
+        "name": "web-search-settings.ts",
+        "path": "web-search-settings.ts",
+        "lines": 105,
+        "description": "Web Search Settings",
+        "tags": [
+          "Core",
+          "AI",
+          "macOS"
+        ],
+        "lastModified": "2026-07-22",
+        "codeAnalysis": {
+          "importsExternal": [],
+          "importsInternal": [],
+          "interfaces": [
+            {
+              "name": "WebSearchSettings",
+              "properties": [
+                {
+                  "name": "maxPages",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "maxCharsPerResult",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "totalBudget",
+                  "type": "number",
+                  "required": true
+                },
+                {
+                  "name": "defaultDepth",
+                  "type": "'summary' | 'full' | 'auto'",
+                  "required": true
+                },
+                {
+                  "name": "autoSummarize",
+                  "type": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "deduplicateContent",
+                  "type": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "enableQueryRelevance",
+                  "type": "boolean",
+                  "required": true
+                },
+                {
+                  "name": "searchEngine",
+                  "type": "'duckduckgo' | 'google'",
+                  "required": true
+                },
+                {
+                  "name": "lastUpdated",
+                  "type": "number",
+                  "required": true
+                }
+              ]
+            }
+          ],
+          "hooks": [],
+          "componentType": "utility",
+          "exports": [
+            "WebSearchSettings",
+            "WEB_SEARCH_DEFAULTS",
+            "getWebSearchSettings",
+            "updateWebSearchSettings",
+            "resetWebSearchSettings",
+            "resolveSearchParams"
+          ],
+          "apiUsage": [],
+          "keyFunctions": []
+        }
       }
     ]
   },
@@ -9581,7 +10972,7 @@
     "components": []
   },
   "summary": {
-    "total": 126,
-    "totalLines": 38065
+    "total": 138,
+    "totalLines": 43762
   }
 }
