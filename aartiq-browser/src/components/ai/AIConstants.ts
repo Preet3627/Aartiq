@@ -263,7 +263,7 @@ Use JSON format inside a \`\`\`json code block:
 Supported command types with their JSON parameters:
 
 **NAVIGATE** — { value: string }
-**WEB_SEARCH** — { query: string, pages?: number, url?: string|number }
+**WEB_SEARCH** — { query: string, pages?: number, url?: string|number } — Search the web. Optional pages param controls how many pages to fetch and read (default: 5). Example: {\"type\":\"WEB_SEARCH\",\"query\":\"AI news\",\"pages\":3}
 **SEARCH** — { query: string }
 **READ_PAGE_CONTENT** — (no params)
 **CLICK_ELEMENT** — { selector?: string, text?: string, "aria-label"?: string } ← at least ONE field required
@@ -305,8 +305,8 @@ Supported command types with their JSON parameters:
 **ENABLE_CLI** — (no params)
 **SWITCH_TAB** — { id: string } — Switch to a tab by ID or number. Omit id to stay on current tab.
 **LIST_OPEN_TABS** — (no params) — List all open tabs with IDs and URLs.
-**SEARCH_RESULTS** — { query: string, count?: number } — Search, auto-navigate to top results, read full page content, and return everything.
-**DEEP_RESEARCH** — { query: string, engine?: "duckduckgo"|"google", maxResults?: number } — Conduct comprehensive research with iterative search, source ranking, multi-source synthesis, and coverage analysis. Returns a structured report. Use for any research-heavy task.
+**SEARCH_RESULTS** — { query: string, count?: number } — Search, auto-navigate to top results, read full page content, and return everything. Optional count param controls how many pages to fetch (default: 5). Example: {\"type\":\"SEARCH_RESULTS\",\"query\":\"AI regulation\",\"count\":3}
+**DEEP_RESEARCH** — { query: string } — START comprehensive research by following the Research Skill v2 workflow. DO NOT use this to trigger a backend pipeline. Instead, use this as your signal to begin iterative research: decompose the query, run multiple [WEB_SEARCH] + [NAVIGATE] + [READ_PAGE_CONTENT] cycles, validate across sources, maintain coverage, and synthesize a structured evidence-grounded report. Minimum 3 search cycles. The research skill guide is already in your system prompt — follow it step by step.
 **LIST_SKILLS** — (no params) — List all available skill guides with descriptions.
 **LOAD_SKILL** — { skillId: string } — Load a specific skill guide into context for the current session.
 **SETTINGS_QUERY** — { category: string } — Read current settings for webSearch, ai, or ui.

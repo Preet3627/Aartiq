@@ -168,7 +168,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
         { id: 'permissions', icon: <Lock size={18} />, label: 'Permissions' },
         { id: 'vault', icon: <Key size={18} />, label: 'Vault & Autofill' },
         { id: 'history', icon: <HistoryIcon size={18} />, label: 'History' },
-        { id: 'api-keys', icon: <Key size={18} />, label: 'API Keys' },
+        { id: 'api-keys', icon: <Sparkles size={18} />, label: 'AI Providers' },
         { id: 'languages', icon: <Languages size={18} />, label: 'Regional Languages' },
         { id: 'shortcuts', icon: <Keyboard size={18} />, label: 'Keyboard Shortcuts' },
         { id: 'sync', icon: <RefreshCw size={18} />, label: 'Sync' },

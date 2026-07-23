@@ -493,10 +493,6 @@ declare global {
             aiWebSearch: (query: string, engine?: string, count?: number) => Promise<{ results: Array<{ title: string; url: string; snippet: string; content: string }>; engine?: string; error?: string }>;
             webSearchYoutube: (query: string, count?: number) => Promise<{ success: boolean; results?: Array<{ title: string; url: string; snippet: string; videoId: string; channel: string; length: string; thumbnail: string }>; error?: string }>;
             fetchPageContent: (url: string, maxChars?: number) => Promise<{ success: boolean; content?: string; error?: string }>;
-            researchStart: (query: string, engine?: string, options?: { maxResults?: number; concurrency?: number; coverageThreshold?: number; maxIterations?: number }) => Promise<{ success: boolean; pipelineId?: string; report?: string; clusters?: any[]; contradictions?: any[]; sourceSummary?: Array<{ name: string; favicon?: string; url: string; articleCount: number; avgScore: number; used: boolean }>; coverage?: { percentage: number; covered: number; total: number }; stats?: { totalUrls: number; successful: number; clusters: number; iterations?: number; coverage?: number }; error?: string }>;
-            researchCancel: (pipelineId: string) => Promise<{ success: boolean; error?: string }>;
-            researchGetStatus: (pipelineId: string) => Promise<{ success: boolean; running?: boolean }>;
-            onResearchProgress: (callback: (progress: { pipelineId: string; stage: string; message?: string; [key: string]: any }) => void) => () => void;
             domClickElement: (opts: { tabId?: string; selector?: string; text?: string; 'aria-label'?: string; retry?: number; verify?: boolean }) => Promise<{ success: boolean; error?: string; method?: string; tag?: string; text?: string; rect?: { x: number; y: number; w: number; h: number } }>;
             domFillForm: (opts: { tabId?: string; selector?: string; value: string; retry?: number; verify?: boolean; clearFirst?: boolean }) => Promise<{ success: boolean; error?: string; value?: string; verified?: boolean }>;
 

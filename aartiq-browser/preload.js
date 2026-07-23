@@ -160,15 +160,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   fetchPageContent: (url, maxChars) => ipcRenderer.invoke('fetch-page-content', url, maxChars),
   webSearchYoutube: (query, count) => ipcRenderer.invoke('web-search-youtube', query, count),
 
-  // Research Pipeline
-  researchStart: (query, engine, options) => ipcRenderer.invoke('research:start', { query, engine, options }),
-  researchCancel: (pipelineId) => ipcRenderer.invoke('research:cancel', { pipelineId }),
-  researchGetStatus: (pipelineId) => ipcRenderer.invoke('research:get-status', { pipelineId }),
-  onResearchProgress: (callback) => {
-    const subscription = (event, data) => callback(data);
-    ipcRenderer.on('research:progress', subscription);
-    return () => ipcRenderer.removeListener('research:progress', subscription);
-  },
   domClickElement: (opts) => ipcRenderer.invoke('dom-click-element', opts),
   domFillForm: (opts) => ipcRenderer.invoke('dom-fill-form', opts),
   multiFillForm: (opts) => ipcRenderer.invoke('dom-multi-fill-form', opts),

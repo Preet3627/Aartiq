@@ -66,6 +66,7 @@
     "ai-sdk-ollama": "^3.8.0",
     "autoprefixer": "^10.4.23",
     "body-parser": "^2.2.2",
+    "cbor-x": "^1.6.4",
     "chart.js": "^4.5.1",
     "cross-fetch": "^4.1.0",
     "docx": "^8.5.0",

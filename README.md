@@ -1,4 +1,4 @@
-# Aartiq Browser
+# Aartiq — For the questions that matter
 
 An Electron-based browser with an integrated AI chat that executes LLM-planned browser actions, system commands, and document generation — every action is permission-gated before execution.
 

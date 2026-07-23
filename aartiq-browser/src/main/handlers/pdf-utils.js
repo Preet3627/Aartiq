@@ -20,6 +20,12 @@ const PDF_TEMPLATES = {
           blockquote { border-left: 3px solid #ccc; padding: 10px 18px; color: #555; margin: 16px 0; font-style: italic; }
           code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; font-size: 0.88em; }
           pre { background: #1a1a2e; color: #e0e0e0; padding: 16px; overflow-x: auto; margin: 20px 0; border-radius: 6px; white-space: pre-wrap; }
+          .page-break { page-break-before: always; height: 0; margin: 0; border: none; }
+          hr { border: none; border-top: 1px solid #eee; margin: 20px 0; }
+          table { page-break-inside: avoid; }
+          thead { page-break-after: avoid; }
+          tr { page-break-inside: avoid; }
+          img { page-break-inside: avoid; }
           .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #eee; display: flex; justify-content: space-between; font-size: 0.75rem; color: #aaa; }
         </style>
       </head>
@@ -69,7 +75,7 @@ function parseMarkdownToHTML(content) {
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
-  html = html.replace(/^---$/gm, '<hr/>');
+  html = html.replace(/^---$/gm, '<div class="page-break"></div>');
   return html;
 }
 
@@ -79,7 +85,9 @@ function generateAartiqPDFTemplate(title, content, iconBase64, metadata = {}) {
 
   let cleanContent = content
     .replace(/\[WATERMARK:\s*([^\]]+)\]/gi, (_, w) => { metadata.watermark = w; return ''; })
-    .replace(/\[TEMPLATE:\s*([^\]]+)\]/gi, () => '');
+    .replace(/\[TEMPLATE:\s*([^\]]+)\]/gi, () => '')
+    .replace(/\[BG_COLOR:\s*([^\]]+)\]/gi, (_, c) => { metadata.bgColor = c; return ''; })
+    .replace(/\[PRIORITY:\s*([^\]]+)\]/gi, (_, p) => { metadata.priority = p; return ''; });
 
   cleanContent = parseMarkdownTables(cleanContent);
   cleanContent = parseMarkdownToHTML(cleanContent);

@@ -12,7 +12,7 @@ const registerPluginHandlers = require('./plugin-handlers.js');
 const registerMemoryHandlers = require('./memory-handlers.js');
 const registerRagHandlers = require('./rag-handlers.js');
 const registerVoiceWorkflowHandlers = require('./voice-workflow-handlers.js');
-const registerResearchHandlers = require('./research-handlers.js');
+
 const utils = require('./utils.js');
 
 function registerAllHandlers(ipcMain, handlers) {
@@ -122,7 +122,7 @@ function registerAllHandlers(ipcMain, handlers) {
   registerMemoryHandlers(ipcMain, enrichedHandlers);
   registerRagHandlers(ipcMain, enrichedHandlers);
   registerVoiceWorkflowHandlers(ipcMain, enrichedHandlers);
-  registerResearchHandlers(ipcMain, enrichedHandlers);
+
 
   console.log('[Handlers] All IPC handlers registered');
 }

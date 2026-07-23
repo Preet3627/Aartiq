@@ -62,11 +62,35 @@ const stageLabels: Record<string, string> = {
   error: 'Error',
 };
 
+function displayText(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value && typeof value === 'object') {
+    const maybeLink = value as { title?: unknown; url?: unknown; name?: unknown };
+    return displayText(maybeLink.title || maybeLink.name || maybeLink.url, fallback);
+  }
+  return fallback;
+}
+
+function stepKey(step: ResearchStep, index: number): string {
+  return [
+    'research-timeline-step',
+    displayText(step.id),
+    displayText(step.stage),
+    displayText(step.url),
+    displayText(step.label),
+    index,
+  ].filter(Boolean).join('-');
+}
+
 function StepItem({ step, index }: { step: ResearchStep; index: number }) {
   const [expanded, setExpanded] = useState(false);
-  const icon = step.icon || stageIcons[step.stage] || '⚙️';
-  const label = step.label || stageLabels[step.stage] || step.stage;
-  const hasDetail = step.detail || step.source;
+  const stage = displayText(step.stage);
+  const icon = displayText(step.icon) || stageIcons[stage] || '⚙️';
+  const label = displayText(step.label) || stageLabels[stage] || stage || 'Research step';
+  const detail = displayText(step.detail);
+  const source = displayText(step.source);
+  const hasDetail = detail || source;
 
   return (
     <motion.div
@@ -102,8 +126,8 @@ function StepItem({ step, index }: { step: ResearchStep; index: number }) {
           }`}>
             {label}
           </span>
-          {step.source && (
-            <span className="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">{step.source}</span>
+          {source && (
+            <span className="text-[10px] text-zinc-500 bg-white/5 px-1.5 py-0.5 rounded">{source}</span>
           )}
           {step.score !== undefined && (
             <span className={`text-[10px] font-mono ${
@@ -113,7 +137,7 @@ function StepItem({ step, index }: { step: ResearchStep; index: number }) {
         </div>
 
         <AnimatePresence>
-          {expanded && step.detail && (
+          {expanded && detail && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
@@ -121,7 +145,7 @@ function StepItem({ step, index }: { step: ResearchStep; index: number }) {
               transition={{ duration: 0.2 }}
               className="overflow-hidden"
             >
-              <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed">{step.detail}</p>
+              <p className="text-[11px] text-zinc-500 mt-1 leading-relaxed">{detail}</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -151,7 +175,7 @@ export function ResearchTimeline({ steps, isComplete }: ResearchTimelineProps) {
         <div className="flex items-center gap-2.5">
           <div className={`w-2 h-2 rounded-full ${isComplete ? 'bg-emerald-400' : runningStep ? 'bg-sky-400 animate-pulse' : 'bg-zinc-500'}`} />
           <span className="text-xs font-medium text-zinc-300">
-            {isComplete ? 'Research Complete' : runningStep ? runningStep.label : 'Research Progress'}
+            {isComplete ? 'Research Complete' : runningStep ? displayText(runningStep.label, 'Research Progress') : 'Research Progress'}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -183,7 +207,7 @@ export function ResearchTimeline({ steps, isComplete }: ResearchTimelineProps) {
           >
             <div className="px-4 pb-3 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
               {steps.map((step, i) => (
-                <StepItem key={step.id} step={step} index={i} />
+                <StepItem key={stepKey(step, i)} step={step} index={i} />
               ))}
             </div>
           </motion.div>

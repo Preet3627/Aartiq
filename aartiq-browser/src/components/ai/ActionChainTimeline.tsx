@@ -9,6 +9,7 @@ export interface ActionChainStep {
   label: string;
   status: 'pending' | 'running' | 'done' | 'error' | 'skipped';
   detail?: string;
+  detailNode?: React.ReactNode;
   icon?: React.ReactNode;
   timestamp: number;
 }
@@ -45,6 +46,41 @@ const statusIcon = {
   skipped: <span className="w-2.5 h-2.5 rounded-full border border-yellow-400/50" />,
 };
 
+function displayText(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value && typeof value === 'object') {
+    const maybeLink = value as { title?: unknown; url?: unknown; name?: unknown };
+    return displayText(maybeLink.title || maybeLink.name || maybeLink.url, fallback);
+  }
+  return fallback;
+}
+
+function stepKey(step: ActionChainStep, index: number): string {
+  return [
+    'action-chain-step',
+    displayText(step.id),
+    displayText(step.label),
+    displayText(step.detail),
+    step.timestamp || index,
+    index,
+  ].filter(Boolean).join('-');
+}
+
+function DetailDisplay({ step }: { step: ActionChainStep }) {
+  if (step.detailNode) {
+    return <span className="text-[9px] text-secondary-text/40 truncate flex-1">{step.detailNode}</span>;
+  }
+  if (step.detail) {
+    return (
+      <span className="text-[9px] text-secondary-text/40 font-mono truncate flex-1">
+        {displayText(step.detail)}
+      </span>
+    );
+  }
+  return null;
+}
+
 const ActionChainTimeline = memo(function ActionChainTimeline({
   steps,
   title = 'Automation Steps',
@@ -78,15 +114,15 @@ const ActionChainTimeline = memo(function ActionChainTimeline({
 
           {/* Dot strip */}
           <div className="flex items-center gap-1 ml-1 max-w-[180px] overflow-hidden">
-            {steps.slice(0, 12).map((step) => (
+            {steps.slice(0, 12).map((step, idx) => (
               <span
-                key={step.id}
+                key={stepKey(step, idx)}
                 className="relative group/step shrink-0"
               >
                 <span className={`block w-2 h-2 rounded-full ${statusDotColor[step.status]} transition-all duration-[150ms]`} />
                 {/* Tooltip */}
                 <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-[200] whitespace-nowrap rounded-lg border border-border-color bg-primary-bg/95 px-2 py-1 text-[10px] text-primary-text shadow-xl opacity-0 group-hover/step:opacity-100 transition-opacity duration-[150ms] backdrop-blur-xl">
-                  {step.label}
+                  {displayText(step.label, 'Step')}
                 </span>
               </span>
             ))}
@@ -134,7 +170,7 @@ const ActionChainTimeline = memo(function ActionChainTimeline({
               <div className="px-1 py-1 space-y-0.5 max-h-[200px] overflow-y-auto modern-scrollbar">
                 {steps.map((step, idx) => (
                   <motion.div
-                    key={step.id}
+                    key={stepKey(step, idx)}
                     initial={{ opacity: 0, x: -4 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ duration: 0.15, delay: idx * 0.02 }}
@@ -151,13 +187,9 @@ const ActionChainTimeline = memo(function ActionChainTimeline({
                       step.status === 'error' ? 'text-red-400' :
                       'text-secondary-text/60'
                     }`}>
-                      {step.label}
+                      {displayText(step.label, 'Step')}
                     </span>
-                    {step.detail && (
-                      <span className="text-[9px] text-secondary-text/40 font-mono truncate max-w-[140px]">
-                        {step.detail}
-                      </span>
-                    )}
+                    <DetailDisplay step={step} />
                   </motion.div>
                 ))}
               </div>
@@ -222,7 +254,7 @@ const ActionChainTimeline = memo(function ActionChainTimeline({
             <div className="px-3 py-2 space-y-1.5 max-h-[300px] overflow-y-auto modern-scrollbar">
               {steps.map((step, idx) => (
                 <motion.div
-                  key={step.id}
+                  key={stepKey(step, idx)}
                   initial={{ opacity: 0, x: -4 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: idx * 0.02, duration: 0.15 }}
@@ -242,13 +274,9 @@ const ActionChainTimeline = memo(function ActionChainTimeline({
                         step.status === 'skipped' ? 'text-yellow-400' :
                         'text-secondary-text/60'
                       }`}>
-                        {step.label}
+                        {displayText(step.label, 'Step')}
                       </span>
-                      {step.detail && (
-                        <span className="text-[9px] text-secondary-text/40 font-mono truncate flex-1">
-                          {step.detail}
-                        </span>
-                      )}
+                      <DetailDisplay step={step} />
                     </div>
                   </div>
                   <div className="flex-shrink-0 text-[9px] text-secondary-text/30 font-mono">

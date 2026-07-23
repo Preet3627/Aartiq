@@ -18,6 +18,27 @@ interface ThinkingPanelProps {
   initialOpen?: boolean;
 }
 
+function displayText(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value && typeof value === 'object') {
+    const maybeLink = value as { title?: unknown; url?: unknown; name?: unknown; text?: unknown };
+    return displayText(maybeLink.title || maybeLink.name || maybeLink.text || maybeLink.url, fallback);
+  }
+  return fallback;
+}
+
+function stepKey(step: ThinkingStep, index: number): string {
+  return [
+    'thinking-step',
+    displayText(step.id),
+    displayText(step.label),
+    displayText(step.detail),
+    step.timestamp || index,
+    index,
+  ].filter(Boolean).join('-');
+}
+
 const ThinkingPanel = memo(function ThinkingPanel({ steps = [], thinkText, initialOpen = false }: ThinkingPanelProps) {
   const [open, setOpen] = useState(initialOpen);
   const hasRunning = steps.some((s) => s.status === 'running');
@@ -106,7 +127,7 @@ const ThinkingPanel = memo(function ThinkingPanel({ steps = [], thinkText, initi
               <div className="px-3 py-2 space-y-1.5 bg-black/10">
                 {steps.map((step, idx) => (
                   <motion.div
-                    key={step.id}
+                    key={stepKey(step, idx)}
                     initial={{ opacity: 0, x: -8 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.04 }}
@@ -132,9 +153,9 @@ const ThinkingPanel = memo(function ThinkingPanel({ steps = [], thinkText, initi
                         step.status === 'running' ? 'text-sky-300'
                         : step.status === 'done'  ? 'text-white/50'
                                                   : 'text-red-300'
-                      }`}>{step.label}</div>
+                      }`}>{displayText(step.label, 'Step')}</div>
                       {step.detail && (
-                        <div className="text-[9px] text-white/25 truncate mt-0.5">{step.detail}</div>
+                        <div className="text-[9px] text-white/25 truncate mt-0.5">{displayText(step.detail)}</div>
                       )}
                     </div>
                   </motion.div>

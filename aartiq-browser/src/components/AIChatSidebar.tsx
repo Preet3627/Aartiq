@@ -61,6 +61,12 @@ import YouTubePlayer from './ai/YouTubePlayer';
 import { ResearchExecutionCard, type ExecutionStepData } from './ai/ResearchExecutionCard';
 import { ResearchSourceCarousel } from './ai/ResearchSourceCard';
 import { getCmdParam, getCmdParamInt, cleanCmdValue, type ParsedCommand } from '@/lib/AICommandParser';
+import {
+  applyResearchProgress,
+  createEmptyResearchState,
+  createResearchState,
+  type ResearchUiState,
+} from '@/lib/researchState';
 
 // Logic & Utils
 import {
@@ -305,8 +311,8 @@ const renderMarkdownContent = (content: string) => (
       },
       table({ children }) {
         return (
-          <div className="my-4 overflow-x-auto rounded-xl border border-[color-mix(in_srgb,var(--primary-text)_12%,transparent)]">
-            <table className="aartiq-table w-full border-collapse text-[13px]">{children}</table>
+          <div className="my-3 max-w-full overflow-x-auto rounded-xl border border-[color-mix(in_srgb,var(--primary-text)_12%,transparent)]">
+            <table className="aartiq-table w-full min-w-full border-collapse text-[13px]">{children}</table>
           </div>
         );
       },
@@ -882,12 +888,8 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [terminalLogs, setTerminalLogs] = useState<Array<{ id: string; command: string; output: string; success: boolean; timestamp: number }>>([]);
   const [showTerminal, setShowTerminal] = useState(false);
   const [showDevLogs, setShowDevLogs] = useState(false);
-  const [researchProgress, setResearchProgress] = useState<{ stage: string; message: string; [key: string]: any } | null>(null);
-  const [researchSteps, setResearchSteps] = useState<Array<{ id: string; stage: string; label: string; detail?: string; status: 'pending' | 'running' | 'done' | 'error'; icon?: string; timestamp?: number; source?: string; favicon?: string; url?: string; score?: number }>>([]);
-  const [researchExecutionSteps, setResearchExecutionSteps] = useState<ExecutionStepData[]>([]);
-  const [researchSourceSummary, setResearchSourceSummary] = useState<Array<{ name: string; favicon?: string; url: string; articleCount: number; avgScore: number; used: boolean }>>([]);
-  const [researchCoverage, setResearchCoverage] = useState<{ percentage: number; covered: number; total: number } | null>(null);
-  const [activeResearchPipelineId, setActiveResearchPipelineId] = useState<string | null>(null);
+  const [researchState, setResearchState] = useState<ResearchUiState>(() => createEmptyResearchState());
+  const activeResearchPipelineIdRef = useRef<string | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const terminalLogIdCounter = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -911,59 +913,6 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
       setAgentState('executing');
     }
   }, [permissionPending]);
-
-  useEffect(() => {
-    const unsubscribe = window.electronAPI?.onResearchProgress?.((progress: any) => {
-      setResearchProgress(progress);
-      if (progress.stage === 'complete') {
-        setTimeout(() => setResearchProgress(null), 3000);
-        if (progress.sourceSummary) setResearchSourceSummary(progress.sourceSummary);
-        if (progress.coverage) setResearchCoverage(progress.coverage);
-        setResearchExecutionSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'done' as const } : s));
-      } else {
-        const stepId = `${progress.stage}-${progress.url || progress.query || Date.now()}`;
-        const newStep = {
-          id: stepId,
-          stage: progress.stage,
-          label: progress.message || progress.stage,
-          detail: progress.url || progress.query,
-          status: (progress.stage.includes('error') ? 'error' : 'done') as 'error' | 'done',
-          source: progress.source,
-          url: progress.url,
-          score: progress.score,
-        };
-        setResearchSteps(prev => {
-          const existing = prev.findIndex(s => s.id === stepId);
-          if (existing >= 0) {
-            const updated = [...prev];
-            updated[existing] = newStep;
-            return updated;
-          }
-          return [...prev, newStep];
-        });
-        setResearchExecutionSteps(prev => {
-          const newExec: ExecutionStepData = {
-            id: stepId,
-            stage: progress.stage,
-            message: progress.message || progress.stage,
-            url: progress.url,
-            source: progress.source,
-            score: progress.score,
-            status: progress.stage.includes('error') ? 'error' : 'done',
-          };
-          const existing = prev.findIndex(s => s.id === stepId);
-          if (existing >= 0) {
-            const updated = [...prev];
-            updated[existing] = newExec;
-            return updated;
-          }
-          return [...prev.slice(-15), newExec];
-        });
-        if (progress.coverage) setResearchCoverage(progress.coverage);
-      }
-    });
-    return () => unsubscribe?.();
-  }, []);
 
   const markSidebarInteraction = useCallback(() => {
     setLastSidebarInteractionAt(Date.now());
@@ -1286,6 +1235,10 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
 
   const resolveActionChainStep = useCallback((id: string, status: 'done' | 'error' | 'skipped', detail?: string) => {
     setActionChainSteps((prev) => prev.map((s) => s.id === id ? { ...s, status, detail: detail ?? s.detail } : s));
+  }, []);
+
+  const updateActionChainStepLabel = useCallback((id: string, label: string, detail?: string, detailNode?: React.ReactNode) => {
+    setActionChainSteps((prev) => prev.map((s) => s.id === id ? { ...s, label, detail: detail ?? s.detail, detailNode: detailNode ?? s.detailNode } : s));
   }, []);
 
   const resetActionChainSteps = useCallback(() => {
@@ -1673,18 +1626,7 @@ I couldn't schedule the task. The background service may not be running. Please 
     skillContexts = skillResults.filter(Boolean);
     const skillContext = skillContexts.join('\n\n');
 
-    // If the user explicitly asked to load a skill and we handled it, respond directly
-    if (explicitLoadSkillId && skillContexts.length > 0) {
-      const loadedMeta = AVAILABLE_SKILLS.find(s => s.id === explicitLoadSkillId);
-      const responseMsg = loadedMeta
-        ? `✅ **${loadedMeta.label}** skill loaded. You can now use its commands.\n\n*Try asking me to manage settings, view bookmarks, or customize your experience.*`
-        : `✅ **${explicitLoadSkillId}** skill loaded.`;
-      setMessages(prev => [...prev, { id: createMessageId('assistant'), role: 'model', content: responseMsg } as ExtendedChatMessage]);
-      setIsLoading(false);
-      setIsThinking(false);
-      setAgentState('idle');
-      return;
-    }
+    // Skill loaded — status shown via thinking steps, continue processing
 
     const { content: protectedContent, wasProtected } = Security.fortress(rawContent);
     const userMessage: ExtendedChatMessage = {
@@ -2178,6 +2120,27 @@ I couldn't schedule the task. The background service may not be running. Please 
 
         case 'NAVIGATE': {
           const targetUrl = command.value.trim() || 'https://www.google.com';
+          // Update action chain with the URL being navigated to
+          let navHostname = '';
+          try { navHostname = new URL(targetUrl.startsWith('http') ? targetUrl : `https://${targetUrl}`).hostname; } catch {}
+          if (currentActionChainStepIdRef.current) {
+            updateActionChainStepLabel(
+              currentActionChainStepIdRef.current,
+              `🌐 Navigating: ${navHostname || targetUrl}`,
+              targetUrl,
+              navHostname ? (
+                <span className="inline-flex items-center gap-1">
+                  <img
+                    src={`https://www.google.com/s2/favicons?domain=${navHostname}&sz=16`}
+                    alt=""
+                    className="w-3 h-3 rounded-sm flex-shrink-0"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  <span className="text-[9px] text-secondary-text/50 truncate max-w-[120px]">{navHostname}</span>
+                </span>
+              ) : undefined
+            );
+          }
           if (targetUrl.startsWith('comet://')) {
             const page = targetUrl.replace('comet://', '');
             router.push(`/${page}`);
@@ -2615,11 +2578,15 @@ I couldn't schedule the task. The background service may not be running. Please 
             query = `Opening URL: ${directUrl}`;
           }
 
+          // Update the generic action chain step with the actual search query
+          if (currentActionChainStepIdRef.current) {
+            updateActionChainStepLabel(currentActionChainStepIdRef.current, `🔍 Searching: "${originalQuery}"`);
+          }
+
           const searchStepId = addThinkingStep(`Searching for "${treatAsDirectUrl ? directUrl : originalQuery}"...`);
 
           if (treatAsDirectUrl) {
-            // Direct URL — navigate to it
-            setActiveView('browser');
+            // Direct URL — open in a new background tab (don't steal focus)
             const navigationResult = await openTabAndWaitForLoad(directUrl, 'ai-session');
             output = `Opened new tab and navigated to ${navigationResult.url || directUrl}`;
             resolveThinkingStep(searchStepId, 'done', 'Page loaded');
@@ -2630,7 +2597,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           let searchResults: Array<{ title: string; url: string; snippet: string; content: string }> = [];
           let usedEngine = 'duckduckgo';
           try {
-            const mcpSearchResult = await (window.electronAPI as any).aiWebSearch(originalQuery, 'duckduckgo', Math.min(pagesOverride || 3, 5));
+            const mcpSearchResult = await (window.electronAPI as any).aiWebSearch(originalQuery, 'duckduckgo', pagesOverride || 5);
             if (mcpSearchResult?.results?.length > 0) {
               searchResults = mcpSearchResult.results;
               usedEngine = mcpSearchResult.engine || 'duckduckgo';
@@ -2644,7 +2611,7 @@ I couldn't schedule the task. The background service may not be running. Please 
             try {
               const ragResults = await window.electronAPI.webSearchRag(originalQuery);
               const normalized = normalizeSearchResults(ragResults as any[]);
-              searchResults = normalized.slice(0, pagesOverride || 6).map(r => ({
+              searchResults = normalized.slice(0, pagesOverride || 5).map(r => ({
                 title: r.title,
                 url: r.url,
                 snippet: r.snippet,
@@ -2669,7 +2636,7 @@ I couldn't schedule the task. The background service may not be running. Please 
             });
             searchContextStore.addWebSearch(originalQuery, fullSnippet);
 
-            // Add action chain step showing websites found
+            // Update the action chain step with found websites (favicons + titles)
             const websites = searchResults
               .filter(r => r.url && r.url.startsWith('http'))
               .map(r => ({
@@ -2678,18 +2645,50 @@ I couldn't schedule the task. The background service may not be running. Please 
                 charCount: (r.content || '').length,
                 truncated: (r.content || '').length > 6000,
               }));
-            const searchChainId = addActionChainStep(
-              `Searched ${searchResults.length} website${searchResults.length !== 1 ? 's' : ''} for "${originalQuery}"`,
-              `${usedEngine} · ${websites.length} sites scraped`
+            const websiteDomains = websites.map(w => {
+              try { return new URL(w.url).hostname; } catch { return w.url; }
+            }).join(', ');
+            const websiteDetailNode = (
+              <span className="inline-flex items-center gap-1 flex-wrap">
+                {websites.map((w, i) => {
+                  let hostname = '';
+                  try { hostname = new URL(w.url).hostname; } catch { hostname = w.url; }
+                  const faviconUrl = `https://www.google.com/s2/favicons?domain=${hostname}&sz=16`;
+                  return (
+                    <span key={i} className="group/site relative inline-flex items-center gap-0.5">
+                      <img
+                        src={faviconUrl}
+                        alt=""
+                        className="w-3 h-3 rounded-sm flex-shrink-0"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                      <span className="text-[9px] text-secondary-text/50 truncate max-w-[80px]">
+                        {w.title || hostname}
+                      </span>
+                      {/* Hover tooltip with full URL */}
+                      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-[300] whitespace-nowrap rounded-md border border-border-color bg-primary-bg/95 px-2 py-1 text-[9px] font-mono text-primary-text shadow-xl opacity-0 group-hover/site:opacity-100 transition-opacity duration-[150ms] backdrop-blur-xl">
+                        {w.url}
+                      </span>
+                      {i < websites.length - 1 && <span className="text-secondary-text/20 mx-0.5">·</span>}
+                    </span>
+                  );
+                })}
+              </span>
             );
-            resolveActionChainStep(searchChainId, 'done', `${websites.length} sites · ${usedEngine}`);
+            if (currentActionChainStepIdRef.current) {
+              updateActionChainStepLabel(
+                currentActionChainStepIdRef.current,
+                `🔍 Searched: "${originalQuery}"`,
+                `${websites.length} sites`,
+                websiteDetailNode
+              );
+            }
 
             // Navigate to specific result if requested, or show summary
             if (specificUrl?.startsWith('__INDEX_')) {
               const idx = parseInt(specificUrl.replace('__INDEX_', '').replace('__', ''));
               const target = searchResults[idx];
               if (target?.url) {
-                setActiveView('browser');
                 await openTabAndWaitForLoad(target.url, 'ai-session');
                 const activeTabId = useAppStore.getState().activeTabId;
                 const contentRes = await window.electronAPI.extractPageContent(activeTabId || undefined);
@@ -2705,7 +2704,6 @@ I couldn't schedule the task. The background service may not be running. Please 
             } else if (specificUrl) {
               const target = searchResults.find(r => r.url.includes(specificUrl));
               if (target?.url) {
-                setActiveView('browser');
                 await openTabAndWaitForLoad(target.url, 'ai-session');
                 output = `✅ Opened: ${target.title} (${target.url})`;
               } else {
@@ -2772,7 +2770,6 @@ I couldn't schedule the task. The background service may not be running. Please 
             resolveThinkingStep(searchStepId, 'done', `${searchResults.length} results via ${usedEngine}`);
           } else {
             // Last resort: open a search tab and try DOM/OCR extraction
-            setActiveView('browser');
             const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(originalQuery)}`;
             await openTabAndWaitForLoad(searchUrl, 'ai-session');
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -2827,7 +2824,7 @@ I couldn't schedule the task. The background service may not be running. Please 
             // MCP search already navigates to pages and reads full content
             let srResults: Array<{ title: string; url: string; snippet: string; content: string }> = [];
             try {
-              const mcpRes = await (window.electronAPI as any).aiWebSearch(srQuery, 'duckduckgo', Math.min(srCount, 5));
+              const mcpRes = await (window.electronAPI as any).aiWebSearch(srQuery, 'duckduckgo', srCount);
               if (mcpRes?.results?.length > 0) {
                 srResults = mcpRes.results.map((r: any) => ({
                   title: r.title,
@@ -2874,57 +2871,50 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
-        // ✅ DEEP_RESEARCH — Comprehensive Perplexity-quality research report
-        // JSON: {"type": "DEEP_RESEARCH", "query": "AI news", "engine": "duckduckgo", "maxResults": 10}
+        // ✅ DEEP_RESEARCH — Signal to begin iterative research using the Research Skill v2 workflow.
+        // The LLM itself is the research engine: WEB_SEARCH → NAVIGATE → READ_PAGE_CONTENT → iterate → synthesize.
+        // DO NOT run a backend pipeline. Just acknowledge and let the LLM continue researching.
         case 'DEEP_RESEARCH': {
           const drRawValue = command.value.trim().replace(/^["'](.*)["']$/, '$1') || '';
           const drQuery = getCmdParam(command as any, 'query') || cleanCmdValue(command as any) || drRawValue;
-          const drEngine = getCmdParam(command as any, 'engine') || 'duckduckgo';
-          const drMaxResults = getCmdParamInt(command as any, 'maxResults') || 12;
-          const drConcurrency = getCmdParamInt(command as any, 'concurrency') || 4;
 
           if (!drQuery) {
             output = 'DEEP_RESEARCH requires a query parameter.';
             break;
           }
 
-          // Reset research state
-          setResearchSteps([]);
-          setResearchExecutionSteps([]);
-          setResearchSourceSummary([]);
-          setResearchCoverage(null);
+          const researchId = createMessageId('research');
+          activeResearchPipelineIdRef.current = researchId;
+          setResearchState(createResearchState(researchId, drQuery));
 
           const drStepId = addThinkingStep(`Researching "${drQuery}"...`);
-          try {
-            setAgentState('executing');
-            const result = await (window.electronAPI as any).researchStart(drQuery, drEngine, {
-              maxResults: drMaxResults,
-              concurrency: drConcurrency,
-            });
-
-            if (result?.success && result.report) {
-              output = result.report;
-              await BrowserAI.addToVectorMemory(output, {
-                type: 'deep_research',
-                query: drQuery,
-                timestamp: Date.now(),
-              });
-              if (result.sourceSummary) setResearchSourceSummary(result.sourceSummary);
-              if (result.coverage) setResearchCoverage(result.coverage);
-              const clusterCount = result.stats?.clusters || result.clusters?.length || 0;
-              resolveThinkingStep(drStepId, 'done', `Research complete: ${clusterCount} stories, ${result.stats?.successful || 0} sources`);
-            } else {
-              output = `Deep research failed: ${result?.error || 'Unknown error'}`;
-              resolveThinkingStep(drStepId, 'error', result?.error || 'Failed');
-            }
-          } catch (e: any) {
-            output = `Deep research error: ${e.message}`;
-            resolveThinkingStep(drStepId, 'error', e.message);
-          }
+          output = `Research workflow initiated for: "${drQuery}". Now follow the Research Skill v2 guide: decompose the query into targeted subtopics, run multiple [WEB_SEARCH] + [NAVIGATE] + [READ_PAGE_CONTENT] cycles, validate facts across 2+ sources, maintain coverage above 80%, and synthesize a structured evidence-grounded report with a ## Sources section listing every URL you visited.`;
+          resolveThinkingStep(drStepId, 'done', `Research workflow started for "${drQuery}"`);
           break;
         }
 
         case 'READ_PAGE_CONTENT': {
+          // Update action chain with which page is being read
+          let readHostname = '';
+          try { readHostname = new URL(currentUrl).hostname; } catch {}
+          if (currentActionChainStepIdRef.current) {
+            updateActionChainStepLabel(
+              currentActionChainStepIdRef.current,
+              `📖 Reading: ${readHostname || currentUrl}`,
+              currentUrl,
+              readHostname ? (
+                <span className="inline-flex items-center gap-1">
+                  <img
+                    src={`https://www.google.com/s2/favicons?domain=${readHostname}&sz=16`}
+                    alt=""
+                    className="w-3 h-3 rounded-sm flex-shrink-0"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                  <span className="text-[9px] text-secondary-text/50 truncate max-w-[120px]">{readHostname}</span>
+                </span>
+              ) : undefined
+            );
+          }
           try {
             const settled = await waitForActiveTabToSettle(15000);
             if (!settled) {
@@ -3958,7 +3948,7 @@ I couldn't schedule the task. The background service may not be running. Please 
 
               // Page break between pages (except last)
               if (i < pdfData.pages.length - 1) {
-                pdfContent += '\n---\n\n';
+                pdfContent += '\n<div class="page-break"></div>\n\n';
               }
             }
           } else if (pdfData.content) {
@@ -4718,10 +4708,6 @@ I couldn't schedule the task. The background service may not be running. Please 
           try {
             const ctx = await window.electronAPI.loadSkill(skillId);
             if (ctx) {
-              setMessages(prev => [...prev, {
-                role: 'model',
-                content: `✅ **${skillMeta.label}** skill loaded. You can now use its commands.\n\n*Skill guide injected into context for this session.*`
-              }]);
               resolveActionChainStep(loadStepId, 'done', `${skillId} loaded`);
               output = `Skill "${skillId}" loaded successfully`;
             } else {
@@ -5307,7 +5293,7 @@ I've successfully executed the following real tasks:
 
 **Built by:** Preet Kumar Patel — A 16-year-old student from India 🇮🇳
 
-*Aartiq ${versionLabel} — The AI-Native Browser*
+*Aartiq ${versionLabel} — For the questions that matter*
           ` }]);
 
           output = 'Full capability demonstration executed with 10 real tasks via action chain.';
@@ -6867,7 +6853,7 @@ I've successfully executed the following real tasks:
       </header>
 
       {/* Chat Messages */}
-      <div className={`flex-1 overflow-y-auto modern-scrollbar transition-[padding] duration-[180ms] ease-[var(--ease-spring)] backdrop-blur-sm px-4 py-4 pb-32 space-y-3`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 95%, transparent), color-mix(in srgb, var(--primary-bg) 99%, transparent))' }}>
+      <div className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden modern-scrollbar transition-[padding] duration-[180ms] ease-[var(--ease-spring)] backdrop-blur-sm px-4 py-4 pb-6 space-y-3`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 95%, transparent), color-mix(in srgb, var(--primary-bg) 99%, transparent))' }}>
         <AnimatePresence mode="popLayout">
           {messages.length === 0 && (
             <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }} className="mx-auto flex max-w-[650px] flex-col items-center justify-center py-8 text-center">
@@ -7227,16 +7213,19 @@ I've successfully executed the following real tasks:
           {isLoading && messages.length === 0 && <ThinkingStatus state={agentState} />}
 
           {/* Research Execution Card — shows during active research */}
-          {researchExecutionSteps.length > 0 && (
-            <div className="space-y-3">
+          {researchState.steps.length > 0 && (
+            <div className="mx-auto w-full max-w-[650px] space-y-2">
               <ResearchExecutionCard
-                steps={researchExecutionSteps}
-                isComplete={!isLoading}
-                query={researchSteps.find(s => s.stage === 'planning')?.detail || ''}
-                coverage={researchCoverage || undefined}
+                steps={researchState.steps as ExecutionStepData[]}
+                isComplete={researchState.status === 'completed' || researchState.status === 'failed' || researchState.status === 'cancelled'}
+                query={researchState.query}
+                progress={researchState.progress}
+                currentStep={researchState.currentStep}
+                totalSteps={researchState.totalSteps}
+                coverage={researchState.coverage || undefined}
               />
-              {researchSourceSummary.length > 0 && (
-                <ResearchSourceCarousel sources={researchSourceSummary} />
+              {researchState.sources.length > 0 && (
+                <ResearchSourceCarousel sources={researchState.sources} />
               )}
             </div>
           )}
@@ -7257,7 +7246,7 @@ I've successfully executed the following real tasks:
       </div>
 
       {/* Input Area */}
-      <footer className="sticky bottom-0 px-4 pb-3 pt-2" suppressHydrationWarning style={{ background: 'linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary-bg) 88%, transparent) 34%, var(--primary-bg) 100%)', backdropFilter: 'blur(18px)' }}>
+      <footer className="flex-shrink-0 px-4 pb-3 pt-2" suppressHydrationWarning style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 72%, transparent), color-mix(in srgb, var(--primary-bg) 98%, transparent) 32%, var(--primary-bg) 100%)', backdropFilter: 'blur(18px)' }}>
         <div className={`mx-auto max-w-[650px] rounded-2xl border p-2 transition-all duration-[180ms] ease-[var(--ease-spring)] ${glowActive && composerFocused ? (isRgbGlow ? 'rgb-glow-animate' : 'ai-glow-shift') : ''} ${shiftTabGlow
           ? 'border-purple-500/70 shadow-[0_0_22px_rgba(168,85,247,0.26)]'
           : 'focus-within:border-[color-mix(in_srgb,var(--accent)_35%,var(--border-color))]'

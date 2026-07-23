@@ -445,7 +445,7 @@ module.exports = function registerFileHandlers(ipcMain, handlers) {
       }
 
       const iconBase64 = await getAppIconBase64();
-      const pdfHtml = generateAartiqPDFTemplate(chatTitle, chatContent, iconBase64, 'professional', {
+      const pdfHtml = generateAartiqPDFTemplate(chatTitle, chatContent, iconBase64, {
         author: 'Aartiq',
         category: 'Chat Session',
         tags: ['chat', 'export', 'aartiq'],

@@ -182,7 +182,7 @@ export default function WelcomeScreen() {
               <img src="/logo-transparent.png" alt="Aartiq" className="h-9 w-9 object-contain" />
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/70">Aartiq Browser</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-sky-200/70">Aartiq — For the questions that matter</p>
               <p className="text-sm text-white/45">Minimal AI workspace for research, actions, and secure automation.</p>
             </div>
           </div>

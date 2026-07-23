@@ -2,6 +2,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
+const TAGLINE = "For the questions that matter.";
+
 const InitializingOverlay = () => {
     return (
         <motion.div 
@@ -11,7 +13,6 @@ const InitializingOverlay = () => {
             className="fixed inset-0 z-[100000] flex items-center justify-center bg-[#050505]"
         >
             <div className="relative flex flex-col items-center">
-                {/* Subtle glowing background */}
                 <motion.div 
                     animate={{ 
                         scale: [1, 1.2, 1],
@@ -21,7 +22,6 @@ const InitializingOverlay = () => {
                     className="absolute inset-0 bg-sky-500/20 blur-[120px] rounded-full"
                 />
                 
-                {/* Minimal Logo */}
                 <motion.div
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
@@ -36,19 +36,14 @@ const InitializingOverlay = () => {
                         <h1 className="text-3xl font-black tracking-[0.5em] text-white uppercase bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40">Aartiq</h1>
                         <div className="flex items-center gap-4">
                             <div className="h-[1px] w-16 bg-white/5" />
-                            <motion.span 
-                                animate={{ opacity: [0.2, 0.5, 0.2] }}
-                                transition={{ duration: 2, repeat: Infinity }}
-                                className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/40"
-                            >
-                                Neural Core Engine
-                            </motion.span>
+                            <span className="text-[10px] font-bold uppercase tracking-[0.3em] bg-gradient-to-r from-purple-400 via-violet-400 to-sky-400 bg-clip-text text-transparent">
+                                {TAGLINE}
+                            </span>
                             <div className="h-[1px] w-16 bg-white/5" />
                         </div>
                     </div>
                 </motion.div>
 
-                {/* Minimalist Loading Bar */}
                 <div className="absolute bottom-[240px] w-40 h-[2px] bg-white/5 overflow-hidden rounded-full">
                     <motion.div 
                         initial={{ x: "-100%" }}

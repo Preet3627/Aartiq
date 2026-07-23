@@ -110,6 +110,29 @@ function ThemeIcon({ theme }: { theme: AppTheme }) {
   return <Moon size={16} />;
 }
 
+function displayText(value: unknown, fallback = ''): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value && typeof value === 'object') {
+    const maybeLink = value as { title?: unknown; url?: unknown; name?: unknown; text?: unknown; path?: unknown };
+    return displayText(maybeLink.text || maybeLink.title || maybeLink.name || maybeLink.url || maybeLink.path, fallback);
+  }
+  return fallback;
+}
+
+function normalizeSuggestion(suggestion: any, fallbackType = 'search') {
+  const type = displayText(suggestion?.type, fallbackType);
+  const url = displayText(suggestion?.url || suggestion?.path);
+  const text = displayText(suggestion?.text || suggestion?.title || suggestion?.name || url, url || 'Suggestion');
+
+  return {
+    ...suggestion,
+    type,
+    text,
+    url,
+  };
+}
+
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1238,16 +1261,19 @@ export default function Home() {
         setUrlPrediction(preds[0] || null);
 
         if (window.electronAPI) {
-          const webSuggestions = await window.electronAPI.getSuggestions(inputValue);
+          const rawWebSuggestions = await window.electronAPI.getSuggestions(inputValue);
+          const webSuggestions = Array.isArray(rawWebSuggestions)
+            ? rawWebSuggestions.map((suggestion: any) => normalizeSuggestion(suggestion)).filter((suggestion: any) => suggestion.text || suggestion.url)
+            : [];
           const appSearch = await window.electronAPI.searchApplications(inputValue);
           const appSuggestions = appSearch.success ? appSearch.results.map((app: any) => ({
             type: 'app',
-            text: app.name,
-            url: app.path,
+            text: displayText(app.name || app.path, 'Application'),
+            url: displayText(app.path),
             icon: <Briefcase size={14} />
           })) : [];
 
-          setSuggestions([...webSuggestions, ...appSuggestions]);
+          setSuggestions([...webSuggestions, ...appSuggestions.map((suggestion: any) => normalizeSuggestion(suggestion, 'app'))]);
         }
       } else {
         setUrlPrediction(null);
@@ -1507,12 +1533,13 @@ export default function Home() {
   };
 
   const handleSuggestionClick = (suggestion: any) => {
+    const targetUrl = displayText(suggestion?.url);
     if (suggestion.type === 'app') {
-      if (window.electronAPI && suggestion.url) {
-        window.electronAPI.openExternalApp(suggestion.url);
+      if (window.electronAPI && targetUrl) {
+        window.electronAPI.openExternalApp(targetUrl);
       }
     } else {
-      handleGo(suggestion.url);
+      handleGo(targetUrl);
     }
     setSuggestions([]);
     setIsTyping(false);
@@ -2526,8 +2553,8 @@ export default function Home() {
                           {s.type === 'history' && <RefreshCcw size={14} className="text-secondary-text" />}
                           {s.type === 'bookmark' && <Bookmark size={14} className="text-secondary-text" />}
                           {s.type === 'app' && s.icon}
-                          <span className="flex-1 text-primary-text truncate">{s.text}</span>
-                          <span className="text-secondary-text text-xs">{s.url}</span>
+                          <span className="flex-1 text-primary-text truncate">{displayText(s.text, 'Suggestion')}</span>
+                          <span className="text-secondary-text text-xs">{displayText(s.url)}</span>
                         </div>
                       ))}
                     </div>

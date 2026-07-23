@@ -83,8 +83,10 @@ class SkillLoader {
   async load(format) {
     const normalizedFormat = format.toLowerCase();
 
-    if (this.cache[normalizedFormat]) {
-      return this.cache[normalizedFormat];
+    // Always re-read from disk to pick up edits (cache invalidated after 60s)
+    const cached = this.cache[normalizedFormat];
+    if (cached && cached._loadedAt && (Date.now() - cached._loadedAt < 60000)) {
+      return cached.content;
     }
 
     const paths = this.getSkillPaths(normalizedFormat);
@@ -94,7 +96,7 @@ class SkillLoader {
       try {
         const content = fs.readFileSync(existingPath, 'utf-8');
         const skillContent = this.extractSkillContent(content, normalizedFormat);
-        this.cache[normalizedFormat] = skillContent;
+        this.cache[normalizedFormat] = { content: skillContent, _loadedAt: Date.now() };
         console.log(`[SkillLoader] Loaded skill for ${normalizedFormat} from: ${existingPath}`);
         return skillContent;
       } catch (e) {
@@ -104,7 +106,7 @@ class SkillLoader {
 
     console.log(`[SkillLoader] Skill file not found for ${normalizedFormat}, searched:`, paths);
     const fallback = this.getFallbackInstructions(normalizedFormat);
-    this.cache[normalizedFormat] = fallback;
+    this.cache[normalizedFormat] = { content: fallback, _loadedAt: Date.now() };
     return fallback;
   }
 
