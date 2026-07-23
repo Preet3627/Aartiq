@@ -21,13 +21,23 @@ const os = require('os');
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_ALLOWED_DIRECTORIES = [
-  { path: os.homedir(), recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
-  { path: path.join(os.homedir(), 'Desktop'), recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
-  { path: path.join(os.homedir(), 'Documents'), recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
-  { path: path.join(os.homedir(), 'Downloads'), recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
-  { path: '/tmp', recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
-];
+// Cross-platform default: only the Aartiq Browser data directory, not the entire home
+function _getDefaultDirectories() {
+  let appDataDir;
+  if (process.platform === 'darwin') {
+    appDataDir = path.join(os.homedir(), 'Library', 'Application Support', 'aartiq');
+  } else if (process.platform === 'win32') {
+    appDataDir = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'aartiq');
+  } else {
+    appDataDir = path.join(os.homedir(), '.config', 'aartiq');
+  }
+  return [
+    { path: appDataDir, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
+    { path: '/tmp', recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
+  ];
+}
+
+const DEFAULT_ALLOWED_DIRECTORIES = _getDefaultDirectories();
 
 // ---------------------------------------------------------------------------
 // Path Canonicalization (§2 — security-critical)

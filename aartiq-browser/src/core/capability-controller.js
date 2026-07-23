@@ -13,6 +13,9 @@ class CapabilityController {
     
     // Callback to notify renderer of pending approvals
     this.onApprovalRequired = options.onApprovalRequired || null;
+
+    // Pending approval resolvers: ticketId → { resolve, reject, timer }
+    this._pendingApprovalCallbacks = new Map();
   }
 
   registerAction(action) {
@@ -69,7 +72,7 @@ class CapabilityController {
       }
     }
 
-    // If approval needed, issue a ticket instead of blocking
+    // If approval needed, issue a ticket and WAIT for user response
     if (needsApproval) {
       const ticket = this.ticketManager.issueTicket(name, params, {
         riskLevel: action.riskLevel,
@@ -82,17 +85,33 @@ class CapabilityController {
         this.onApprovalRequired(ticket);
       }
 
-      return {
-        approved: false,
-        needsApproval: true,
-        ticketId: ticket.ticketId,
-        action: name,
-        params: ticket.params,
-        paramsHash: ticket.paramsHash,
-        metadata: ticket.metadata,
-        expiresAt: ticket.expiresAt,
-        reason: approvalReason,
-      };
+      // Wait for the user to approve/deny via the renderer UI
+      const approvalResult = await new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          this._pendingApprovalCallbacks.delete(ticket.ticketId);
+          resolve({
+            approved: false,
+            needsApproval: true,
+            ticketId: ticket.ticketId,
+            action: name,
+            params: ticket.params,
+            paramsHash: ticket.paramsHash,
+            metadata: ticket.metadata,
+            expiresAt: ticket.expiresAt,
+            reason: `${approvalReason} (timed out)`,
+          });
+        }, this.ticketManager.ticketTTL);
+
+        this._pendingApprovalCallbacks.set(ticket.ticketId, {
+          resolve: (result) => {
+            clearTimeout(timeout);
+            this._pendingApprovalCallbacks.delete(ticket.ticketId);
+            resolve(result);
+          },
+        });
+      });
+
+      return approvalResult;
     }
 
     // No approval needed, execute directly
@@ -118,6 +137,12 @@ class CapabilityController {
     // Step 1: Approve the ticket (pending → approved)
     const approval = this.ticketManager.approveTicket(ticketId, approvedBy);
     if (!approval.success) {
+      // Resolve any pending callback with failure
+      this._resolvePendingApproval(ticketId, {
+        approved: false,
+        reason: approval.reason,
+        ticketId,
+      });
       return {
         approved: false,
         reason: approval.reason,
@@ -129,6 +154,11 @@ class CapabilityController {
     const redemption = this.ticketManager.redeemTicket(ticketId);
     
     if (!redemption.success) {
+      this._resolvePendingApproval(ticketId, {
+        approved: false, 
+        reason: redemption.reason,
+        ticketId,
+      });
       return { 
         approved: false, 
         reason: redemption.reason,
@@ -138,6 +168,11 @@ class CapabilityController {
 
     const action = this.actions.get(redemption.action);
     if (!action) {
+      this._resolvePendingApproval(ticketId, {
+        approved: false, 
+        reason: `Action "${redemption.action}" no longer registered`,
+        ticketId,
+      });
       return { 
         approved: false, 
         reason: `Action "${redemption.action}" no longer registered`,
@@ -163,18 +198,23 @@ class CapabilityController {
     // Execute the action with the EXACT params that were approved
     try {
       const result = await action.handler(redemption.params);
-      return { 
+      const execResult = { 
         approved: true, 
         result,
         ticketId,
         action: redemption.action,
       };
+      // Resolve any pending callback (from executeAction waiting for approval)
+      this._resolvePendingApproval(ticketId, execResult);
+      return execResult;
     } catch (e) {
-      return { 
+      const failResult = { 
         approved: false, 
         reason: `Action "${redemption.action}" failed: ${e.message}`,
         ticketId,
       };
+      this._resolvePendingApproval(ticketId, failResult);
+      return failResult;
     }
   }
 
@@ -182,7 +222,27 @@ class CapabilityController {
    * Deny a ticket
    */
   denyTicket(ticketId, deniedBy = 'user', reason = 'User denied') {
-    return this.ticketManager.denyTicket(ticketId, deniedBy, reason);
+    const result = this.ticketManager.denyTicket(ticketId, deniedBy, reason);
+    // Resolve any pending callback with denial
+    if (result.success) {
+      this._resolvePendingApproval(ticketId, {
+        approved: false,
+        reason,
+        ticketId,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Resolve a pending approval callback if one exists
+   */
+  _resolvePendingApproval(ticketId, result) {
+    const pending = this._pendingApprovalCallbacks.get(ticketId);
+    if (pending) {
+      this._pendingApprovalCallbacks.delete(ticketId);
+      pending.resolve(result);
+    }
   }
 
   /**

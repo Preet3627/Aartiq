@@ -194,8 +194,8 @@ describe('isPathAllowed (§2 + §8)', () => {
 // ---------------------------------------------------------------------------
 
 describe('Default Allowlist (§1)', () => {
-  it('should have at least 5 default entries', () => {
-    assert.ok(DEFAULT_ALLOWED_DIRECTORIES.length >= 5);
+  it('should have at least 1 default entry (Aartiq Browser data directory)', () => {
+    assert.ok(DEFAULT_ALLOWED_DIRECTORIES.length >= 1);
   });
 
   it('each default entry should have required fields', () => {
@@ -208,10 +208,15 @@ describe('Default Allowlist (§1)', () => {
     }
   });
 
-  it('default entries should include home directory', () => {
+  it('default entries should include the Aartiq Browser data directory', () => {
+    const aartiqEntry = DEFAULT_ALLOWED_DIRECTORIES.find(e => e.path.includes('aartiq'));
+    assert.ok(aartiqEntry, 'should include the Aartiq Browser data directory');
+    assert.strictEqual(aartiqEntry.access, 'read-write');
+  });
+
+  it('should NOT include the entire home directory by default', () => {
     const homeEntry = DEFAULT_ALLOWED_DIRECTORIES.find(e => e.path === os.homedir());
-    assert.ok(homeEntry, 'should include home directory');
-    assert.strictEqual(homeEntry.access, 'read-write');
+    assert.ok(!homeEntry, 'should not include the entire home directory');
   });
 });
 

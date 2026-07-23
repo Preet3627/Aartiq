@@ -128,6 +128,18 @@ export const COMMAND_REGISTRY = {
 export const SUPPORTED_COMMANDS = Object.keys(COMMAND_REGISTRY) as Array<keyof typeof COMMAND_REGISTRY>;
 export type CommandType = keyof typeof COMMAND_REGISTRY;
 
+// Alias map: alternate names the AI model may generate → canonical command name
+const COMMAND_ALIASES: Record<string, string> = {
+    GET_BOOKMARKS: 'LIST_BOOKMARKS',
+    GET_HISTORY: 'LIST_HISTORY',
+    FETCH_BOOKMARKS: 'LIST_BOOKMARKS',
+    FETCH_HISTORY: 'LIST_HISTORY',
+    SHOW_BOOKMARKS: 'LIST_BOOKMARKS',
+    SHOW_HISTORY: 'LIST_HISTORY',
+    VIEW_BOOKMARKS: 'LIST_BOOKMARKS',
+    VIEW_HISTORY: 'LIST_HISTORY',
+};
+
 // Non-executable commands (handled by LLM only or displayed in text)
 export const META_COMMANDS = [
     'PLACEHOLDER_META',
@@ -180,7 +192,8 @@ function extractCommandsFromStructuredPayload(payload: any, originalMatch: strin
     const KNOWN_KEYS = new Set(['type', 'command', 'value', 'reason', 'risk']);
 
     const appendCommand = (cmd: any) => {
-        const cmdType = (cmd?.type || cmd?.command || '').toUpperCase();
+        const rawType = (cmd?.type || cmd?.command || '').toUpperCase();
+        const cmdType = COMMAND_ALIASES[rawType] || rawType;
         const cmdValue = cmd?.value ?? cmd?.url ?? cmd?.query ?? cmd?.args ?? '';
 
         if (!cmdType || !SUPPORTED_COMMANDS.includes(cmdType as any)) {
@@ -362,7 +375,8 @@ export function parseAICommands(content: string): CommandParseResult {
             // Parse [COMMAND]:value format from HTML comments
             const match = trimmed.match(/^\[([A-Z_]+)\]\s*:(.*)$/);
             if (match) {
-                const cmdType = match[1].toUpperCase();
+                const rawCmdType = match[1].toUpperCase();
+                const cmdType = COMMAND_ALIASES[rawCmdType] || rawCmdType;
                 const cmdValue = match[2] || '';
                 if (cmdType && commandsSet.has(cmdType as CommandType) && !metaCommandsSet.has(cmdType as any)) {
                     addUniqueCommand({
@@ -420,7 +434,8 @@ export function parseAICommands(content: string): CommandParseResult {
         let typeEnd = (colonIdx !== -1 && colonIdx < closeIdx) ? colonIdx : closeIdx;
         let possibleType = mask.substring(startIdx + 1, typeEnd).trim().toUpperCase();
         
-        if (!commandsSet.has(possibleType as CommandType) || metaCommandsSet.has(possibleType as any)) {
+        const resolvedType = COMMAND_ALIASES[possibleType] || possibleType;
+        if (!commandsSet.has(resolvedType as CommandType) || metaCommandsSet.has(resolvedType as any)) {
             searchIdx = startIdx + 1;
             continue;
         }
@@ -450,7 +465,7 @@ export function parseAICommands(content: string): CommandParseResult {
                 rawValue = rawValue.substring(1, rawValue.length - 1).trim();
             }
 
-            const type = possibleType;
+            const type = resolvedType;
             const shouldStoreRawValue = ['GENERATE_PDF', 'CREATE_PDF_JSON', 'CREATE_FILE_JSON', 'SCHEDULE_TASK', 'OPEN_SCHEDULING_MODAL'].includes(type);
 
             let nextCharIdx = actualCloseIdx + 1;

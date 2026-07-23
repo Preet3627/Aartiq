@@ -318,6 +318,11 @@ declare global {
             notifyApprovalCleared: () => void;
             onApprovalActionResolved: (callback: (data: { requestId: string; allowed: boolean; deviceUnlockValidated?: boolean }) => void) => () => void;
 
+            // Ticket-based approval (CapabilityController)
+            approveTicket: (ticketId: string) => Promise<boolean>;
+            denyTicket: (ticketId: string, reason?: string) => Promise<boolean>;
+            onApprovalRequired: (callback: (ticket: { ticketId: string; action: string; params: Record<string, any>; metadata?: { riskLevel?: string; description?: string; approvalReason?: string }; expiresAt: number }) => void) => () => void;
+
             // Event Listeners for UI updates
             onNetworkStatusChanged: (callback: (isOnline: boolean) => void) => () => void;
             onClipboardChanged: (callback: (text: string) => void) => () => void;

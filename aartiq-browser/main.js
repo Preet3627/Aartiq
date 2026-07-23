@@ -7986,7 +7986,175 @@ if (isPackaged && process.platform === 'darwin') {
   // --- DOM Fill Form Handler with wait, clear, verify, retry ---
   // Accepts: { selector, value, retry, verify, clearFirst, tabId }
   ipcMain.handle('dom-fill-form', async (event, opts) => {
-    const { tabId, selector, value, retry = 2, verify = false, clearFirst = true } = opts || {};
+    const { tabId, selector, value, retry = 2, verify = false, clearFirst = true, timeout = 5000 } = opts || {};
+    const targetTabId = tabId || activeTabId;
+    const query = selector;
+    const view = tabViews.get(targetTabId);
+
+    if (!view || !view.webContents) {
+      return { success: false, error: 'Browser view not found' };
+    }
+
+    // Strategy 1: dom-engine v2 (AX-tree-first resolution, state check, waitForElement, editor-aware fill)
+    if (query) {
+      try {
+        const engineResult = await domEngine.fillField(view.webContents, { selector: query, value, timeout, clearFirst, verify });
+        if (engineResult.success) return { ...engineResult, method: 'dom-engine-v2' };
+      } catch (_) {}
+    }
+
+    // Strategy 2: dom-engine v2 wait + inline JS fill fallback
+    if (query) {
+      try {
+        const waitResult = await domEngine.waitForElement(view.webContents, { selector: query, timeout: Math.min(timeout, 3000) });
+        if (waitResult.success) {
+          const fillCode = `
+            (async () => {
+              const TARGET_VALUE = ${JSON.stringify(value || '')};
+              const el = document.querySelector(${JSON.stringify(query)}) || document.querySelector('input[name="${query.replace(/.*\[name=["']?([^"']+).*$/, '$1')}"]');
+              if (!el) return { success: false, error: 'Element lost' };
+
+              el.scrollIntoView({ block: 'center', behavior: 'instant' });
+              await new Promise(r => setTimeout(r, 50));
+              el.focus();
+
+              function reactSetValue(el, val) {
+                const tag = el.tagName;
+                if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+                  el.textContent = val;
+                  el.dispatchEvent(new Event('input', { bubbles: true }));
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                  return;
+                }
+                const prev = el.value;
+                const proto = el.constructor.prototype;
+                const ns = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                if (ns) ns.call(el, val); else el.value = val;
+                const tracker = el._valueTracker;
+                if (tracker) tracker.setValue(prev);
+                try { el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: val })); }
+                catch (_) { el.dispatchEvent(new Event('input', { bubbles: true })); }
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+
+              ${clearFirst ? `
+              if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                const proto = el.constructor.prototype;
+                const ns = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                if (ns) ns.call(el, ''); else el.value = '';
+                const tracker = el._valueTracker;
+                if (tracker) tracker.setValue('');
+                try { el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent', data: null })); }
+                catch (_) { el.dispatchEvent(new Event('input', { bubbles: true })); }
+              } else { el.textContent = ''; }
+              await new Promise(r => setTimeout(r, 30));
+              ` : ''}
+
+              reactSetValue(el, TARGET_VALUE);
+
+              ${verify ? `
+              await new Promise(r => setTimeout(r, 100));
+              const cv = el.value || el.textContent || '';
+              if (cv === TARGET_VALUE || cv.includes(TARGET_VALUE) || TARGET_VALUE.includes(cv)) {
+                return { success: true, value: cv.substring(0, 200), verified: true };
+              }
+              ` : ''}
+
+              return { success: true, value: TARGET_VALUE.substring(0, 200) };
+            })()
+          `;
+          const result = await view.webContents.executeJavaScript(fillCode);
+          if (result?.success) return { ...result, method: 'dom-engine-v2-wait+inline-fill' };
+        }
+      } catch (_) {}
+    }
+
+    // Strategy 3: legacy inline JS fallback (backward compat, multi-strategy find)
+    if (query && value !== undefined) {
+      try {
+        const fillCode = `
+          (async () => {
+            const MAX_RETRIES = ${retry};
+            const TARGET_VALUE = ${JSON.stringify(value || '')};
+            const QUERY = ${JSON.stringify(query)};
+
+            function findElement() {
+              const el = document.querySelector(QUERY);
+              if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return el;
+              const allInputs = document.querySelectorAll('input, textarea, select, [contenteditable="true"], [contenteditable=""]');
+              for (const inp of allInputs) {
+                const ph = (inp.placeholder || inp.title || '').toLowerCase();
+                if (ph && TARGET_VALUE.toLowerCase().includes(ph) && inp.offsetParent !== null) return inp;
+              }
+              for (const inp of allInputs) {
+                const r = inp.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0 && inp.offsetParent !== null) return inp;
+              }
+              return null;
+            }
+
+            function reactSetValue(el, val) {
+              const tag = el.tagName;
+              if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+                el.textContent = val;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                return;
+              }
+              const prev = el.value;
+              const proto = el.constructor.prototype;
+              const ns = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+              if (ns) ns.call(el, val); else el.value = val;
+              const tracker = el._valueTracker;
+              if (tracker) tracker.setValue(prev);
+              try { el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: val })); }
+              catch (_) { el.dispatchEvent(new Event('input', { bubbles: true })); }
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            for (let r = 0; r < MAX_RETRIES; r++) {
+              const element = findElement();
+              if (!element) {
+                if (r < MAX_RETRIES - 1) await new Promise(x => setTimeout(x, 200));
+                continue;
+              }
+              try {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                await new Promise(x => setTimeout(x, 100));
+                element.focus();
+                ${clearFirst ? `
+                if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+                  const proto = element.constructor.prototype;
+                  const ns = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                  if (ns) ns.call(element, ''); else element.value = '';
+                  const tracker = element._valueTracker;
+                  if (tracker) tracker.setValue(element.value);
+                  try { element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent', data: null })); }
+                  catch (_) { element.dispatchEvent(new Event('input', { bubbles: true })); }
+                } else { element.innerHTML = ''; }
+                await new Promise(x => setTimeout(x, 50));
+                ` : ''}
+                reactSetValue(element, TARGET_VALUE);
+                return { success: true, value: TARGET_VALUE.substring(0, 200) };
+              } catch (e) {
+                if (r < MAX_RETRIES - 1) await new Promise(x => setTimeout(x, 200));
+              }
+            }
+            return { success: false, error: 'Failed to fill after ' + MAX_RETRIES + ' retries' };
+          })()
+        `;
+        const result = await view.webContents.executeJavaScript(fillCode);
+        if (result?.success) return { ...result, method: 'legacy-inline-fallback' };
+      } catch (_) {}
+    }
+
+    return { success: false, error: 'Fill failed: element not found via any strategy' };
+  });
+
+  // --- DOM Multi-Fill Form Handler ---
+  // Accepts: { fields: {selector: value, ...}, delayBetweenFields, retry, verify, tabId }
+  ipcMain.handle('dom-multi-fill-form', async (event, opts) => {
+    const { tabId, fields, delayBetweenFields = 100, retry = 2, verify = true, timeout = 5000 } = opts || {};
     const targetTabId = tabId || activeTabId;
     const view = tabViews.get(targetTabId);
 
@@ -7994,43 +8162,41 @@ if (isPackaged && process.platform === 'darwin') {
       return { success: false, error: 'Browser view not found' };
     }
 
+    if (!fields || typeof fields !== 'object' || Object.keys(fields).length === 0) {
+      return { success: false, error: 'No fields provided' };
+    }
+
+    // Strategy 1: dom-engine v2 multiFillForm (AX-tree-first, editor-aware)
     try {
-      const fillCode = `
+      const engineResult = await domEngine.multiFillForm(view.webContents, { fields, delayBetweenFields, timeout, verify });
+      if (engineResult.success) return { ...engineResult, method: 'dom-engine-v2' };
+    } catch (_) {}
+
+    // Strategy 2: fallback sequential fill via domEngine
+    try {
+      const entries = Object.entries(fields);
+      const results = [];
+      for (const [sel, val] of entries) {
+        try {
+          const fillResult = await domEngine.fillField(view.webContents, { selector: sel, value: val, timeout: Math.min(timeout, 3000), clearFirst: true, verify });
+          results.push({ selector: sel, ...fillResult });
+        } catch (_) {
+          results.push({ selector: sel, success: false, error: 'Fill failed' });
+        }
+        if (delayBetweenFields > 0) await new Promise(r => setTimeout(r, delayBetweenFields));
+      }
+      const allOk = results.every(r => r.success);
+      if (allOk) return { success: true, results, method: 'dom-engine-v2-sequential' };
+    } catch (_) {}
+
+    // Strategy 3: inline JS sequential fallback
+    try {
+      const entries = Object.entries(fields);
+      const inlineCode = `
         (async () => {
-          const MAX_RETRIES = ${retry};
-          const TARGET_VALUE = ${JSON.stringify(value || '')};
-
-          function findElement() {
-            // Strategy 1: exact CSS selector
-            ${selector ? `const el = document.querySelector(${JSON.stringify(selector)});
-            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return el;` : ''}
-
-            // Strategy 2: find by name attribute extracted from selector
-            ${selector ? (() => {
-              const nameMatch = selector.match(/\[name=["']([^"']+)["']\]/);
-              if (nameMatch) {
-                return `{
-                const byName = document.querySelector('input[name="${nameMatch[1]}"], textarea[name="${nameMatch[1]}"]');
-                if (byName) return byName;
-              }`;
-              }
-              return '';
-            })() : ''}
-
-            // Strategy 3: by placeholder
-            const allInputs = document.querySelectorAll('input, textarea, select, [contenteditable="true"], [contenteditable=""]');
-            for (const inp of allInputs) {
-              const ph = (inp.placeholder || inp.title || '').toLowerCase();
-              if (ph && TARGET_VALUE.toLowerCase().includes(ph) && inp.offsetParent !== null) return inp;
-            }
-
-            // Strategy 4: first visible input
-            for (const inp of allInputs) {
-              const r = inp.getBoundingClientRect();
-              if (r.width > 0 && r.height > 0 && inp.offsetParent !== null) return inp;
-            }
-            return null;
-          }
+          const FIELDS = ${JSON.stringify(entries)};
+          const DELAY = ${delayBetweenFields};
+          const results = [];
 
           function reactSetValue(el, val) {
             const tag = el.tagName;
@@ -8040,129 +8206,51 @@ if (isPackaged && process.platform === 'darwin') {
               el.dispatchEvent(new Event('change', { bubbles: true }));
               return;
             }
-
-            const previousValue = el.value;
-
-            // 1. Use native value setter (bypasses React's override)
+            const prev = el.value;
             const proto = el.constructor.prototype;
-            const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-            if (nativeSetter) {
-              nativeSetter.call(el, val);
-            } else {
-              el.value = val;
-            }
-
-            // 2. Update React's internal value tracker (prevents dedup)
+            const ns = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+            if (ns) ns.call(el, val); else el.value = val;
             const tracker = el._valueTracker;
-            if (tracker) tracker.setValue(previousValue);
-
-            // 3. Dispatch InputEvent with inputType for React 16+
-            try {
-              el.dispatchEvent(new InputEvent('input', {
-                bubbles: true,
-                cancelable: true,
-                inputType: 'insertText',
-                data: val
-              }));
-            } catch (_) {
-              el.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-
-            // 4. Dispatch change event
+            if (tracker) tracker.setValue(prev);
+            try { el.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: val })); }
+            catch (_) { el.dispatchEvent(new Event('input', { bubbles: true })); }
             el.dispatchEvent(new Event('change', { bubbles: true }));
           }
 
-          for (let retry = 0; retry < MAX_RETRIES; retry++) {
-            const element = findElement();
-            if (!element) {
-              if (retry < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, 200));
-              continue;
-            }
-
-            try {
-              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              await new Promise(r => setTimeout(r, 100));
-              element.focus();
-
-              // Clear existing value
-              ${clearFirst ? `
-              if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
-                const proto = element.constructor.prototype;
-                const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-                if (nativeSetter) nativeSetter.call(element, '');
-                else element.value = '';
-                const tracker = element._valueTracker;
-                if (tracker) tracker.setValue(element.value);
-                try {
-                  element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent', data: null }));
-                } catch (_) {
-                  element.dispatchEvent(new Event('input', { bubbles: true }));
+          for (const [sel, val] of FIELDS) {
+            let ok = false;
+            for (let r = 0; r < ${retry}; r++) {
+              const el = document.querySelector(sel);
+              if (!el) { await new Promise(x => setTimeout(x, 200)); continue; }
+              try {
+                el.scrollIntoView({ block: 'center', behavior: 'instant' });
+                await new Promise(x => setTimeout(x, 50));
+                el.focus();
+                if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                  const proto = el.constructor.prototype;
+                  const ns = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                  if (ns) ns.call(el, ''); else el.value = '';
+                  const tracker = el._valueTracker;
+                  if (tracker) tracker.setValue('');
+                  try { el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContent', data: null })); }
+                  catch (_) { el.dispatchEvent(new Event('input', { bubbles: true })); }
                 }
-              } else {
-                element.innerHTML = '';
-              }
-              await new Promise(r => setTimeout(r, 50));
-              ` : ''}
-
-              // Set value using React-aware approach
-              reactSetValue(element, TARGET_VALUE);
-
-              // Verify
-              ${verify ? `
-              await new Promise(r => setTimeout(r, 100));
-              const currentVal = element.value || element.textContent || '';
-              if (currentVal === TARGET_VALUE || currentVal.includes(TARGET_VALUE) || TARGET_VALUE.includes(currentVal)) {
-                return { success: true, value: currentVal.substring(0, 100), verified: true };
-              }
-              ` : ''}
-
-              return { success: true, value: TARGET_VALUE.substring(0, 100) };
-            } catch (e) {
-              if (retry < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, 200));
+                reactSetValue(el, val);
+                ok = true;
+                break;
+              } catch (_) { if (r < ${retry} - 1) await new Promise(x => setTimeout(x, 200)); }
             }
+            results.push({ selector: sel, success: ok });
+            if (DELAY > 0) await new Promise(x => setTimeout(x, DELAY));
           }
-
-          return { success: false, error: 'Failed to fill form after ' + MAX_RETRIES + ' retries' };
+          return { success: results.every(r => r.success), results };
         })()
       `;
+      const result = await view.webContents.executeJavaScript(inlineCode);
+      if (result?.success) return { ...result, method: 'legacy-inline-fallback' };
+    } catch (_) {}
 
-      const result = await view.webContents.executeJavaScript(fillCode);
-      // Fallback to domEngine if inline JS failed
-      if (!result?.success) {
-        try {
-          const engineResult = await domEngine.fillField(view.webContents, { selector, value, retry, verify, clearFirst });
-          if (engineResult?.success) return engineResult;
-        } catch (_) {}
-      }
-      return result;
-    } catch (e) {
-      console.error('[Main] DOM fill form failed:', e);
-      // Final fallback: domEngine
-      try {
-        return await domEngine.fillField(view.webContents, { selector, value, retry, verify, clearFirst });
-      } catch (e2) {
-        return { success: false, error: e.message };
-      }
-    }
-  });
-
-  // --- DOM Multi-Fill Form Handler ---
-  // Accepts: { fields: {selector: value, ...}, delayBetweenFields, retry, verify, tabId }
-  ipcMain.handle('dom-multi-fill-form', async (event, opts) => {
-    const { tabId, fields, delayBetweenFields = 100, retry = 2, verify = true } = opts || {};
-    const targetTabId = tabId || activeTabId;
-    const view = tabViews.get(targetTabId);
-
-    if (!view || !view.webContents) {
-      return { success: false, error: 'Browser view not found' };
-    }
-
-    try {
-      return await domEngine.multiFillForm(view.webContents, { fields, delayBetweenFields, retry, verify });
-    } catch (e) {
-      console.error('[Main] DOM multi-fill form failed:', e);
-      return { success: false, error: e.message };
-    }
+    return { success: false, error: 'Multi-fill failed: no strategy succeeded' };
   });
 
   // --- DOM Engine: Find Element ---

@@ -73,13 +73,19 @@ interface ShellPermissionRequest {
 
 export function useAIActionSecurityManager() {
   const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
+  const pendingPermissionRef = useRef<PendingPermission | null>(null);
+  const biometricVerifiedRef = useRef(false);
+  const batchResolveRef = useRef<((allowed: boolean[]) => void) | null>(null);
+  const batchInputsLengthRef = useRef(0);
   const [dirPermissionRequest, setDirPermissionRequest] = useState<DirectoryPermissionRequest | null>(null);
   const [dirPermissionLoading, setDirPermissionLoading] = useState(false);
   const [shellPermissionRequest, setShellPermissionRequest] = useState<ShellPermissionRequest | null>(null);
   const [shellPermissionLoading, setShellPermissionLoading] = useState(false);
-  const biometricVerifiedRef = useRef(false);
-  const batchResolveRef = useRef<((allowed: boolean[]) => void) | null>(null);
-  const batchInputsLengthRef = useRef(0);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    pendingPermissionRef.current = pendingPermission;
+  }, [pendingPermission]);
 
   useEffect(() => {
     if (!window.electronAPI?.onDirectoryPermissionRequest) return;
@@ -326,6 +332,62 @@ export function useAIActionSecurityManager() {
     return cleanup;
   }, []);
 
+  // Listen for ticket-based approval requests from the main process
+  useEffect(() => {
+    if (!window.electronAPI?.onApprovalRequired) return;
+    const cleanup = window.electronAPI.onApprovalRequired(async (ticket: {
+      ticketId: string;
+      action: string;
+      params: Record<string, any>;
+      metadata?: { riskLevel?: string; description?: string; approvalReason?: string };
+      expiresAt: number;
+    }) => {
+      // Don't show approval UI if there's already a pending permission
+      if (pendingPermissionRef.current) {
+        // Auto-deny since user is already handling another approval
+        await window.electronAPI?.denyTicket?.(ticket.ticketId, 'Another approval is pending');
+        return;
+      }
+
+      const risk = (ticket.metadata?.riskLevel as 'low' | 'medium' | 'high') || 'medium';
+
+      return new Promise<boolean>((resolve) => {
+        const approve = async () => {
+          resolve(true);
+          await window.electronAPI?.approveTicket?.(ticket.ticketId);
+        };
+
+        const deny = async () => {
+          resolve(false);
+          await window.electronAPI?.denyTicket?.(ticket.ticketId, 'User denied');
+        };
+
+        pendingPermissionRef.current = {
+          resolve: (allowed: boolean) => {
+            if (allowed) {
+              approve();
+            } else {
+              deny();
+            }
+          },
+          context: {
+            actionType: `TICKET:${ticket.action}`,
+            action: ticket.metadata?.description || ticket.action.replace(/-/g, ' '),
+            target: JSON.stringify(ticket.params || {}),
+            what: ticket.metadata?.description || ticket.action.replace(/-/g, ' '),
+            reason: ticket.metadata?.approvalReason || `Action "${ticket.action}" requires approval`,
+            risk,
+            requiresDeviceUnlock: risk === 'high',
+          },
+        };
+
+        // Trigger re-render
+        setPendingPermission(pendingPermissionRef.current);
+      });
+    });
+    return cleanup;
+  }, []);
+
 
 
   // Directory permission warning panel
@@ -478,37 +540,43 @@ export function useAIActionSecurityManager() {
           <ClickPermissionModal
             context={pendingPermission.context}
             onAllow={async (alwaysAllow) => {
-              const context = pendingPermission.context;
+              try {
+                const context = pendingPermission.context;
 
-              if (context.risk !== 'high' && context.requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
-                const authResult = await window.electronAPI.authenticateBiometric(
-                  `Approve action: ${context.action}`
-                );
-                if (authResult?.error === 'Authentication cancelled') {
-                  pendingPermission.resolve(false);
-                  setPendingPermission(null);
-                  return;
+                if (context.risk !== 'high' && context.requiresDeviceUnlock && window.electronAPI?.authenticateBiometric) {
+                  const authResult = await window.electronAPI.authenticateBiometric(
+                    `Approve action: ${context.action}`
+                  );
+                  if (authResult?.error === 'Authentication cancelled') {
+                    pendingPermission.resolve(false);
+                    setPendingPermission(null);
+                    return;
+                  }
                 }
-              }
 
-              if (alwaysAllow && window.electronAPI?.permGrant && context.risk !== 'high') {
-                const permissionKey = getActionPermissionKey(context.actionType, context.target, context.what);
-                await window.electronAPI.permGrant(permissionKey, 'execute', context.action, false);
+                if (alwaysAllow && window.electronAPI?.permGrant && context.risk !== 'high') {
+                  const permissionKey = getActionPermissionKey(context.actionType, context.target, context.what);
+                  await window.electronAPI.permGrant(permissionKey, 'execute', context.action, false);
 
-                if (
-                  context.actionType === 'SHELL_COMMAND' &&
-                  window.electronAPI?.setAutoApprovalCommand &&
-                  context.target
-                ) {
-                  await window.electronAPI.setAutoApprovalCommand({
-                    command: context.target,
-                    enabled: true,
-                  });
+                  if (
+                    context.actionType === 'SHELL_COMMAND' &&
+                    window.electronAPI?.setAutoApprovalCommand &&
+                    context.target
+                  ) {
+                    await window.electronAPI.setAutoApprovalCommand({
+                      command: context.target,
+                      enabled: true,
+                    });
+                  }
                 }
-              }
 
-              pendingPermission.resolve(true);
-              setPendingPermission(null);
+                pendingPermission.resolve(true);
+                setPendingPermission(null);
+              } catch (e) {
+                console.error('[AI Security] Error in approval handler:', e);
+                pendingPermission.resolve(false);
+                setPendingPermission(null);
+              }
             }}
             onDeny={() => {
               pendingPermission.resolve(false);
