@@ -187,11 +187,16 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
   });
 
   ipcMain.on('change-zoom', (event, deltaY) => {
-    const view = tabViews.get(handlers.activeTabId);
-    if (view) {
-      const current = view.webContents.getZoomFactor();
-      view.webContents.setZoomFactor(deltaY > 0 ? current - 0.1 : current + 0.1);
-    }
+    try {
+      const view = tabViews.get(handlers.activeTabId);
+      if (view && view.webContents && !view.webContents.isDestroyed()) {
+        const current = view.webContents.getZoomFactor();
+        const next = deltaY > 0 ? current - 0.1 : current + 0.1;
+        if (Number.isFinite(next) && next > 0) {
+          view.webContents.setZoomFactor(next);
+        }
+      }
+    } catch (_) {}
   });
 
   ipcMain.on('open-dev-tools', () => {
@@ -937,6 +942,40 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
             const t = ${JSON.stringify(text)}.toLowerCase();
             return document.querySelector([placeholder*="${t}"], [title*="${t}"], [aria-label*="${t}"]);
           });` : ''}
+
+          if (strategies.length === 0) {
+            const Q = ${JSON.stringify(selector || text || ariaLabel || '')};
+            if (Q) {
+              strategies.push(() => document.querySelector(Q));
+              strategies.push(() => {
+                const t = Q.toLowerCase();
+                const all = document.querySelectorAll('button, a, input[type="submit"], input[type="button"], [role="button"], [role="link"], [role="option"], [role="tab"], [role="menuitem"], [onclick], .btn, .button, [class*="subscribe"], [class*="Subscribe"]');
+                for (const el of all) {
+                  const elText = (el.textContent || el.value || '').toLowerCase().trim();
+                  if (elText === t || elText.includes(t)) return el;
+                }
+                const any = document.querySelectorAll('*');
+                for (const el of any) {
+                  if (el.children.length === 0 || el.tagName === 'BUTTON' || el.tagName === 'A') {
+                    const elText = (el.textContent || '').toLowerCase().trim();
+                    if (elText === t || elText.includes(t)) return el;
+                  }
+                }
+                return null;
+              });
+              strategies.push(() => document.querySelector('[aria-label*="' + Q + '"], [placeholder*="' + Q + '"], [title*="' + Q + '"]'));
+            } else {
+              // No query at all — find any prominent clickable element on the page
+              strategies.push(() => {
+                const btns = document.querySelectorAll('button, a, [role="button"], [class*="subscribe"], [class*="Subscribe"], [aria-label*="subscribe"], [aria-label*="Subscribe"], ytd-subscribe-button-renderer, yt-button-shape button');
+                for (const el of btns) {
+                  const rect = el.getBoundingClientRect();
+                  if (rect.width > 20 && rect.height > 20 && rect.width < 600) return el;
+                }
+                return null;
+              });
+            }
+          }
 
           async function findAndClick() {
             for (let retry = 0; retry < MAX_RETRIES; retry++) {

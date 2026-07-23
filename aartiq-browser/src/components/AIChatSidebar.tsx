@@ -2189,6 +2189,11 @@ I couldn't schedule the task. The background service may not be running. Please 
             }
           }
 
+          // Last resort: if everything is still empty, try value as text search
+          if (!cssSelector && !textFilter && !ariaLabel && rawInput) {
+            textFilter = rawInput;
+          }
+
           const clickStepId = addThinkingStep(`Clicking${cssSelector ? ': ' + cssSelector : ''}${textFilter ? ' "' + textFilter + '"' : ''}...`);
           try {
             setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'awaiting_permission' } : cmd));
@@ -2277,7 +2282,14 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
 
         case 'FIND_AND_CLICK': {
-          const textToFind = command.value.split('|')[0].trim();
+          const cmdParamsFac = (command as any).params || {};
+          let textToFind = command.value.split('|')[0].trim();
+          if (!textToFind) textToFind = cmdParamsFac.text || cmdParamsFac.query || cmdParamsFac.value || '';
+          if (!textToFind) {
+            output = 'FIND_AND_CLICK requires text to search for';
+            commandResult = { output: '', error: output };
+            break;
+          }
           const findClickStepId = addThinkingStep(`Finding and clicking: "${textToFind}"...`);
           try {
             setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? { ...cmd, status: 'awaiting_permission' } : cmd));
