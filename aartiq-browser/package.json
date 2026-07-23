@@ -55,6 +55,7 @@
     "@ai-sdk/mcp": "^1.0.30",
     "@ai-sdk/openai": "^3.0.47",
     "@ai-sdk/xai": "^3.0.72",
+    "@beeper/webauthn-authenticator": "^0.2.1",
     "@ghostery/adblocker-electron": "^2.14.1",
     "@googleapis/gmail": "^16.1.1",
     "@modelcontextprotocol/sdk": "^1.27.1",

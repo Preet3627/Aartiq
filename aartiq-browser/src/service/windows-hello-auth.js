@@ -1,192 +1,100 @@
 /**
  * Windows Hello Authentication Module
- * 
- * Implements proper Windows Hello verification using:
- * - WebAuthn API for cryptographic challenge-response
- * - TPM-backed key storage
- * - PIN/Biometric verification through Windows Security
- * 
- * This replaces the insecure CredentialPicker approach that didn't verify passwords.
+ *
+ * Implements proper Windows Hello verification using the native WebAuthn API
+ * (webauthn.dll) for cryptographic challenge-response with TPM-backed keys.
+ *
+ * Replaces the previous PowerShell-based CredentialPicker approach with:
+ * - W3C WebAuthn / FIDO2 standard challenge-response
+ * - TPM-backed key storage (private keys never leave hardware)
+ * - Biometric/PIN verification through Windows Security dialogs
+ * - Attestation support for verifying key genuineness
  */
 
+const os = require('os');
 const { exec } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const crypto = require('crypto');
 
-const CRED_TYPE_GENERIC = 1;
-const HELPER_NAME = 'AartiqWindowsHello';
+const webauthnService = require('../lib/webauthn-service');
 
 class WindowsHelloAuth {
     constructor() {
         this.platform = os.platform();
         this.isAvailable = false;
         this.authType = null;
-        this._keyName = 'AartiqAuth';
     }
 
     /**
-     * Check if Windows Hello is available on this system
+     * Check if Windows Hello WebAuthn is available on this system.
+     * Uses the native webauthn.dll API check — no PowerShell required.
      */
     async checkAvailability() {
         if (this.platform !== 'win32') {
             return { available: false, type: 'none', message: 'Windows only' };
         }
 
-        try {
-            // Check if Windows Hello is configured
-            const psScript = `
-$ErrorActionPreference = "Stop"
-try {
-    # Check if Windows Hello is set up
-    $hello = Get-WmiObject -Namespace "root\cimv2\Security\MicrosoftTpm" -Class Win32_Tpm -ErrorAction SilentlyContinue
-    $helloEnabled = $hello -ne $null
-    
-    # Check for biometric devices
-    $bioDevices = Get-PnpDevice -Class Biometric -Status OK -ErrorAction SilentlyContinue
-    $hasBiometric = $bioDevices -and $bioDevices.Count -gt 0
-    
-    # Check Windows Hello PIN
-    $pinSet = try {
-        $credential = New-Object System.Net.NetworkCredential("", "", "")
-        $true  # PIN is configured if we get here
-    } catch {
-        $false
-    }
-    
-    $result = @{
-        Available = $helloEnabled -or $hasBiometric
-        HasBiometric = $hasBiometric
-        HasPin = $pinSet
-        Type = if ($hasBiometric) { "biometric" } elseif ($pinSet) { "pin" } else { "none" }
-    }
-    
-    $result | ConvertTo-Json
-} catch {
-    @{ Available = $false; HasBiometric = $false; HasPin = $false; Type = "none" } | ConvertTo-Json
-}
-`;
-            const result = await execAsync(`powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`, {
-                timeout: 10000,
-                encoding: 'utf8'
-            });
+        const platformInfo = webauthnService.getPlatformInfo();
+        this.isAvailable = platformInfo.supported;
+        this.authType = platformInfo.supported ? 'webauthn' : 'none';
 
-            const status = JSON.parse(result.stdout.trim());
-            this.isAvailable = status.Available;
-            this.authType = status.Type;
-
-            return {
-                available: status.Available,
-                type: status.Type,
-                hasBiometric: status.HasBiometric,
-                hasPin: status.HasPin,
-                message: status.Available ? `Windows Hello ${status.Type} available` : 'Windows Hello not configured'
-            };
-        } catch (error) {
-            return { available: false, type: 'none', message: error.message };
-        }
+        return {
+            available: platformInfo.supported,
+            type: platformInfo.supported ? 'webauthn' : 'none',
+            apiVersion: platformInfo.apiVersion,
+            supportsCable: platformInfo.supportsCable,
+            hasCredential: webauthnService.hasCredential(),
+            message: platformInfo.supported
+                ? `Windows Hello WebAuthn available (API v${platformInfo.apiVersion})`
+                : 'WebAuthn not supported on this system',
+        };
     }
 
     /**
-     * Authenticate using Windows Hello
-     * Uses the Windows Security Credential UI for proper verification
+     * Authenticate using Windows Hello via WebAuthn.
+     *
+     * Triggers the Windows Security dialog (biometric / PIN) and performs
+     * a cryptographic challenge-response. The private key never leaves the TPM.
      */
     async authenticate(reason = 'Authenticate to proceed') {
         if (this.platform !== 'win32') {
             return { success: false, error: 'Windows only' };
         }
 
-        const availability = await this.checkAvailability();
-        if (!availability.available) {
-            return { success: false, error: 'Windows Hello not available', code: 'NOT_AVAILABLE' };
+        if (!webauthnService.isSupported()) {
+            return { success: false, error: 'WebAuthn not supported on this system', code: 'NOT_AVAILABLE' };
         }
 
         try {
-            // Use Windows Hello via the Security Credential UI
-            const psScript = `
-$ErrorActionPreference = "Stop"
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-
-# Helper to await async operations
-$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
-function Await($WinRtTask, $ResultType) {
-    $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
-    $netTask = $asTask.Invoke($null, @($WinRtTask))
-    $netTask.Wait(-1) | Out-Null
-    $netTask.Result
-}
-
-# Get the HWND of the active window
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public class Win32 {
-    [DllImport("user32.dll")]
-    public static extern IntPtr GetForegroundWindow();
-}
-"@
-
-$hwnd = [Win32]::GetForegroundWindow()
-
-# Request Windows Hello authentication
-$credentials = [Windows.Security.Credentials.UI.CredentialPicker,Windows.Security.Credentials.UI.CredentialPicker,WindowsRuntime]
-$picker = [Windows.Security.Credentials.UI.CredentialPicker,Windows.Security.Credentials.UI.CredentialPicker,WindowsRuntime]
-
-$options = New-Object Windows.Security.Credentials.UI.CredentialPickerOptions
-$options.Caption = "Aartiq Security"
-$options.Message = "${reason.replace(/"/g, '`"').replace(/'/g, "''")}"
-$options.TargetName = "Aartiq"
-$options.AuthenticationProtocol = [Windows.Security.Credentials.UI.AuthenticationProtocol]::WindowsHello
-$options.CallerSavesCredential = $false
-
-$result = Await ($picker::PickAsync($options)) ([Windows.Security.Credentials.UI.CredentialPickerResults])
-
-if ($result.ErrorCode -eq 0 -and $result.Credential -ne $null) {
-    # Verify the credential is not empty
-    $cred = $result.Credential
-    if ($cred.UserName -ne "" -or $cred.Password -ne "") {
-        Write-Output "SUCCESS"
-    } else {
-        Write-Output "EMPTY"
-    }
-} elseif ($result.ErrorCode -eq 1223) {
-    Write-Output "CANCELLED"
-} else {
-    Write-Output "FAILED"
-}
-`;
-            const result = await execAsync(`powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`, {
-                timeout: 60000,
-                encoding: 'utf8'
-            });
-
-            const output = result.stdout.trim();
-
-            if (output === 'SUCCESS') {
-                return {
-                    success: true,
-                    method: 'windows-hello',
-                    message: 'Windows Hello verified',
-                    verified: true
-                };
-            } else if (output === 'CANCELLED') {
-                return { success: false, error: 'Authentication cancelled', code: 'CANCELLED' };
-            } else if (output === 'EMPTY') {
-                return { success: false, error: 'Empty credential provided', code: 'EMPTY_CREDENTIAL' };
-            } else {
-                return { success: false, error: 'Authentication failed', code: 'AUTH_FAILED' };
+            if (!webauthnService.hasCredential()) {
+                const reg = await webauthnService.registerCredential({
+                    userId: undefined,
+                    userName: 'aartiq-user',
+                    displayName: 'Aartiq User',
+                });
+                if (!reg.success) {
+                    return { success: false, error: `Failed to register credential: ${reg.error}`, code: 'REGISTRATION_FAILED' };
+                }
             }
+
+            const result = await webauthnService.authenticate(reason);
+
+            return {
+                success: result.success,
+                method: 'windows-hello-webauthn',
+                verified: result.success,
+                credentialId: result.credentialId || null,
+                message: result.success ? 'Windows Hello verified' : (result.error || 'Authentication failed'),
+                code: result.success ? 'SUCCESS' : (result.error || 'AUTH_FAILED'),
+            };
         } catch (error) {
             return { success: false, error: error.message, code: 'EXCEPTION' };
         }
     }
 
     /**
-     * Create a Windows Hello credential for this app
-     * This stores a cryptographic key in TPM for verification
+     * Create a Windows Hello credential (TPM-backed key pair).
+     * Delegates to webauthn-service for the actual WebAuthn registration.
      */
     async createCredential() {
         if (this.platform !== 'win32') {
@@ -194,83 +102,16 @@ if ($result.ErrorCode -eq 0 -and $result.Credential -ne $null) {
         }
 
         try {
-            // Generate a challenge
-            const challenge = crypto.randomBytes(32);
-            const challengeBase64 = challenge.toString('base64');
-
-            const psScript = `
-$ErrorActionPreference = "Stop"
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-
-$asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
-function Await($WinRtTask, $ResultType) {
-    $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)
-    $netTask = $asTask.Invoke($null, @($WinRtTask))
-    $netTask.Wait(-1) | Out-Null
-    $netTask.Result
-}
-
-# Create a new key using Windows Hello
-$keyProvider = [Windows.Security.Cryptography.DataProtection.DataProtectionProvider,Windows.Security.Cryptography.DataProtection,WindowsRuntime]
-
-# For now, we'll use a simpler approach - store a verification token
-$token = [System.Guid]::NewGuid().ToString()
-$bytes = [System.Text.Encoding]::UTF8.GetBytes($token)
-$protected = Protect-CmsMessage -To "CN=Aartiq" -Content ([System.IO.MemoryStream]::new($bytes)) -ErrorAction Stop
-
-Write-Output "CREATED:$token"
-`;
-            const result = await execAsync(`powershell -NoProfile -Command "${psScript.replace(/"/g, '\\"').replace(/\n/g, '; ')}"`, {
-                timeout: 30000,
-                encoding: 'utf8'
+            const result = await webauthnService.registerCredential({
+                userId: undefined,
+                userName: 'aartiq-user',
+                displayName: 'Aartiq User',
             });
 
-            const output = result.stdout.trim();
-            if (output.startsWith('CREATED:')) {
-                const token = output.substring(8);
-                return {
-                    success: true,
-                    token: token,
-                    message: 'Windows Hello credential created'
-                };
-            }
-
-            return { success: false, error: 'Failed to create credential' };
-        } catch (error) {
-            return { success: false, error: error.message };
-        }
-    }
-
-    /**
-     * Verify a Windows Hello credential
-     */
-    async verifyCredential(token) {
-        if (this.platform !== 'win32') {
-            return { success: false, error: 'Windows only' };
-        }
-
-        if (!token) {
-            return { success: false, error: 'No token provided' };
-        }
-
-        try {
-            // Authenticate and verify the token matches
-            const authResult = await this.authenticate('Verify your identity');
-            if (!authResult.success) {
-                return { success: false, error: authResult.error };
-            }
-
-            // If we have a stored token, verify it matches
-            const storedToken = await this.getStoredToken();
-            if (storedToken && storedToken !== token) {
-                return { success: false, error: 'Token mismatch' };
-            }
-
             return {
-                success: true,
-                verified: true,
-                method: 'windows-hello',
-                message: 'Credential verified'
+                success: result.success,
+                credentialId: result.credentialId || null,
+                message: result.success ? 'Windows Hello credential created' : result.error,
             };
         } catch (error) {
             return { success: false, error: error.message };
@@ -278,69 +119,44 @@ Write-Output "CREATED:$token"
     }
 
     /**
-     * Store the verification token securely
+     * Verify a Windows Hello credential by performing a fresh assertion.
      */
-    async storeToken(token) {
+    async verifyCredential() {
         if (this.platform !== 'win32') {
             return { success: false, error: 'Windows only' };
         }
 
         try {
-            const tokenPath = path.join(os.homedir(), '.aartiq', 'windows-hello-token');
-            const tokenDir = path.dirname(tokenPath);
-            
-            if (!fs.existsSync(tokenDir)) {
-                fs.mkdirSync(tokenDir, { recursive: true, mode: 0o700 });
-            }
-
-            // Encrypt the token before storing
-            const encrypted = Buffer.from(token).toString('base64');
-            fs.writeFileSync(tokenPath, encrypted, { mode: 0o600 });
-            
-            return { success: true, message: 'Token stored securely' };
+            const authResult = await this.authenticate('Verify your identity');
+            return {
+                success: authResult.success,
+                verified: authResult.verified || false,
+                method: authResult.method || 'windows-hello-webauthn',
+                message: authResult.message,
+            };
         } catch (error) {
             return { success: false, error: error.message };
         }
     }
 
     /**
-     * Get the stored verification token
-     */
-    async getStoredToken() {
-        if (this.platform !== 'win32') {
-            return null;
-        }
-
-        try {
-            const tokenPath = path.join(os.homedir(), '.aartiq', 'windows-hello-token');
-            if (!fs.existsSync(tokenPath)) {
-                return null;
-            }
-
-            const encrypted = fs.readFileSync(tokenPath, 'utf8');
-            return Buffer.from(encrypted, 'base64').toString();
-        } catch (error) {
-            return null;
-        }
-    }
-
-    /**
-     * Quick availability check
+     * Quick availability check (cached).
      */
     async quickCheck() {
-        const availability = await this.checkAvailability();
-        return {
-            available: this.isAvailable,
-            type: this.authType,
-            platform: this.platform,
-            ...availability
-        };
+        if (this.isAvailable !== false && this.authType !== null) {
+            return {
+                available: this.isAvailable,
+                type: this.authType,
+                platform: this.platform,
+            };
+        }
+        return await this.checkAvailability();
     }
 }
 
 /**
- * Cross-platform biometric authentication manager
- * Handles Windows Hello, Touch ID, and Linux fingerprint
+ * Cross-platform biometric authentication manager.
+ * Handles Windows Hello (WebAuthn), macOS Touch ID, and Linux fingerprint.
  */
 class CrossPlatformBiometricAuth {
     constructor() {
@@ -349,7 +165,7 @@ class CrossPlatformBiometricAuth {
     }
 
     /**
-     * Check biometric availability
+     * Check biometric availability for the current platform.
      */
     async checkAvailability() {
         if (this.platform === 'win32') {
@@ -363,7 +179,7 @@ class CrossPlatformBiometricAuth {
     }
 
     /**
-     * Authenticate with platform-appropriate method
+     * Authenticate with the platform-appropriate method.
      */
     async authenticate(reason = 'Authenticate to proceed') {
         if (this.platform === 'win32') {
@@ -377,13 +193,13 @@ class CrossPlatformBiometricAuth {
     }
 
     /**
-     * Require authentication for an action
+     * Require authentication for an action. Throws on failure.
      */
     async requireAuth(action, reason) {
         const check = await this.checkAvailability();
-        
+
         console.log(`[CrossPlatformAuth] ${action} requested - Checking biometric auth (${check.type})`);
-        
+
         const result = await this.authenticate(reason);
         if (!result.success) {
             throw new Error(`Authentication failed: ${result.error}`);
@@ -392,23 +208,23 @@ class CrossPlatformBiometricAuth {
     }
 
     /**
-     * Execute actions with authentication
+     * Execute a chain of actions with authentication.
      */
     async executeWithAuth(actions, reason = 'Execute critical action') {
         const results = [];
-        
+
         const criticalActions = ['restart', 'shutdown', 'lock', 'delete', 'execute'];
         const isCriticalChain = actions.every(a => criticalActions.includes(a.type));
-        
+
         if (isCriticalChain) {
             await this.requireAuth('critical-chain', reason);
         }
-        
+
         const { execSync } = require('child_process');
-        
+
         for (const action of actions) {
             let result;
-            
+
             try {
                 switch (action.type) {
                     case 'restart':
@@ -421,7 +237,7 @@ class CrossPlatformBiometricAuth {
                         }
                         result = { success: true, action: 'restart' };
                         break;
-                        
+
                     case 'shutdown':
                         if (this.platform === 'darwin') {
                             await execAsync('osascript -e \'tell app "System Events" to shut down\'');
@@ -432,7 +248,7 @@ class CrossPlatformBiometricAuth {
                         }
                         result = { success: true, action: 'shutdown' };
                         break;
-                        
+
                     case 'lock':
                         if (this.platform === 'darwin') {
                             await execAsync('/System/Library/CoreServices/Menu\\ Extras/User.menu/Contents/Resources/CGSession -suspend');
@@ -443,7 +259,7 @@ class CrossPlatformBiometricAuth {
                         }
                         result = { success: true, action: 'lock' };
                         break;
-                        
+
                     case 'open-url':
                         if (this.platform === 'darwin') {
                             await execAsync(`open "${action.url}"`);
@@ -454,7 +270,7 @@ class CrossPlatformBiometricAuth {
                         }
                         result = { success: true, action: 'open-url', url: action.url };
                         break;
-                        
+
                     case 'shell':
                         try {
                             execSync(action.command, { stdio: 'ignore' });
@@ -463,31 +279,38 @@ class CrossPlatformBiometricAuth {
                             result = { success: false, action: 'shell', error: e.message };
                         }
                         break;
-                        
+
                     case 'wait':
                         await new Promise(r => setTimeout(r, action.ms || 1000));
                         result = { success: true, action: 'wait', ms: action.ms };
                         break;
-                        
+
                     default:
                         result = { success: false, action: action.type, error: 'Unknown action' };
                 }
             } catch (e) {
                 result = { success: false, action: action.type, error: e.message };
             }
-            
+
             results.push(result);
-            
+
             if (!result.success && result.error) {
                 console.error('[CrossPlatformAuth] Action failed:', result.error);
             }
         }
-        
+
         return results;
     }
 
-    // macOS methods
+    // ── macOS methods ────────────────────────────────────────────────────────
+
     async checkMacAvailability() {
+        try {
+            if (webauthnService.isSupported()) {
+                return { available: true, type: 'webauthn', message: 'WebAuthn caBLE available' };
+            }
+        } catch (_) {}
+
         try {
             const { systemPreferences } = require('electron');
             if (systemPreferences && systemPreferences.canPromptTouchID()) {
@@ -500,6 +323,23 @@ class CrossPlatformBiometricAuth {
     }
 
     async authenticateMac(reason) {
+        if (webauthnService.isSupported()) {
+            try {
+                if (!webauthnService.hasCredential()) {
+                    await webauthnService.registerCredential({
+                        userName: 'aartiq-user',
+                        displayName: 'Aartiq User',
+                    });
+                }
+                const result = await webauthnService.authenticate(reason);
+                if (result.success) {
+                    return { success: true, method: 'webauthn-cable', message: 'WebAuthn verified' };
+                }
+            } catch (e) {
+                console.warn('[CrossPlatformAuth] WebAuthn caBLE failed, trying Touch ID:', e.message);
+            }
+        }
+
         try {
             const { systemPreferences } = require('electron');
             if (systemPreferences) {
@@ -523,19 +363,20 @@ class CrossPlatformBiometricAuth {
         }
     }
 
-    // Linux methods
+    // ── Linux methods ────────────────────────────────────────────────────────
+
     async checkLinuxAvailability() {
         try {
             const whichResult = await execAsync('which fprintd 2>/dev/null || echo "not found"');
             if (whichResult.stdout.includes('not found')) {
                 return { available: false, type: 'none', message: 'fprintd not installed' };
             }
-            
+
             const listResult = await execAsync('fprintd-list 2>&1 || echo "No devices"');
             if (!listResult.stdout.includes('No devices') && !listResult.stdout.includes('error')) {
                 return { available: true, type: 'fingerprint', message: 'Fingerprint reader detected' };
             }
-            
+
             return { available: false, type: 'password', message: 'No fingerprint reader' };
         } catch (error) {
             return { available: false, type: 'none', message: error.message };
@@ -564,12 +405,11 @@ class CrossPlatformBiometricAuth {
             );
 
             if (result.stdout && result.stdout.trim().length > 0) {
-                // Verify the password is correct
                 const verifyResult = await execAsync(
                     `echo '${result.stdout.trim()}' | sudo -S echo "verified" 2>&1`,
                     { timeout: 10000 }
                 );
-                
+
                 if (verifyResult.stdout.includes('verified')) {
                     return { success: true, method: 'password', message: 'Password verified' };
                 } else {

@@ -6,6 +6,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const webauthnService = require('../lib/webauthn-service');
+
 class BiometricAuthManager {
     constructor() {
         this.platform = os.platform();
@@ -79,24 +81,18 @@ class BiometricAuthManager {
 
     async checkWindowsAvailability() {
         try {
-            const psCommand = `powershell -Command "Try { Add-Type -AssemblyName 'System.Security'; [Windows.Security.Credentials.PasswordVault]::New() | Out-Null; Write-Output 'Available' } Catch { Write-Output 'NotAvailable' }"`;
-            const result = await execAsync(psCommand);
-            
-            if (result.stdout.includes('Available')) {
+            if (webauthnService.isSupported()) {
                 this.isAvailable = true;
                 this.authType = 'windows-hello';
-                return { available: true, type: 'windows-hello', message: 'Windows Hello available' };
+                return {
+                    available: true,
+                    type: 'windows-hello',
+                    message: 'Windows Hello WebAuthn available',
+                    hasCredential: webauthnService.hasCredential(),
+                };
             }
-            
-            const bioCheck = await execAsync(`powershell -Command "Get-WmiObject -Class Win32_PnPEntity | Where-Object { $_.Present -and $_.Name -match 'Fingerprint|Biometric|Hello' } | Select-Object -First 1 -ExpandProperty Name"`);
-            
-            if (bioCheck.stdout && bioCheck.stdout.trim().length > 0) {
-                this.isAvailable = true;
-                this.authType = 'windows-hello';
-                return { available: true, type: 'windows-hello', message: `Biometric device: ${bioCheck.stdout.trim()}` };
-            }
-            
-            return { available: false, type: 'pin', message: 'Use Windows PIN instead' };
+
+            return { available: false, type: 'none', message: 'WebAuthn not supported on this system' };
         } catch (error) {
             return { available: false, type: 'none', message: error.message };
         }
@@ -185,47 +181,26 @@ class BiometricAuthManager {
     }
 
     async authenticateWindows(reason) {
-        const tmpScript = path.join(os.tmpdir(), `aartiq-auth-${Date.now()}.ps1`);
         try {
-            const psScript = `
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-$picker = [Windows.Security.Credentials.UI.CredentialPicker,Windows.Security.Credentials.UI.CredentialPicker,ContentType=WindowsRuntime]
-$opts = New-Object Windows.Security.Credentials.UI.CredentialPickerOptions
-$opts.Caption = "Aartiq"
-$opts.Message = "${reason.replace(/"/g, '`"')}"
-$opts.TargetName = "Aartiq"
-$opts.AuthenticationProtocol = [Windows.Security.Credentials.UI.AuthenticationProtocol]::Basic
-$opts.CallerSavesCredential = $false
-try {
-    $result = [Windows.Security.Credentials.UI.CredentialPicker]::PickAsync($opts).GetAwaiter().GetResult()
-    if ($result.ErrorCode -eq 0) { Write-Output "OK" } else { Write-Output "NO" }
-} catch {
-    Write-Output "NO"
-}
-`;
-            fs.writeFileSync(tmpScript, psScript, 'utf8');
-            const result = await execAsync(`powershell -NoProfile -File "${tmpScript}"`, { timeout: 60000 });
-
-            if (result.stdout?.includes('OK')) {
-                return { success: true, method: 'windows-hello', message: 'Windows Hello verified' };
+            if (!webauthnService.isSupported()) {
+                return { success: false, error: 'WebAuthn not supported on this system' };
             }
 
-            const fallbackScript = `
-$cred = Get-Credential -UserName "Aartiq User" -Message "${reason.replace(/"/g, '`"')}"
-if ($cred) { Write-Output "OK" } else { Write-Output "NO" }
-`;
-            const fbPath = tmpScript.replace('.ps1', '-fb.ps1');
-            fs.writeFileSync(fbPath, fallbackScript, 'utf8');
-            const fbResult = await execAsync(`powershell -NoProfile -File "${fbPath}"`, { timeout: 60000 });
-            if (fbResult.stdout?.includes('OK')) {
-                return { success: true, method: 'credential', message: 'Windows credential verified' };
+            if (!webauthnService.hasCredential()) {
+                await webauthnService.registerCredential({
+                    userName: 'aartiq-user',
+                    displayName: 'Aartiq User',
+                });
             }
-            return { success: false, error: 'Authentication cancelled' };
+
+            const result = await webauthnService.authenticate(reason);
+            return {
+                success: result.success,
+                method: 'windows-hello',
+                message: result.success ? 'Windows Hello verified' : (result.error || 'Authentication failed'),
+            };
         } catch (error) {
             return { success: false, error: error.message };
-        } finally {
-            try { if (fs.existsSync(tmpScript)) fs.unlinkSync(tmpScript); } catch {}
-            try { const fb = tmpScript.replace('.ps1', '-fb.ps1'); if (fs.existsSync(fb)) fs.unlinkSync(fb); } catch {}
         }
     }
 

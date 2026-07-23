@@ -6,6 +6,19 @@ const util = require('util');
 const execFileAsync = util.promisify(execFile);
 const HELPER_NAME = 'Aartiq';
 
+let _webauthnService = null;
+function getWebauthnService() {
+    if (_webauthnService === null) {
+        try {
+            _webauthnService = require('./webauthn-service');
+        } catch (err) {
+            console.warn('[NativeVerifier] WebAuthn service not available:', err.message);
+            _webauthnService = false;
+        }
+    }
+    return _webauthnService || false;
+}
+
 function getMacHelperPaths() {
   return {
     bundledBinary: path.join(process.resourcesPath || '', 'bin', HELPER_NAME),
@@ -183,6 +196,34 @@ async function verifyMacDeviceUnlock({ reason, actionText, riskLevel = 'medium' 
   };
 }
 
+async function verifyWindowsLegacy({ reason, actionText, riskLevel }) {
+    try {
+        const psCommand = `
+        $creds = Get-Credential -UserName "$env:USERNAME" -Message "${reason || 'Unlock Aartiq to continue.'}";
+        if ($creds) {
+          Write-Host '{"supported": true, "approved": true, "mode": "windows-credential-prompt"}';
+        } else {
+          Write-Host '{"supported": true, "approved": false, "mode": "windows-credential-prompt"}';
+        }
+      `;
+        const { stdout } = await execFileAsync('powershell', ['-Command', psCommand]);
+        const trimmed = `${stdout || ''}`.trim();
+        const lastLine = trimmed.split('\n').pop();
+        try {
+            return JSON.parse(lastLine);
+        } catch (e) {
+            return { supported: true, approved: false, mode: 'windows-credential-prompt', error: 'Failed to parse PowerShell output.' };
+        }
+    } catch (error) {
+        return {
+            supported: true,
+            approved: false,
+            mode: 'windows-credential-prompt',
+            error: error.message || 'PowerShell credential prompt failed.',
+        };
+    }
+}
+
 async function verifyNativeDeviceAccess({ reason, actionText, riskLevel = 'medium' }) {
   if (process.platform === 'darwin') {
     return verifyMacDeviceUnlock({ reason, actionText, riskLevel });
@@ -190,37 +231,34 @@ async function verifyNativeDeviceAccess({ reason, actionText, riskLevel = 'mediu
 
   if (process.platform === 'win32') {
     try {
-      // Use PowerShell to trigger a standard Windows credential prompt.
-      // This is a robust fallback when we don't have a compiled C++/WinRT helper.
-      const psCommand = `
-        $creds = Get-Credential -UserName "$env:USERNAME" -Message "${reason || 'Unlock Aartiq to continue.'}";
-        if ($creds) {
-          # On Windows, we just check if credentials were provided
-          # In a real app, you might verify them against the system, but Get-Credential
-          # itself is a secure enough gate for "native unlock" in this context.
-          Write-Host '{"supported": true, "approved": true, "mode": "windows-credential-prompt"}';
-        } else {
-          Write-Host '{"supported": true, "approved": false, "mode": "windows-credential-prompt"}';
-        }
-      `;
-      
-      const { stdout } = await execFileAsync('powershell', ['-Command', psCommand]);
-      const trimmed = `${stdout || ''}`.trim();
-      const lastLine = trimmed.split('\n').pop(); // Get last line in case of warnings
-      
-      try {
-        const parsed = JSON.parse(lastLine);
-        return parsed;
-      } catch (e) {
-        return { supported: true, approved: false, mode: 'windows-credential-prompt', error: 'Failed to parse PowerShell output.' };
+      const webauthnService = getWebauthnService();
+      if (!webauthnService || !webauthnService.isSupported()) {
+        console.log('[NativeVerifier] WebAuthn not available, falling back to PowerShell legacy verification');
+        return await verifyWindowsLegacy({ reason, actionText, riskLevel });
       }
-    } catch (error) {
+
+      if (!webauthnService.hasCredential()) {
+        const reg = await webauthnService.registerCredential({
+          userName: 'aartiq-user',
+          displayName: 'Aartiq User',
+        });
+        if (!reg.success) {
+          console.warn('[NativeVerifier] WebAuthn registration failed, falling back to PowerShell:', reg.error);
+          return await verifyWindowsLegacy({ reason, actionText, riskLevel });
+        }
+      }
+
+      const result = await webauthnService.authenticate(reason || `Unlock Aartiq to continue.`);
       return {
         supported: true,
-        approved: false,
-        mode: 'windows-credential-prompt',
-        error: error.message || 'PowerShell credential prompt failed.',
+        approved: result.success,
+        mode: 'windows-hello-webauthn',
+        credentialId: result.credentialId || null,
+        error: result.success ? null : (result.error || 'WebAuthn authentication failed'),
       };
+    } catch (error) {
+      console.warn('[NativeVerifier] WebAuthn verification failed, falling back to PowerShell:', error.message);
+      return await verifyWindowsLegacy({ reason, actionText, riskLevel });
     }
   }
 

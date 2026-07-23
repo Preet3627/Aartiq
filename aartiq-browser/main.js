@@ -6998,32 +6998,8 @@ if (isPackaged && process.platform === 'darwin') {
     }
   }
 
-  // Biometric Authentication Handlers
-  try {
-    const { BiometricAuthManager, CrossPlatformBiometricAuth } = require('./src/service/biometric-auth.js');
-
-    const biometricAuth = new BiometricAuthManager();
-    const crossPlatformAuth = new CrossPlatformBiometricAuth();
-
-    // Check biometric availability
-    ipcMain.handle('biometric-check', async () => {
-      return await biometricAuth.quickCheck();
-    });
-
-    // Authenticate via biometrics
-    ipcMain.handle('biometric-authenticate', async (event, reason) => {
-      return await biometricAuth.authenticate(reason || 'Authenticate to proceed');
-    });
-
-    // Execute chained actions with biometric protection
-    ipcMain.handle('biometric-execute', async (event, actions, reason) => {
-      return await crossPlatformAuth.executeWithAuth(actions, reason || 'Execute critical action');
-    });
-
-    console.log('[Main] Biometric authentication initialized');
-  } catch (error) {
-    console.error('[Main] Failed to initialize biometric auth:', error);
-  }
+  // Biometric authentication handlers are registered via system-handlers.js (registerAllHandlers)
+  // Do NOT register them here — they would be immediately overwritten.
 
   initializeAutomationService();
 
