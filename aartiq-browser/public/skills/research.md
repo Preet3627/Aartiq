@@ -6,19 +6,36 @@ license: Proprietary
 
 ## Research Workflow
 
-### News & Deep Research (Mandatory)
-- NEVER summarize from memory — ALWAYS verify at the source
-- NEVER rely only on search snippets — they are brief summaries and often miss key details
-- Navigate to actual article URLs and read the full page content
+### Deep Research (Recommended for complex queries)
+Use the DEEP_RESEARCH command for comprehensive, multi-source research with iterative search, source ranking, and coverage analysis.
+
+```json
+{"type": "DEEP_RESEARCH", "query": "<topic>", "engine": "duckduckgo", "maxResults": 12}
+```
+
+The pipeline automatically:
+- Decomposes the query into subtopics
+- Searches iteratively until coverage threshold is met
+- Ranks sources by domain authority + content quality
+- Extracts articles with multi-strategy fallback
+- Detects contradictions across sources
+- Generates a structured report with executive summary, key takeaways, and charts data
+
+### Quick Research (For simpler queries)
+For quick fact-finding or when you need specific pages:
 
 **Step 1:** [WEB_SEARCH: <topic+today>] — returns titles, URLs, and brief snippets. System auto-reads the top result.
 **Step 2:** [NAVIGATE: <url>] for the NEXT 2–3 best URLs from those results.
 **Step 3:** [READ_PAGE_CONTENT] on EACH source to extract full article details.
-**Step 4:** Synthesize all full-page content and [CREATE_FILE_JSON: <JSON>].
+**Step 4:** Synthesize all full-page content and answer.
 **Step 5:** When generating a document, automatically include a "## Sources" section at the end listing every URL you visited and used.
 
+### When to use DEEP_RESEARCH vs WEB_SEARCH
+- **Use DEEP_RESEARCH** when: user asks for "research", "analyze", "report", "comprehensive", "deep dive", "what's happening with", "latest news about", or any multi-faceted topic
+- **Use WEB_SEARCH** when: user asks a simple factual question, wants a quick answer, or needs a specific piece of information
+
 ### Regeneration / Refinement Exception
-Skip Steps 1-4 if you are regenerating due to an error, changing the template, or making minor edits and you already have the verified primary source data in your history. DO NOT re-search for identical data.
+Skip re-searching if you are regenerating due to an error, changing the template, or making minor edits and you already have the verified primary source data in your history. DO NOT re-search for identical data.
 
 ### Website Data
 **Step 1:** [NAVIGATE: https://example.com]
@@ -39,6 +56,6 @@ Skip Steps 1-4 if you are regenerating due to an error, changing the template, o
 - NEVER generate a PDF with fake data before searching
 - NEVER answer "what happened today" without searching first
 - NEVER make up model names, specs, or release dates
-- ALWAYS emit [WEB_SEARCH: query] BEFORE any prose for factual/current queries
+- ALWAYS emit [DEEP_RESEARCH: query] or [WEB_SEARCH: query] BEFORE any prose for factual/current queries
 - After [NAVIGATE: url], ALWAYS follow with [READ_PAGE_CONTENT] to get actual full-page data
 - Cite the real URL from search results when presenting information

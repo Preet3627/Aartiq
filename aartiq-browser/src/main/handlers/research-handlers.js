@@ -6,22 +6,26 @@ const activePipelines = new Map();
 function registerResearchHandlers(ipcMain, handlers) {
   ipcMain.handle('research:start', async (event, { query, engine = 'duckduckgo', options = {} }) => {
     const pipelineId = `research-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const pipeline = new ResearchPipeline({
       concurrency: options.concurrency || 4,
-      maxResults: options.maxResults || 10,
-      maxContentLength: options.maxContentLength || 8000,
-      minContentLength: options.minContentLength || 500,
+      maxResults: options.maxResults || 12,
+      maxContentLength: options.maxContentLength || 12000,
+      minContentLength: options.minContentLength || 300,
       similarityThreshold: options.similarityThreshold || 0.7,
+      coverageThreshold: options.coverageThreshold || 70,
+      maxIterations: options.maxIterations || 4,
     });
-    
-    const progressCallback = (progress) => {
-      event.sender.send('research:progress', { pipelineId, ...progress });
+
+    const sendProgress = (progress) => {
+      try {
+        event.sender.send('research:progress', { pipelineId, ...progress });
+      } catch {}
     };
-    
-    pipeline.setProgressCallback(progressCallback);
+
+    pipeline.setProgressCallback(sendProgress);
     activePipelines.set(pipelineId, pipeline);
-    
+
     try {
       const result = await pipeline.run(query, engine);
       activePipelines.delete(pipelineId);
@@ -31,16 +35,17 @@ function registerResearchHandlers(ipcMain, handlers) {
       return { success: false, pipelineId, error: error?.message || String(error) || 'Unknown error' };
     }
   });
-  
+
   ipcMain.handle('research:cancel', async (event, { pipelineId }) => {
     const pipeline = activePipelines.get(pipelineId);
     if (pipeline) {
+      pipeline.cancel();
       activePipelines.delete(pipelineId);
       return { success: true };
     }
     return { success: false, error: 'Pipeline not found' };
   });
-  
+
   ipcMain.handle('research:get-status', async (event, { pipelineId }) => {
     const pipeline = activePipelines.get(pipelineId);
     if (pipeline) {

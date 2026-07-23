@@ -58,6 +58,8 @@ import MermaidDiagram from './ai/MermaidDiagram';
 import FlowchartDiagram from './ai/FlowchartDiagram';
 import ChartDiagram from './ai/ChartDiagram';
 import YouTubePlayer from './ai/YouTubePlayer';
+import { ResearchExecutionCard, type ExecutionStepData } from './ai/ResearchExecutionCard';
+import { ResearchSourceCarousel } from './ai/ResearchSourceCard';
 import { getCmdParam, getCmdParamInt, cleanCmdValue, type ParsedCommand } from '@/lib/AICommandParser';
 
 // Logic & Utils
@@ -881,6 +883,11 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [showTerminal, setShowTerminal] = useState(false);
   const [showDevLogs, setShowDevLogs] = useState(false);
   const [researchProgress, setResearchProgress] = useState<{ stage: string; message: string; [key: string]: any } | null>(null);
+  const [researchSteps, setResearchSteps] = useState<Array<{ id: string; stage: string; label: string; detail?: string; status: 'pending' | 'running' | 'done' | 'error'; icon?: string; timestamp?: number; source?: string; favicon?: string; url?: string; score?: number }>>([]);
+  const [researchExecutionSteps, setResearchExecutionSteps] = useState<ExecutionStepData[]>([]);
+  const [researchSourceSummary, setResearchSourceSummary] = useState<Array<{ name: string; favicon?: string; url: string; articleCount: number; avgScore: number; used: boolean }>>([]);
+  const [researchCoverage, setResearchCoverage] = useState<{ percentage: number; covered: number; total: number } | null>(null);
+  const [activeResearchPipelineId, setActiveResearchPipelineId] = useState<string | null>(null);
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const terminalLogIdCounter = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -910,6 +917,49 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
       setResearchProgress(progress);
       if (progress.stage === 'complete') {
         setTimeout(() => setResearchProgress(null), 3000);
+        if (progress.sourceSummary) setResearchSourceSummary(progress.sourceSummary);
+        if (progress.coverage) setResearchCoverage(progress.coverage);
+        setResearchExecutionSteps(prev => prev.map(s => s.status === 'running' ? { ...s, status: 'done' as const } : s));
+      } else {
+        const stepId = `${progress.stage}-${progress.url || progress.query || Date.now()}`;
+        const newStep = {
+          id: stepId,
+          stage: progress.stage,
+          label: progress.message || progress.stage,
+          detail: progress.url || progress.query,
+          status: (progress.stage.includes('error') ? 'error' : 'done') as 'error' | 'done',
+          source: progress.source,
+          url: progress.url,
+          score: progress.score,
+        };
+        setResearchSteps(prev => {
+          const existing = prev.findIndex(s => s.id === stepId);
+          if (existing >= 0) {
+            const updated = [...prev];
+            updated[existing] = newStep;
+            return updated;
+          }
+          return [...prev, newStep];
+        });
+        setResearchExecutionSteps(prev => {
+          const newExec: ExecutionStepData = {
+            id: stepId,
+            stage: progress.stage,
+            message: progress.message || progress.stage,
+            url: progress.url,
+            source: progress.source,
+            score: progress.score,
+            status: progress.stage.includes('error') ? 'error' : 'done',
+          };
+          const existing = prev.findIndex(s => s.id === stepId);
+          if (existing >= 0) {
+            const updated = [...prev];
+            updated[existing] = newExec;
+            return updated;
+          }
+          return [...prev.slice(-15), newExec];
+        });
+        if (progress.coverage) setResearchCoverage(progress.coverage);
       }
     });
     return () => unsubscribe?.();
@@ -2830,7 +2880,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           const drRawValue = command.value.trim().replace(/^["'](.*)["']$/, '$1') || '';
           const drQuery = getCmdParam(command as any, 'query') || cleanCmdValue(command as any) || drRawValue;
           const drEngine = getCmdParam(command as any, 'engine') || 'duckduckgo';
-          const drMaxResults = getCmdParamInt(command as any, 'maxResults') || 10;
+          const drMaxResults = getCmdParamInt(command as any, 'maxResults') || 12;
           const drConcurrency = getCmdParamInt(command as any, 'concurrency') || 4;
 
           if (!drQuery) {
@@ -2838,8 +2888,15 @@ I couldn't schedule the task. The background service may not be running. Please 
             break;
           }
 
-          const drStepId = addThinkingStep(`Starting deep research on "${drQuery}"...`);
+          // Reset research state
+          setResearchSteps([]);
+          setResearchExecutionSteps([]);
+          setResearchSourceSummary([]);
+          setResearchCoverage(null);
+
+          const drStepId = addThinkingStep(`Researching "${drQuery}"...`);
           try {
+            setAgentState('executing');
             const result = await (window.electronAPI as any).researchStart(drQuery, drEngine, {
               maxResults: drMaxResults,
               concurrency: drConcurrency,
@@ -2852,8 +2909,10 @@ I couldn't schedule the task. The background service may not be running. Please 
                 query: drQuery,
                 timestamp: Date.now(),
               });
+              if (result.sourceSummary) setResearchSourceSummary(result.sourceSummary);
+              if (result.coverage) setResearchCoverage(result.coverage);
               const clusterCount = result.stats?.clusters || result.clusters?.length || 0;
-              resolveThinkingStep(drStepId, 'done', `Research complete: ${clusterCount} stories`);
+              resolveThinkingStep(drStepId, 'done', `Research complete: ${clusterCount} stories, ${result.stats?.successful || 0} sources`);
             } else {
               output = `Deep research failed: ${result?.error || 'Unknown error'}`;
               resolveThinkingStep(drStepId, 'error', result?.error || 'Failed');
@@ -7166,6 +7225,22 @@ I've successfully executed the following real tasks:
             )
           })}
           {isLoading && messages.length === 0 && <ThinkingStatus state={agentState} />}
+
+          {/* Research Execution Card — shows during active research */}
+          {researchExecutionSteps.length > 0 && (
+            <div className="space-y-3">
+              <ResearchExecutionCard
+                steps={researchExecutionSteps}
+                isComplete={!isLoading}
+                query={researchSteps.find(s => s.stage === 'planning')?.detail || ''}
+                coverage={researchCoverage || undefined}
+              />
+              {researchSourceSummary.length > 0 && (
+                <ResearchSourceCarousel sources={researchSourceSummary} />
+              )}
+            </div>
+          )}
+
           {isLoading && messages.length > 0 && (
             <ProcessingIndicator
               agentState={agentState}
