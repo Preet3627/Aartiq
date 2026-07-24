@@ -307,6 +307,18 @@ module.exports = function registerFileHandlers(ipcMain, handlers) {
         docSections.push({ children: [new Paragraph('No content provided')] });
       }
 
+      // Add tagline to the last section
+      if (docSections.length > 0) {
+        const lastSection = docSections[docSections.length - 1];
+        lastSection.children.push(new Paragraph({ text: '' }));
+        lastSection.children.push(new Paragraph({
+          text: 'For the questions that matter.',
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 400 },
+          children: [new TextRun({ text: 'For the questions that matter.', italics: true, color: '999999', size: 18 })]
+        }));
+      }
+
       const doc = new Document({
         sections: docSections,
         numbering: {
@@ -367,6 +379,8 @@ module.exports = function registerFileHandlers(ipcMain, handlers) {
           }));
           slide.addText(textItems, { x: 0.5, y: slideTitle ? 1.2 : 0.5, w: 9, h: slideTitle ? 4 : 5.2, fontSize: 16, color: '444444', valign: 'top' });
         }
+        // Tagline footer
+        slide.addText('For the questions that matter.', { x: 0.5, y: 5.1, w: 9, fontSize: 8, color: 'AAAAAA', italic: true, align: 'center' });
         if (notes) {
           slide.addNotes(notes);
         }

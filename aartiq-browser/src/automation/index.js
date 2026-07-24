@@ -103,7 +103,9 @@ class AutomationLayer {
 
   async executeClickSequence(actions, opts = {}) {
     const results = [];
+    let shouldStop = false;
     for (const action of actions) {
+      if (shouldStop) break;
       try {
         switch (action.type) {
           case 'click':
@@ -128,10 +130,12 @@ class AutomationLayer {
             break;
           default:
             results.push({ success: false, error: `Unknown action type: ${action.type}` });
+            if (opts.stopOnError !== false) shouldStop = true;
+            break;
         }
       } catch (err) {
         results.push({ success: false, error: err.message });
-        if (opts.stopOnError !== false) break;
+        if (opts.stopOnError !== false) shouldStop = true;
       }
     }
     return results;

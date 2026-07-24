@@ -26,6 +26,7 @@ const DANGEROUS_PATTERNS = [
   /rm\s+-rf\s+\//i,           // rm -rf /
   /rm\s+-rf\s+~\//i,          // rm -rf ~/
   /:\s*\|/i,                  // fork bomb
+  /\$\(/i,                    // command substitution $(...)
   /\\x[0-9a-f]{2}/i,         // hex-encoded chars
   /;\s*rm\s/i,                // ; rm ...
   /mkfs/i,                    // format filesystem
@@ -42,7 +43,7 @@ const DANGEROUS_PATTERNS = [
 ];
 
 const BLOCKED_COMMANDS = new Set([
-  'sudo', 'su', 'passwd', 'chgrp',
+  'sudo', 'su', 'passwd', 'chgrp', 'rm',
 ]);
 
 const HIGH_RISK_FILE_COMMANDS = new Set([

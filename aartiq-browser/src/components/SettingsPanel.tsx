@@ -1063,7 +1063,6 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                         {activeSection === 'extensions' && (
                             <ExtensionSettings />
                         )}
-
                         {activeSection === 'plugins' && (
                             <PluginSettings />
                         )}

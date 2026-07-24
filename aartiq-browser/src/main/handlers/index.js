@@ -9,9 +9,11 @@ const registerPermissionHandlers = require('./permission-handlers.js');
 const registerMcpHandlers = require('./mcp-handlers.js');
 const registerSystemHandlers = require('./system-handlers.js');
 const registerPluginHandlers = require('./plugin-handlers.js');
+const registerExtensionHandlers = require('./extension-handlers.js');
 const registerMemoryHandlers = require('./memory-handlers.js');
 const registerRagHandlers = require('./rag-handlers.js');
 const registerVoiceWorkflowHandlers = require('./voice-workflow-handlers.js');
+const registerAutofillHandlers = require('./autofill-handlers.js');
 
 const utils = require('./utils.js');
 
@@ -37,6 +39,7 @@ function registerAllHandlers(ipcMain, handlers) {
     'get-auth-token','get-user-info','get-auth-session',
     'get-autofill-data','get-passwords-for-site','vault-list-entries','vault-save-entry',
     'vault-delete-entry','vault-read-secret','vault-copy-secret',
+    'vault-generate-totp','vault-save-totp-secret','vault-remove-totp-secret','vault-read-audit-log',
     'llm-get-available-providers','llm-get-provider-models','llm-set-active-provider',
     'llm-configure-provider','llm-generate-chat-content',
     'ai-engine-chat','ai-engine-configure','test-gemini-api','get-stored-api-keys',
@@ -73,6 +76,11 @@ function registerAllHandlers(ipcMain, handlers) {
     'plugins:enable','plugins:disable','plugins:get-commands','plugins:execute-command',
     'plugins:update-config','plugins:get-dir','plugins:scan',
     'plugin-api:read-file','plugin-api:write-file','plugin-api:log',
+    'install-extension-folder','install-extension-crx','enable-extension','disable-extension',
+    'select-and-install-extension',
+    'get-extension-actions','open-extension-popup',
+    'autofill:list','autofill:get','autofill:add','autofill:update','autofill:delete',
+    'autofill:detect','autofill:fill',
     'get-ai-memory','save-vector-store','load-vector-store','clear-vector-store',
     'memory:collect','memory:flush','memory:stats',
     'rag-ingest','rag-retrieve','rag-context','rag-stats','rag-delete-source','rag-clear',
@@ -95,7 +103,7 @@ function registerAllHandlers(ipcMain, handlers) {
     'add-ai-memory',
     'send-p2p-signal',
     'wifi-sync-set-last-clipboard',
-    'open-extension-dir','raycast-update-state',
+    'open-extension-dir','close-extension-popup','raycast-update-state',
     'open-popup-window','close-popup-window','close-all-popups',
     'open-settings-popup','open-profile-popup','open-plugins-popup','open-downloads-popup',
     'open-clipboard-popup','open-cart-popup','open-search-popup','open-translate-popup',
@@ -119,9 +127,11 @@ function registerAllHandlers(ipcMain, handlers) {
   registerMcpHandlers(ipcMain, enrichedHandlers);
   registerSystemHandlers(ipcMain, enrichedHandlers);
   registerPluginHandlers(ipcMain, enrichedHandlers);
+  registerExtensionHandlers(ipcMain, enrichedHandlers);
   registerMemoryHandlers(ipcMain, enrichedHandlers);
   registerRagHandlers(ipcMain, enrichedHandlers);
   registerVoiceWorkflowHandlers(ipcMain, enrichedHandlers);
+  registerAutofillHandlers(ipcMain, enrichedHandlers);
 
 
   console.log('[Handlers] All IPC handlers registered');

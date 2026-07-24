@@ -222,7 +222,7 @@ describe('Fix 2: Capability controller — unregistered actions rejected', () =>
 
   it('should require approval for always-approval actions', async () => {
     const { CapabilityController } = require('../src/core/capability-controller.js');
-    const cc = new CapabilityController({});
+    const cc = new CapabilityController({ ticketTTL: 100 });
 
     cc.registerAction({
       name: 'dangerous-action',
@@ -235,11 +235,23 @@ describe('Fix 2: Capability controller — unregistered actions rejected', () =>
     assert.strictEqual(result.approved, false, 'Should not be approved yet');
     assert.strictEqual(result.needsApproval, true, 'Should signal approval needed');
     assert.ok(result.ticketId, 'Should have a ticket ID');
+
+    cc.destroy();
   });
 
   it('should execute after ticket is approved', async () => {
     const { CapabilityController } = require('../src/core/capability-controller.js');
-    const cc = new CapabilityController({});
+    let approveTicketId;
+
+    const cc = new CapabilityController({
+      ticketTTL: 5000,
+      onApprovalRequired: (ticket) => {
+        approveTicketId = ticket.ticketId;
+        setImmediate(async () => {
+          await cc.approveAndExecute(ticket.ticketId, 'test-user');
+        });
+      },
+    });
 
     cc.registerAction({
       name: 'approval-action',
@@ -248,12 +260,11 @@ describe('Fix 2: Capability controller — unregistered actions rejected', () =>
       riskLevel: 'medium',
     });
 
-    const pending = await cc.executeAction('approval-action', { msg: 'hello' });
-    assert.strictEqual(pending.needsApproval, true);
+    const result = await cc.executeAction('approval-action', { msg: 'hello' });
+    assert.strictEqual(result.approved, true, 'Should be approved after ticket redemption');
+    assert.strictEqual(result.result, 'executed: hello');
 
-    const approved = await cc.approveAndExecute(pending.ticketId, 'test-user');
-    assert.strictEqual(approved.approved, true, 'Should be approved after ticket redemption');
-    assert.strictEqual(approved.result, 'executed: hello');
+    cc.destroy();
   });
 });
 

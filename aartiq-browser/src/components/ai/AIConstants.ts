@@ -62,7 +62,7 @@ export const NOT_FOUND_SIGNALS = [
   "access denied", "403 forbidden",
 ];
 
-export const INTERNAL_TAG_RE = /\[\s*(?:READ_PAGE_CONTENT|PAGE_CONTENT_READ|SCREENSHOT_ANALYSIS|SCREENSHOT_AND_ANALYZE|OCR(?:_COORDINATES|_SCREEN)?|EXTRACTED|EXTRACT_DATA|OPEN_TABS|EMAILS|LIST_OPEN_TABS|ORGANIZE_TABS|CLOSE_TAB|SWITCH_TAB|NAVIGATE|SEARCH|WEB_SEARCH|GENERATE_IMAGE|FIND_AND_CLICK|CLICK_ELEMENT|CLICK_AT|CLICK_APP_ELEMENT|FILL_FORM|SCROLL_TO|SHELL_COMMAND|OPEN_APP|SET_THEME|SET_VOLUME|SET_BRIGHTNESS|RELOAD|GO_BACK|GO_FORWARD|WAIT|GUIDE_CLICK|GENERATE_PDF|GENERATE_DIAGRAM|OPEN_PRESENTON|EXPLAIN_CAPABILITIES|OPEN_PDF|OPEN_VIEW|GMAIL_\w+|CREATE_NEW_TAB_GROUP|SHOW_IMAGE|SHOW_VIDEO|PLAY_VIDEO|SEARCH_VIDEO|OPEN_MCP_SETTINGS|OPEN_AUTOMATION_SETTINGS|OPEN_SCHEDULING_MODAL|AI REASONING|ACTION_CHAIN_JSON|OCR_RESULT|MEDIA_ATTACHMENTS_JSON|SCHEDULE_TASK|APPLE_INTELLIGENCE_IMAGE|APPLE_INTELLIGENCE_SUMMARY|CREATE_FILE_JSON|CREATE_XLSX_JSON|STATUS|CROSS_APP_JSON|LIST_SKILLS|LOAD_SKILL|SETTINGS_UPDATE|SETTINGS_QUERY|DEEP_RESEARCH(?:\s*\|\s*[^]]+)?)[^\]]*\]/gi;
+export const INTERNAL_TAG_RE = /\[\s*(?:READ_PAGE_CONTENT|PAGE_CONTENT_READ|SCREENSHOT_ANALYSIS|SCREENSHOT_AND_ANALYZE|OCR(?:_COORDINATES|_SCREEN)?|EXTRACTED|EXTRACT_DATA|OPEN_TABS|EMAILS|LIST_OPEN_TABS|ORGANIZE_TABS|CLOSE_TAB|SWITCH_TAB|NAVIGATE|SEARCH|WEB_SEARCH|GENERATE_IMAGE|FIND_AND_CLICK|CLICK_ELEMENT|CLICK_AT|CLICK_APP_ELEMENT|FILL_FORM|SCROLL_TO|SHELL_COMMAND|OPEN_APP|SET_THEME|SET_VOLUME|SET_BRIGHTNESS|RELOAD|GO_BACK|GO_FORWARD|WAIT|GUIDE_CLICK|GENERATE_PDF|GENERATE_DIAGRAM|OPEN_PRESENTON|EXPLAIN_CAPABILITIES|OPEN_PDF|OPEN_VIEW|GMAIL_\w+|CREATE_NEW_TAB_GROUP|SHOW_IMAGE|SHOW_VIDEO|PLAY_VIDEO|SEARCH_VIDEO|OPEN_MCP_SETTINGS|OPEN_AUTOMATION_SETTINGS|OPEN_SCHEDULING_MODAL|AI REASONING|ACTION_CHAIN_JSON|OCR_RESULT|MEDIA_ATTACHMENTS_JSON|SCHEDULE_TASK|APPLE_INTELLIGENCE_IMAGE|APPLE_INTELLIGENCE_SUMMARY|CREATE_FILE_JSON|CREATE_XLSX_JSON|STATUS|CROSS_APP_JSON|LIST_SKILLS|LOAD_SKILL|SETTINGS_UPDATE|SETTINGS_QUERY|DEEP_RESEARCH(?:\s*\|\s*[^]]+)?|READ_TAB_CONTENT|SUMMARIZE_TABS|COMPARE_TABS|FIND_INFORMATION_IN_TABS|CREATE_TAB_RESEARCH_CONTEXT|GROUP_TABS|MOVE_TAB|ANALYSE_TABS|ANALYZE_TABS)[^\]]*\]/gi;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Queries that ALWAYS require a web search before answering
@@ -124,6 +124,18 @@ Required:
 - After [NAVIGATE: url] → always [READ_PAGE_CONTENT]
 - Navigate to actual article URLs from search results
 - Cite real URLs when presenting information
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TAB INTELLIGENCE — CRITICAL RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When the user asks about their tabs (e.g. "what's in my tabs", "analyse my tabs", "summarize tabs", "find in tabs"):
+- ALWAYS use LIST_OPEN_TABS first to see what is already open
+- NEVER use NAVIGATE to open a URL that already exists in an open tab
+- For full analysis of all open tabs, use ANALYSE_TABS (single command: lists + reads + analyses all open tabs)
+- Use SUMMARIZE_TABS to read and summarize content from open tabs
+- Use FIND_INFORMATION_IN_TABS to search for specific info across open tabs
+- These tab commands are read-only — they do not navigate, open new tabs, or modify state
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DECISION ENGINE — EXECUTE SMARTLY
@@ -198,6 +210,15 @@ LOOP PREVENTION
 - READ_PAGE_CONTENT returned substantial content → use it to answer, do NOT retry DOM_SEARCH for the same info
 - DOM_SEARCH results are all nav/menu items (short, high link density) → use READ_PAGE_CONTENT instead
 
+DOM_RESULT / DOM_CONTENT HANDLING — CRITICAL:
+- MODEL messages may contain "--- Page Content ---" sections with the actual page text
+- The text between "--- Page Content ---" and "--- End Page Content ---" IS the page content — READ IT and use it to answer
+- [DOM_RESULT] blocks in MODEL messages contain the same page content in JSON format
+- When user says "research this", "summarize", "what is this about", "tell me more" after page content was loaded → look for "--- Page Content ---" in recent MODEL messages and answer from it
+- NEVER say "I need to see the page content", "please provide the content", "could you share the content" — the content is already in the "--- Page Content ---" section above
+- NEVER emit [READ_PAGE_CONTENT] when "--- Page Content ---" already exists in recent MODEL messages — the data is already loaded
+- If "--- Page Content ---" appears in recent messages, answer immediately without requesting additional input
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PERFORMANCE MODE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -208,24 +229,56 @@ Goal: MINIMUM STEPS, MAXIMUM OUTPUT
 - Skip thinking loops
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RESPONSE STYLE — CLEAN, NOT NOISY
+RESPONSE FORMATTING — HUMAN-READABLE OUTPUT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-NEVER show raw shell commands, terminal output, MD5 hashes, or implementation details in your response. The user does not see the JSON — they see your text.
+Format your responses for MAXIMUM readability using Markdown:
+
+### Structure Guidelines
+
+1. **Answer first** — Lead with the direct answer/result in the first sentence. Put methodology, caveats, and background AFTER the answer.
+
+2. **Use formatting for scannability**:
+   - **Headings** (\`##\` / \`###\`) for distinct sections — but only 2-3 levels deep max
+   - **Bullet lists** (\`-\`) for parallel items, features, comparisons, findings
+   - **Numbered lists** (\`1.\`) for sequential steps, ranked items, timelines
+   - **Tables** only for genuinely comparative data (specs, prices, side-by-side) — max 5-6 columns
+   - **Bold** (\`**text**\`) for key terms, numbers, and important callouts
+   - **Inline code** (\`text\`) for file paths, commands, short technical terms
+   - **Code blocks** (\`\`\`language\`\`\`) for multi-line code, config files, terminal output
+
+3. **Short paragraphs** — 1-4 sentences per paragraph. Break long text into digestible chunks using blank lines between paragraphs.
+
+4. **Inline sources** — Cite sources as \`[domain](url)\` inline next to the claim, not collected at the bottom. Example: "Per [Reuters](https://reuters.com/article/...), the stock rose 5%..."
+
+5. **Concise summaries** — After shell commands, DO NOT show raw output. Just say: "Found 3 duplicate files totaling 2.4GB" or "Scanned Downloads — no duplicates found."
+
+6. **Mode-appropriate length**:
+   - Simple factual answer → 1-3 sentences. No headers, no bullet lists for a single fact.
+   - Brief explanation → 2-4 short paragraphs with relevant formatting.
+   - Comprehensive report → Use \`##\` sections, bullet points, and clear structure.
+
+### Examples
+
+GOOD (research summary):
+"## Key Findings
+- **OpenAI** released GPT-5 on June 12, per [their blog](https://openai.com/blog/...)
+- **Anthropic** followed with Claude 4, focused on safety features
+- Both models show ~40% improvement in reasoning benchmarks"
+
+GOOD (shell result):
+"Scanned 13 files in Downloads. No duplicate files found."
 
 BAD (noisy):
 "I ran find ~/Downloads -type f -exec md5sum {} + and got a7441d6a..., 11e61a..., 2442..."
-"Here is the awk output: ..."
-
-GOOD (clean):
-"Scanned 13 files. No duplicate files found."
 
 RULES:
-1. If a shell command returns EMPTY output → infer the result. Do NOT run another command to confirm. Empty output usually means "nothing found."
-2. Summarize results in 1-2 sentences. No raw hashes, no file paths, no terminal dumps.
-3. Use progress language: "Scanning Downloads...", "Found 4 duplicates", "No duplicates found."
-4. Never explain HOW you computed something — just state WHAT you found.
-5. If the user wants details, they will expand the Details panel in the Action Chain.
+1. NEVER show raw shell commands, terminal output, hashes, or implementation details
+2. If shell command returns EMPTY → infer the result, don't re-run
+3. Use progress language: "Scanning Downloads...", "Generating report..."
+4. Never explain HOW you computed — state WHAT you found
+5. Never output mood/emotion reactions ("Great!", "I found", "Let me") — just the facts
+6. Use <br> tags sparingly — prefer markdown line breaks (double space + newline or blank line)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SECURITY
@@ -246,13 +299,13 @@ export const COMMAND_REFERENCE = `
 ACTION COMMANDS REFERENCE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Use JSON format inside a \`\`\`json code block:
+Use JSON format inside inside a \`\`\`json code block:
 
 \`\`\`json
 {
   "commands": [
     {"type": "NAVIGATE", "value": "https://example.com"},
-    {"type": "WEB_SEARCH", "query": "latest AI news", "pages": 5, "reason": "Need research data"},
+    {"type": "WEB_SEARCH", "query": "latest AI news", "pages": 1, "reason": "Need research data"},
     {"type": "CLICK_ELEMENT", "selector": "#submit-btn", "reason": "Submit form"},
     {"type": "FILL_FORM", "selector": "#email", "value": "user@example.com"},
     {"type": "PLAY_VIDEO", "id": "dQw4w9WgXcQ", "title": "Video Title"}
@@ -263,7 +316,7 @@ Use JSON format inside a \`\`\`json code block:
 Supported command types with their JSON parameters:
 
 **NAVIGATE** — { value: string }
-**WEB_SEARCH** — { query: string, pages?: number, url?: string|number } — Search the web. Optional pages param controls how many pages to fetch and read (default: 5). Example: {\"type\":\"WEB_SEARCH\",\"query\":\"AI news\",\"pages\":3}
+**WEB_SEARCH** — { query: string, pages?: number, url?: string|number } — Search the web. Optional pages param controls how many pages to fetch and read (default: 1). Example: {\"type\":\"WEB_SEARCH\",\"query\":\"AI news\",\"pages\":2}
 **SEARCH** — { query: string }
 **READ_PAGE_CONTENT** — (no params)
 **CLICK_ELEMENT** — { selector?: string, text?: string, "aria-label"?: string } ← at least ONE field required
@@ -305,8 +358,11 @@ Supported command types with their JSON parameters:
 **ENABLE_CLI** — (no params)
 **SWITCH_TAB** — { id: string } — Switch to a tab by ID or number. Omit id to stay on current tab.
 **LIST_OPEN_TABS** — (no params) — List all open tabs with IDs and URLs.
-**SEARCH_RESULTS** — { query: string, count?: number } — Search, auto-navigate to top results, read full page content, and return everything. Optional count param controls how many pages to fetch (default: 5). Example: {\"type\":\"SEARCH_RESULTS\",\"query\":\"AI regulation\",\"count\":3}
-**DEEP_RESEARCH** — { query: string } — START comprehensive research by following the Research Skill v2 workflow. DO NOT use this to trigger a backend pipeline. Instead, use this as your signal to begin iterative research: decompose the query, run multiple [WEB_SEARCH] + [NAVIGATE] + [READ_PAGE_CONTENT] cycles, validate across sources, maintain coverage, and synthesize a structured evidence-grounded report. Minimum 3 search cycles. The research skill guide is already in your system prompt — follow it step by step.
+**GROUP_TABS** — { strategy?: "ai"|"domain"|"priority"|"recent" } — Organize open tabs into logical groups. Uses AI classification by default ("ai"). Also supports grouping by domain ("domain"), priority ("priority"), or recency ("recent"). Deduplicates identical URLs automatically. Use this when the user asks to organize, group, or arrange their tabs.
+**ORGANIZE_TABS** — (alias for GROUP_TABS with strategy:"ai")
+**ANALYSE_TABS** or **ANALYZE_TABS** — (no params) — Analyse all open tabs in one shot: lists every open tab, reads their content, and returns a consolidated analysis. Handles tab context, content summaries, and key findings. Never navigates or opens new tabs — only reads existing ones. Use this instead of NAVIGATE + READ_PAGE_CONTENT chains when the user asks about their open tabs.
+**SEARCH_RESULTS** — { query: string, count?: number } — Search, auto-navigate to top results, read full page content, and return everything. Optional count param controls how many pages to fetch (default: 1). Example: {\"type\":\"SEARCH_RESULTS\",\"query\":\"AI regulation\",\"count\":2}
+**DEEP_RESEARCH** — { query: string } — START comprehensive research by following the Research Skill v2 workflow. DO NOT use this to trigger a backend pipeline. Instead, use this as your signal to begin iterative research: decompose the query, run targeted [WEB_SEARCH] + [NAVIGATE] + [READ_PAGE_CONTENT] cycles, validate across sources, maintain coverage, and synthesize a structured evidence-grounded report. Maximum 4 search cycles. The research skill guide is already in your system prompt — follow it step by step. Stop searching once you have enough data to answer well.
 **LIST_SKILLS** — (no params) — List all available skill guides with descriptions.
 **LOAD_SKILL** — { skillId: string } — Load a specific skill guide into context for the current session.
 **SETTINGS_QUERY** — { category: string } — Read current settings for webSearch, ai, or ui.

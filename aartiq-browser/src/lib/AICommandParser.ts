@@ -86,6 +86,7 @@ export const COMMAND_REGISTRY = {
     THINK: { desc: 'Show AI reasoning steps', example: '[THINK: "Calculating optimal path..."]' },
     PLAN: { desc: 'Show AI future plans', example: '[PLAN: "Step 1: Search, Step 2: Read"]' },
     EXPLAIN_CAPABILITIES: { desc: 'List all available AI features', example: '[EXPLAIN_CAPABILITIES]' },
+    STATUS: { desc: 'Show a custom processing indicator to the user', example: '{"type": "STATUS", "text": "Searching..."}' },
     DOM_SEARCH: { desc: 'Search within current page DOM', example: '[DOM_SEARCH: search term]' },
     DOM_READ_FILTERED: { desc: 'Read DOM with filtering & injection check', example: '[DOM_READ_FILTERED: optional search term]' },
     OPEN_MCP_SETTINGS: { desc: 'Open MCP servers settings', example: '[OPEN_MCP_SETTINGS]' },
@@ -94,7 +95,15 @@ export const COMMAND_REGISTRY = {
     DELETE_AUTOMATION: { desc: 'Delete an automation using its ID', example: '[DELETE_AUTOMATION: task-123]' },
     OPEN_SCHEDULING_MODAL: { desc: 'Open scheduling modal with optional data (JSON or pipe-separated)', example: '[OPEN_SCHEDULING_MODAL: 0 8 * * *|pdf-generate|Daily Report|Generate PDF]' },
     SCHEDULE_TASK: { desc: 'Schedule a recurring automation task (JSON format)', example: '[SCHEDULE_TASK: {"schedule": "0 8 * * *", "type": "open-url", "url": "https://example.com", "name": "Open Site"}]' },
+    ANALYSE_TABS: { desc: 'Analyze all open tabs — list, read content, and return consolidated analysis', example: '{"type": "ANALYSE_TABS"}' },
+    ANALYZE_TABS: { desc: 'Analyze all open tabs — list, read content, and return consolidated analysis', example: '{"type": "ANALYZE_TABS"}' },
+    SUMMARIZE_TABS: { desc: 'Summarize content from one or more open tabs', example: '{"type": "SUMMARIZE_TABS"}' },
+    READ_TAB_CONTENT: { desc: 'Read content from a specific open tab', example: '{"type": "READ_TAB_CONTENT", "tabId": "tab-1"}' },
+    COMPARE_TABS: { desc: 'Compare content across multiple open tabs', example: '{"type": "COMPARE_TABS", "tabIds": ["tab-1", "tab-2"]}' },
+    FIND_INFORMATION_IN_TABS: { desc: 'Search for specific information across open tabs', example: '{"type": "FIND_INFORMATION_IN_TABS", "query": "pricing"}' },
+    CREATE_TAB_RESEARCH_CONTEXT: { desc: 'Create a research context from open tabs', example: '{"type": "CREATE_TAB_RESEARCH_CONTEXT"}' },
     ORGANIZE_TABS: { desc: 'Use AI to intelligently group all open tabs', example: '[ORGANIZE_TABS]' },
+    GROUP_TABS: { desc: 'Group open tabs by AI, domain, priority, or recency', example: '{"type": "GROUP_TABS", "strategy": "ai"}' },
     CLOSE_TAB: { desc: 'Close a specific tab by ID', example: '[CLOSE_TAB: tab-123]' },
     PLUGIN_COMMAND: { desc: 'Execute a plugin-defined command', example: '[PLUGIN_COMMAND: my-plugin.my-command | {"param": "value"}]' },
     GENERATE_IMAGE: { desc: 'Generate an AI image with a detailed prompt', example: '[GENERATE_IMAGE: a futuristic city at sunset]' },
@@ -131,6 +140,8 @@ export type CommandType = keyof typeof COMMAND_REGISTRY;
 
 // Alias map: alternate names the AI model may generate → canonical command name
 const COMMAND_ALIASES: Record<string, string> = {
+    ANALYZE_TABS: 'ANALYSE_TABS',
+    SUMMARIZE_TABS: 'ANALYSE_TABS',
     GET_BOOKMARKS: 'LIST_BOOKMARKS',
     GET_HISTORY: 'LIST_HISTORY',
     FETCH_BOOKMARKS: 'LIST_BOOKMARKS',
@@ -163,7 +174,9 @@ function getCategoryForType(type: string): string {
         GMAIL_AUTHORIZE: 'gmail', GMAIL_LIST_MESSAGES: 'gmail', GMAIL_GET_MESSAGE: 'gmail',
         GMAIL_SEND_MESSAGE: 'gmail', GMAIL_ADD_LABEL: 'gmail',
         THINK: 'meta', PLAN: 'meta', EXPLAIN_CAPABILITIES: 'meta',
-        ORGANIZE_TABS: 'automation', CLOSE_TAB: 'browser', SWITCH_TAB: 'browser', ENABLE_CLI: 'automation',
+        STATUS: 'utility',
+        ORGANIZE_TABS: 'automation', GROUP_TABS: 'automation', CLOSE_TAB: 'browser',         ANALYSE_TABS: 'browser', ANALYZE_TABS: 'browser', SUMMARIZE_TABS: 'browser', READ_TAB_CONTENT: 'browser',
+        SWITCH_TAB: 'browser', ENABLE_CLI: 'automation',
         LIST_SKILLS: 'skills', LOAD_SKILL: 'skills', SETTINGS_QUERY: 'settings', SETTINGS_UPDATE: 'settings',
         LIST_BOOKMARKS: 'bookmarks', ADD_BOOKMARK: 'bookmarks', REMOVE_BOOKMARK: 'bookmarks', CLEAR_BOOKMARKS: 'bookmarks',
         LIST_HISTORY: 'history', CLEAR_HISTORY: 'history',
@@ -674,6 +687,8 @@ export function validateCommand(command: ParsedCommand): { valid: boolean; error
         case 'SCREENSHOT_AND_ANALYZE':
         case 'READ_PAGE_CONTENT':
         case 'LIST_OPEN_TABS':
+        case 'ANALYSE_TABS':
+        case 'ANALYZE_TABS':
         case 'SWITCH_TAB':
         case 'PLAY_VIDEO':
         case 'SEARCH_VIDEO':

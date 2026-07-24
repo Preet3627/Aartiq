@@ -72,41 +72,6 @@ module.exports = function registerSystemHandlers(ipcMain, handlers) {
 
 
 
-  ipcMain.handle('get-extensions', async () => {
-    const extensions = session.defaultSession.getAllExtensions();
-    return extensions.map(ext => ({
-      id: ext.id,
-      name: ext.name,
-      version: ext.version,
-      description: ext.description,
-      path: ext.path
-    }));
-  });
-
-  ipcMain.handle('toggle-extension', async (event, id) => ({ success: true }));
-
-  ipcMain.handle('uninstall-extension', async (event, id) => {
-    try {
-      const ext = session.defaultSession.getExtension(id);
-      if (ext) {
-        const extPath = ext.path;
-        session.defaultSession.removeExtension(id);
-        if (extPath.startsWith(extensionsPath)) {
-          fs.rmSync(extPath, { recursive: true, force: true });
-        }
-        return true;
-      }
-    } catch (e) { console.error(`Failed to uninstall extension ${id}:`, e); }
-    return false;
-  });
-
-  ipcMain.handle('get-extension-path', () => extensionsPath);
-
-  ipcMain.on('open-extension-dir', () => {
-    const { shell } = require('electron');
-    shell.openPath(extensionsPath);
-  });
-
   ipcMain.handle('search-applications', async (event, query) => {
     const { searchApplications } = require('./utils.js');
     return await searchApplications(query);

@@ -168,7 +168,47 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
   ipcMain.on('navigate-browser-view', async (event, { tabId, url }) => {
     const targetId = tabId || handlers.activeTabId;
     const view = tabViews.get(targetId);
-    if (view) view.webContents.loadURL(url);
+    if (!view || !view.webContents || view.webContents.isDestroyed()) return;
+
+    let targetUrl = url;
+    try {
+      const { isValidUrl, normalizeUrl, getSearchUrl } = require('../lib/url-utils');
+      if (!isValidUrl(targetUrl)) {
+        const normalized = normalizeUrl(targetUrl);
+        if (normalized) {
+          targetUrl = normalized;
+        } else {
+          targetUrl = getSearchUrl(targetUrl);
+        }
+      } else {
+        const normalized = normalizeUrl(targetUrl);
+        if (normalized) targetUrl = normalized;
+      }
+    } catch (e) {
+      console.warn('[BrowserView] URL utils error, using raw URL:', e.message);
+    }
+
+    const maxRetries = 2;
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await view.webContents.loadURL(targetUrl);
+        return;
+      } catch (err) {
+        lastError = err;
+        console.warn(`[BrowserView] Navigation attempt ${attempt}/${maxRetries} failed: ${err.message}`);
+        if (attempt < maxRetries) await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
+    console.error(`[BrowserView] Navigation failed after ${maxRetries} attempts: ${targetUrl}`);
+    try {
+      const escapedUrl = targetUrl.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const fallbackUrl = `data:text/html,<html><head><title>Navigation Error</title></head><body style="font-family:sans-serif;padding:40px;text-align:center;background:#fafafa;"><h2 style="color:#dc2626;">Could not load this page</h2><p style="color:#666;word-break:break-all;">${escapedUrl}</p><p style="color:#999;font-size:12px;">${lastError?.message || 'Unknown error'}</p><button onclick="window.history.back()" style="padding:12px 24px;background:#2563eb;color:white;border:none;border-radius:6px;cursor:pointer;margin-top:20px;">Go Back</button></body></html>`;
+      await view.webContents.loadURL(fallbackUrl);
+    } catch (fallbackErr) {
+      console.error('[BrowserView] Fallback page failed:', fallbackErr);
+    }
   });
 
   ipcMain.on('browser-view-go-back', () => {
@@ -245,16 +285,71 @@ module.exports = function registerBrowserHandlers(ipcMain, handlers) {
     for (const [tabId, view] of tabViews) {
       if (view && view.webContents) {
         try {
+          const wc = view.webContents;
           tabs.push({
             tabId,
-            url: view.webContents.getURL(),
-            title: view.webContents.getTitle(),
-            isActive: tabId === handlers.activeTabId
+            url: wc.getURL(),
+            title: wc.getTitle(),
+            isActive: tabId === handlers.activeTabId,
+            isLoading: wc.isLoading(),
+            isAudible: audibleTabs.has(tabId),
+            isDestroyed: wc.isDestroyed(),
           });
         } catch (e) {}
       }
     }
     return tabs;
+  });
+
+  ipcMain.handle('get-tab-metadata', async (event, tabId) => {
+    const targetId = tabId || handlers.activeTabId;
+    const view = tabViews.get(targetId);
+    if (!view || !view.webContents) return null;
+    try {
+      const wc = view.webContents;
+      return {
+        tabId: targetId,
+        url: wc.getURL(),
+        title: wc.getTitle(),
+        isActive: targetId === handlers.activeTabId,
+        isLoading: wc.isLoading(),
+        isAudible: audibleTabs.has(targetId),
+        isDestroyed: wc.isDestroyed(),
+        lastAccessed: Date.now(),
+      };
+    } catch {
+      return null;
+    }
+  });
+
+  ipcMain.handle('get-tab-favicon', async (event, tabId) => {
+    const targetId = tabId || handlers.activeTabId;
+    const view = tabViews.get(targetId);
+    if (!view || !view.webContents) return '';
+    try {
+      return await view.webContents.executeJavaScript(`
+        (() => {
+          const icon = document.querySelector('link[rel="icon"]') ||
+                       document.querySelector('link[rel="shortcut icon"]') ||
+                       document.querySelector('link[rel="apple-touch-icon"]');
+          return icon ? icon.href : '';
+        })()
+      `);
+    } catch {
+      return '';
+    }
+  });
+
+  ipcMain.handle('get-tab-loading-states', async () => {
+    const states = {};
+    for (const [tabId, view] of tabViews) {
+      if (view && view.webContents) {
+        try {
+          states[tabId] = view.webContents.isLoading();
+        } catch {}
+      }
+    }
+    return states;
   });
 
   ipcMain.handle('search-dom', async (event, query) => {

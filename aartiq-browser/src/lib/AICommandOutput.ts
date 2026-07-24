@@ -202,6 +202,8 @@ function getCategoryForCommand(type: string): string {
         GMAIL_GET_MESSAGE: 'gmail',
         GMAIL_SEND_MESSAGE: 'gmail',
         GMAIL_ADD_LABEL: 'gmail',
+        SUMMARIZE_TABS: 'browser',
+        STATUS: 'utility',
     };
     
     return categories[type] || 'utility';

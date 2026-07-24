@@ -128,6 +128,27 @@ const AutomationSettings = () => {
   const [serviceRunning, setServiceRunning] = useState(false);
   const [cliEnabled, setCliEnabled] = useState(false);
 
+  // Directory allowlist
+  const [allowlistedDirs, setAllowlistedDirs] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('aartiq_automation_allowlist') || '[]'); } catch { return []; }
+  });
+  const [newDirInput, setNewDirInput] = useState('');
+
+  const addAllowlistedDir = useCallback(() => {
+    const dir = newDirInput.trim();
+    if (!dir) return;
+    const updated = [...new Set([...allowlistedDirs, dir])];
+    setAllowlistedDirs(updated);
+    localStorage.setItem('aartiq_automation_allowlist', JSON.stringify(updated));
+    setNewDirInput('');
+  }, [newDirInput, allowlistedDirs]);
+
+  const removeAllowlistedDir = useCallback((dir: string) => {
+    const updated = allowlistedDirs.filter(d => d !== dir);
+    setAllowlistedDirs(updated);
+    localStorage.setItem('aartiq_automation_allowlist', JSON.stringify(updated));
+  }, [allowlistedDirs]);
+
   // Monitor service status
   useEffect(() => {
     const checkService = async () => {
@@ -672,6 +693,54 @@ const AutomationSettings = () => {
           </AnimatePresence>
         </div>
       )}
+
+      {/* Directory Allowlist */}
+      <div className="mb-6 p-4 rounded-2xl bg-white/[0.02] border border-white/8">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <FolderOpen size={14} className="text-emerald-400" />
+            <h4 className="text-[11px] font-bold text-white uppercase tracking-wider">Directory Allowlist</h4>
+          </div>
+          <span className="text-[9px] text-secondary-text/40 font-mono">{allowlistedDirs.length} dirs</span>
+        </div>
+        <div className="space-y-1.5 mb-2">
+          {allowlistedDirs.length === 0 ? (
+            <p className="text-[10px] text-white/30 text-center py-2">No directories allowlisted yet</p>
+          ) : (
+            allowlistedDirs.map((dir, i) => (
+              <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.04]">
+                <FolderOpen size={10} className="text-emerald-400/50 shrink-0" />
+                <span className="text-[10px] text-secondary-text/60 font-mono truncate flex-1">{dir}</span>
+                <button
+                  onClick={() => removeAllowlistedDir(dir)}
+                  className="p-0.5 rounded text-secondary-text/30 hover:text-red-400 transition-colors"
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={newDirInput}
+            onChange={e => setNewDirInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addAllowlistedDir(); }}
+            placeholder="~/Documents/Aartiq/Reports"
+            className="flex-1 px-3 py-1.5 text-[10px] bg-white/[0.05] border border-white/[0.08] rounded-lg text-secondary-text placeholder-secondary-text/30 outline-none focus:border-emerald-400/30"
+          />
+          <button
+            onClick={addAllowlistedDir}
+            disabled={!newDirInput.trim()}
+            className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-all disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
+        <p className="text-[8px] text-secondary-text/30 mt-1.5">
+          Allowlisted directories can be accessed by background automations without approval.
+        </p>
+      </div>
 
       {/* Create/Edit Modal */}
       <AnimatePresence>

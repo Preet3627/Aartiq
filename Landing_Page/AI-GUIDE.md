@@ -65,7 +65,7 @@ export const APP_VERSION = {
 | Changelog | `/docs/changelog` | Release notes | Every release |
 | Cloud Sync | `/docs/cloud-sync` | WiFi P2P, E2EE sync, mobile | Sync changes |
 | AI Commands | `/docs/ai-commands` | All JSON commands for AI | New/modified commands |
-| Security | `/docs/security` | Three-layer security model | Security changes |
+| Security | `/docs/security` | Seven-layer defense-in-depth security model | Security changes |
 | Automation | `/docs/automation` | Background scheduling, cron | New automation features |
 | Native API | `/docs/native-api` | macOS SwiftUI panels, IPC | New APIs |
 | Apple Integration | `/docs/apple-integration` | Siri, Shortcuts, Voice, Raycast | macOS integration |
@@ -184,7 +184,7 @@ Aartiq uses structured JSON commands. Always respond with JSON format:
 
 ---
 
-### Three-Layer Security Architecture
+### Seven-Layer Defense-in-Depth Security Architecture
 
 1. **Visual Sandbox & SecureDOM** - AI uses `OCR_SCREEN` for external apps and a dedicated **SecureDOM Reader** (`READ_PAGE_CONTENT`) for internal pages. Raw HTML is filtered via a PII-stripping sanitization layer before reaching the agent.
 2. **In-Page DOM Search** - AI can perform targeted `SEARCH_DOM` queries to find specific text without loading the entire page into context, minimizing token usage and security exposure.

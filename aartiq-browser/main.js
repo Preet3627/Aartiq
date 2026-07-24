@@ -284,6 +284,8 @@ const { PopSearchService, popSearchService } = require('./src/lib/pop-search-ser
 const { WebSearchProvider } = require('./src/lib/web-search-service.js');
 const { MacNativePanelManager } = require('./src/lib/macos-native-panels.js');
 const { PluginManager, pluginManager } = require('./src/lib/plugin-manager.js');
+const { ChromeExtensionManager } = require('./src/lib/extensions/ChromeExtensionManager.js');
+const { AutofillProfileService } = require('./src/lib/autofill/AutofillProfileService.js');
 const { resolveAndClickWithAi } = require('./src/lib/browser-navigation-service.js');
 const { domEngine } = require('./src/lib/dom-engine.js');
 const { getMacOSPermissionHealth, resetMacOSPermissions } = require('./src/lib/macos-permission-health.js');
@@ -6046,6 +6048,14 @@ app.whenReady().then(async () => {
   // Initialize automation manager persistence
   automationManager.init();
 
+  // Initialize Chrome Extension Manager
+  const extensionManager = new ChromeExtensionManager();
+  await extensionManager.loadPersistedExtensions();
+  extensionManager.setupWebStoreInterception();
+
+  // Initialize Autofill Profile Service
+  const autofillProfileService = new AutofillProfileService();
+
   // ─── Passkey / WebAuthn support ────────────────────────────────────────────
   // macOS: Enables Touch ID (Secure Enclave) + platform passkeys (iCloud Keychain, 1Password, etc.)
   // Windows: Chromium's built-in Windows Hello WebAuthn is active by default.
@@ -6259,11 +6269,6 @@ app.whenReady().then(async () => {
           mainWindow.webContents.send('download-complete', { name: item.getFilename(), path: item.getSavePath() });
         }
 
-        // Auto-install logic for Chrome Extensions (.crx)
-        if (fileName.endsWith('.crx')) {
-          console.log(`[Main] Detected extension download: ${fileName}. Installing...`);
-          installExtensionLocally(saveDataPath);
-        }
       } else {
         console.log(`Download failed: ${state}`);
         if (mainWindow) {
@@ -6317,111 +6322,21 @@ app.whenReady().then(async () => {
     console.log('User ID set:', userId);
   });
 
-  ipcMain.handle('get-extensions', async () => {
-    const extensions = session.defaultSession.getAllExtensions();
-    return extensions.map(ext => ({
-      id: ext.id,
-      name: ext.name,
-      version: ext.version,
-      description: ext.description,
-      path: ext.path
-    }));
-  });
-
-  // Track extension paths so we can unload/reload on toggle
-  let _extensionPaths = {};
-  ipcMain.handle('toggle-extension', async (event, id) => {
-    try {
-      const ext = session.defaultSession.getExtension(id);
-      if (ext) {
-        _extensionPaths[id] = ext.path;
-        session.defaultSession.removeExtension(id);
-        console.log(`[Extensions] Disabled extension: ${ext.name} (${id})`);
-        return { success: true, enabled: false };
-      }
-      if (_extensionPaths[id]) {
-        const loaded = await session.defaultSession.loadExtension(_extensionPaths[id]);
-        console.log(`[Extensions] Enabled extension: ${loaded.name} (${id})`);
-        return { success: true, enabled: true };
-      }
-      console.warn(`[Extensions] Extension not found: ${id}`);
-      return { success: false, error: 'Extension not found' };
-    } catch (e) {
-      console.error(`[Extensions] Toggle failed for ${id}:`, e);
-      return { success: false, error: e.message };
-    }
-  });
-
-  ipcMain.handle('uninstall-extension', async (event, id) => {
-    try {
-      const ext = session.defaultSession.getExtension(id);
-      if (ext) {
-        const extPath = ext.path;
-        session.defaultSession.removeExtension(id);
-        // Optional: Delete from folder? 
-        // User said: "Drop your extension folder inside. Restart Aartiq"
-        // So if they uninstall, we should probably delete the folder too.
-        if (extPath.startsWith(extensionsPath)) {
-          fs.rmSync(extPath, { recursive: true, force: true });
-        }
-        return true;
-      }
-    } catch (e) {
-      console.error(`Failed to uninstall extension ${id}:`, e);
-    }
-    return false;
-  });
-
-  ipcMain.handle('get-extension-path', async () => {
-    return extensionsPath;
-  });
+  // Extension handlers are now registered via src/main/handlers/extension-handlers.js
 
   // Helper to install extension from a file path (e.g. download .crx)
   async function installExtensionLocally(crxPath) {
+    if (!extensionManager) return;
     try {
-      const fileName = path.basename(crxPath);
-      const extensionId = fileName.replace('.crx', '').split('_')[0] || `ext_${Date.now()}`;
-      const targetDir = path.join(extensionsPath, extensionId);
-
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
+      const result = await extensionManager.installFromCRX(crxPath);
+      console.log(`[Main] Extension installed from CRX: ${result.name}`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        // Check if the installed extension is a theme
+        const manifest = extensionManager.readManifest(result.path);
+        if (manifest.theme) {
+          mainWindow.webContents.send('apply-theme', manifest.theme);
+        }
       }
-
-      console.log(`[Main] Extracting extension to ${targetDir}...`);
-
-      // For Windows, use tar to extract. CRX files are basically ZIPs with header.
-      // We try to extract directly. If it fails due to header, we might need to strip it.
-      // However, tar often handles ZIP-like structures okay.
-      // Better yet, we use a simple command to strip the first 512 bytes if header exists, 
-      // but many CRXv3 can be opened by unzip tools directly.
-
-      exec(`tar -xf "${crxPath}" -C "${targetDir}"`, async (err) => {
-        if (err) {
-          console.error(`[Main] Extraction failed: ${err.message}. Trying alternative...`);
-          // Fallback or manual strip could go here
-        }
-
-        // Verify manifest
-        const manifestPath = path.join(targetDir, 'manifest.json');
-        if (fs.existsSync(manifestPath)) {
-          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-          console.log(`[Main] Extension ${manifest.name} extracted successfully.`);
-
-          // Check if it's a theme
-          if (manifest.theme) {
-            console.log(`[Main] Detected theme: ${manifest.name}. Applying colors...`);
-            if (mainWindow) mainWindow.webContents.send('apply-theme', manifest.theme);
-          }
-
-          // Load the extension into the session
-          try {
-            await session.defaultSession.loadExtension(targetDir);
-            if (mainWindow) mainWindow.webContents.send('extension-installed', { name: manifest.name, id: extensionId });
-          } catch (loadErr) {
-            console.error(`[Main] Failed to load extension: ${loadErr.message}`);
-          }
-        }
-      });
     } catch (e) {
       console.error(`[Main] installExtensionLocally error:`, e);
     }
@@ -9238,6 +9153,8 @@ ${tabData}`;
     mcpManager, fileSystemMcp, nativeAppMcp,
     extensionsPath, raycastState,
     popupWindows, createPopupWindow, pluginManager,
+    extensionManager,
+    autofillProfileService,
     ragService, voiceService, workflowRecorder, popSearch,
     flutterBridge,
     resolveAndClickWithAi, ensureVaultApprovalForFormFill,

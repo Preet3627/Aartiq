@@ -46,6 +46,15 @@ export const AI_ACTION_SECURITY_CATALOG: AIActionSecurityDefinition[] = [
     toggleable: true,
   },
   {
+    actionType: 'STATUS',
+    label: 'Set status',
+    description: 'Set custom processing indicator status.',
+    category: 'Utility',
+    risk: 'low',
+    detail: 'Display processing status to the user.',
+    toggleable: true,
+  },
+  {
     actionType: 'COMPARE_TABS',
     label: 'Compare tabs',
     description: 'Compare content across multiple open browser tabs.',

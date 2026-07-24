@@ -16,11 +16,11 @@ export interface WebSearchSettings {
 }
 
 export const WEB_SEARCH_DEFAULTS: WebSearchSettings = {
-  maxPages: 10,
+  maxPages: 1,
   maxCharsPerResult: 6000,
   totalBudget: 30000,
   defaultDepth: 'auto',
-  autoSummarize: false,
+  autoSummarize: true,
   deduplicateContent: true,
   enableQueryRelevance: true,
   searchEngine: 'duckduckgo',

@@ -63,12 +63,16 @@ function moveMouse(x, y) {
     } catch (e) {}
   }
   
-  const script = `
-    tell application "System Events"
-      set the position of the mouse to {${x}, ${y}}
-    end tell
-  `;
-  execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+  try {
+    const script = `
+      tell application "System Events"
+        set the position of the mouse to {${x}, ${y}}
+      end tell
+    `;
+    execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+  } catch (e) {
+    console.warn('[Automation/macOS] moveMouse failed:', e.message);
+  }
 }
 
 function click(x, y, button = 'left', double = false) {
@@ -81,116 +85,131 @@ function click(x, y, button = 'left', double = false) {
     } catch (e) {}
   }
   
-  moveMouse(x, y);
-  
-  if (button === 'left') {
-    const script = double
-      ? `tell application "System Events" to click at {${x}, ${y}}`
-      : `tell application "System Events" to click at {${x}, ${y}}`;
-    execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
-  } else if (button === 'right') {
-    const script = `tell application "System Events" to click at {${x}, ${y}}`;
-    execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
-  } else if (button === 'middle') {
+  try {
     moveMouse(x, y);
-    execSync('cliclick m:down && sleep 0.05 && cliclick m:up', { stdio: 'ignore' });
+
+    if (button === 'left') {
+      const script = `tell application "System Events" to click at {${x}, ${y}}`;
+      execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+    } else if (button === 'right') {
+      const script = `tell application "System Events" to click at {${x}, ${y}}`;
+      execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+    } else if (button === 'middle') {
+      moveMouse(x, y);
+      execSync('cliclick m:down && sleep 0.05 && cliclick m:up', { stdio: 'ignore' });
+    }
+  } catch (e) {
+    console.warn('[Automation/macOS] click failed:', e.message);
   }
 }
 
 function typeText(text) {
-  const sanitized = text
-    .replace(/'/g, "'\"'\"'")
-    .replace(/\n/g, '" & return & "');
-  
-  const script = `
-    tell application "System Events"
-      keystroke "${sanitized}"
-    end tell
-  `;
-  execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+  if (!text) return;
+  try {
+    const sanitized = text
+      .replace(/'/g, "'\"'\"'")
+      .replace(/\n/g, '" & return & "');
+    
+    const script = `
+      tell application "System Events"
+        keystroke "${sanitized}"
+      end tell
+    `;
+    execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+  } catch (e) {
+    console.warn('[Automation/macOS] typeText failed:', e.message);
+  }
 }
 
 function keyTap(key, modifiers = []) {
-  const modMap = {
-    'command': 'command down',
-    'control': 'control down',
-    'alt': 'option down',
-    'shift': 'shift down',
-    'control': 'control down',
-    'meta': 'command down'
-  };
-  
-  const mods = modifiers.map(m => modMap[m] || `${m} down`).join(' ');
-  const keyUpper = key.charAt(0).toUpperCase() + key.slice(1);
-  
-  let code;
-  const keyCodes = {
-    'return': 'return',
-    'enter': 'return',
-    'tab': 'tab',
-    'space': ' ',
-    'delete': 'delete',
-    'escape': 'escape',
-    'escape': 'escape',
-    'up': 'up arrow',
-    'down': 'down arrow',
-    'left': 'left arrow',
-    'right': 'right arrow',
-    'home': 'home',
-    'end': 'end',
-    'pageup': 'page up',
-    'pagedown': 'page down',
-    'f1': 'f1',
-    'f2': 'f2',
-    'f3': 'f3',
-    'f4': 'f4',
-    'f5': 'f5',
-    'f6': 'f6',
-    'f7': 'f7',
-    'f8': 'f8',
-    'f9': 'f9',
-    'f10': 'f10',
-    'f11': 'f11',
-    'f12': 'f12'
-  };
-  
-  code = keyCodes[key.toLowerCase()] || keyUpper;
-  
-  if (mods && code) {
-    const script = `
-      tell application "System Events"
-        keystroke "${code}" using {${mods}}
-      end tell
-    `;
-    execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
-  } else if (code) {
-    const script = `
-      tell application "System Events"
-        keystroke "${code}"
-      end tell
-    `;
-    execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+  try {
+    const modMap = {
+      'command': 'command down',
+      'control': 'control down',
+      'alt': 'option down',
+      'shift': 'shift down',
+      'control': 'control down',
+      'meta': 'command down'
+    };
+    
+    const mods = modifiers.map(m => modMap[m] || `${m} down`).join(' ');
+    const keyUpper = key.charAt(0).toUpperCase() + key.slice(1);
+    
+    let code;
+    const keyCodes = {
+      'return': 'return',
+      'enter': 'return',
+      'tab': 'tab',
+      'space': ' ',
+      'delete': 'delete',
+      'escape': 'escape',
+      'escape': 'escape',
+      'up': 'up arrow',
+      'down': 'down arrow',
+      'left': 'left arrow',
+      'right': 'right arrow',
+      'home': 'home',
+      'end': 'end',
+      'pageup': 'page up',
+      'pagedown': 'page down',
+      'f1': 'f1',
+      'f2': 'f2',
+      'f3': 'f3',
+      'f4': 'f4',
+      'f5': 'f5',
+      'f6': 'f6',
+      'f7': 'f7',
+      'f8': 'f8',
+      'f9': 'f9',
+      'f10': 'f10',
+      'f11': 'f11',
+      'f12': 'f12'
+    };
+    
+    code = keyCodes[key.toLowerCase()] || keyUpper;
+    
+    if (mods && code) {
+      const script = `
+        tell application "System Events"
+          keystroke "${code}" using {${mods}}
+        end tell
+      `;
+      execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+    } else if (code) {
+      const script = `
+        tell application "System Events"
+          keystroke "${code}"
+        end tell
+      `;
+      execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+    }
+  } catch (e) {
+    console.warn('[Automation/macOS] keyTap failed:', e.message);
   }
 }
 
 function scroll(x, y, direction, amount = 3) {
-  const directions = {
-    'up': '{0, -' + amount * 100 + '}',
-    'down': '{0, ' + amount * 100 + '}',
-    'left': '{-' + amount * 100 + ', 0}',
-    'right': '{' + amount * 100 + ', 0}'
-  };
-  
-  const delta = directions[direction] || '{0, -100}';
-  
-  moveMouse(x, y);
-  
-  const script = `
-    tell application "System Events"
-      set the scroll direction of window 1 to ${delta}
-    end tell
-  `;
-  execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+  try {
+    const directions = {
+      'up': '{0, -' + amount * 100 + '}',
+      'down': '{0, ' + amount * 100 + '}',
+      'left': '{-' + amount * 100 + ', 0}',
+      'right': '{' + amount * 100 + ', 0}'
+    };
+    
+    const delta = directions[direction] || '{0, -100}';
+    
+    moveMouse(x, y);
+    
+    const script = `
+      tell application "System Events"
+        set the scroll direction of window 1 to ${delta}
+      end tell
+    `;
+    execSync(`osascript -e '${script}'`, { stdio: 'ignore' });
+  } catch (e) {
+    console.warn('[Automation/macOS] scroll failed:', e.message);
+  }
 }
 
 function getMousePos() {

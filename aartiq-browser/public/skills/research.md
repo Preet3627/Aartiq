@@ -64,7 +64,7 @@ downstream — search depth, structure, and length.
 **BRIEFING** — "what's happening with X", "catch me up on Y", casual news
   requests, comparisons between 2–3 things, "explain what changed."
   Examples: "latest AI news", "what happened with the strike", "X vs Y"
-  → 3–8 searches. Answer-first paragraph (the "capsule"), then a handful of
+  → 2–4 searches. Answer-first paragraph (the "capsule"), then a handful of
   short sections or a bulleted rundown. No forced 12-part template. Length:
   roughly 150–500 words unless the topic genuinely has more distinct threads.
 
@@ -72,7 +72,9 @@ downstream — search depth, structure, and length.
   or policy research, or any topic where the user signals they want
   comprehensiveness ("deep research," "full report," "everything you can
   find," "give me a thorough analysis").
-  → 8–20+ searches, multi-source validation, full structured report (Step 9).
+  → 4–8 searches, multi-source validation, full structured report (Step 9).
+  IMPORTANT: Do NOT repeat searches that return the same results. If
+  search results are sufficient, synthesize and stop. Quality over quantity.
 
 If you're unsure between two modes, pick the lighter one. It's cheap to offer
 "want me to go deeper on any of this?" — it's expensive to bury a simple
@@ -128,13 +130,15 @@ For EACH search:
 1. Emit [WEB_SEARCH: <targeted query>] — include the actual current
    month/year when recency matters. Never assume a stale date.
    You can control how many pages to fetch and read per search using the
-   pages parameter: [WEB_SEARCH: {"query":"...","pages":8}]
-   - Default: 5 pages per search
-   - SNAPSHOT mode: pages:2 (just need a quick answer)
-   - BRIEFING mode: pages:3–5 (moderate depth)
-   - DEEP DIVE mode: pages:5–10 (thorough coverage)
+   pages parameter: [WEB_SEARCH: {"query":"...","pages":3}]
+   - Default: 1 page per search
+   - SNAPSHOT mode: pages:1 (just need a quick answer)
+   - BRIEFING mode: pages:1–2 (moderate depth)
+   - DEEP DIVE mode: pages:3–5 (thorough coverage)
    Use fewer pages for simple factual queries. Use more pages when you need
    broad coverage across many sources for a complex topic.
+   IMPORTANT: 1 page is usually enough. Only increase pages when you
+   specifically need multiple sources on a complex topic.
 2. Pick the best 2–3 URLs. Prefer the primary source over aggregators
    covering the same story.
 3. Emit [NAVIGATE: <url>] for each, then [READ_PAGE_CONTENT].
@@ -380,9 +384,9 @@ EXECUTION WORKFLOW
 3. PLAN internally, mode-appropriate depth (Step 2)
 4. ITERATE:
    a. [WEB_SEARCH: <targeted query, with current date context if relevant>]
-      Use pages param to control depth: pages:2 for snapshots, pages:5 for
-      briefings, pages:8–10 for deep dives.
-   b. Pick best 2–3 URLs, preferring primary sources
+      Use pages param to control depth: pages:1 for snapshots, pages:1–2 for
+      briefings, pages:3–5 for deep dives.
+   b. Pick best 1–2 URLs, preferring primary sources
    c. [NAVIGATE: <url>] → [READ_PAGE_CONTENT] for each
    d. Extract real facts, numbers, dates, quotes, source URLs, publish dates
    e. Update internal coverage tracking

@@ -221,6 +221,7 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
       type: entry.type || 'login',
       title: entry.title || '',
       formData: entry.formData || undefined,
+      hasTotp: !!entry.totpSecret,
     };
   }
 
@@ -323,9 +324,9 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
 
   ipcMain.handle('get-passwords-for-site', async (event, domain) => {
     const entries = getVaultEntries();
-    const normalizedDomain = (domain || '').toLowerCase().replace(/^https?:\/\//i, '').split('/')[0];
+    const { domainMatches } = require('../../core/vault-handlers');
     const matches = entries.filter(entry =>
-      normalizedDomain ? `${entry.site || ''}`.includes(normalizedDomain) : true
+      domain ? domainMatches(entry.site, domain) : true
     );
     return matches;
   });
@@ -333,12 +334,10 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
   ipcMain.handle('get-autofill-data', async (event, domain) => {
     try {
       const entries = getVaultEntries();
-      const normalizedDomain = (domain || '').toLowerCase().replace(/^https?:\/\//i, '').split('/')[0];
+      const { domainMatches } = require('../../core/vault-handlers');
       const matches = entries.filter(entry => {
-        const site = `${entry.site || ''}`.toLowerCase().replace(/^https?:\/\//i, '').split('/')[0];
-        return normalizedDomain
-          ? site.includes(normalizedDomain) || normalizedDomain.includes(site)
-          : false;
+        if (!domain) return false;
+        return domainMatches(entry.site, domain);
       });
       if (!matches.length) return { credentials: [], cards: [], addresses: [] };
       const credentials = matches.filter(e => (e.type || 'login') === 'login').map(e => ({
@@ -409,6 +408,8 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
     await syncToNativeKeychain(nextEntry);
     setVaultEntries(entries);
     clearVaultUnlock();
+    const { appendAudit } = require('../../core/vault-handlers');
+    appendAudit(null, { action: 'save', entryId: nextEntry.id, site: nextEntry.site, type: nextEntry.type, timestamp: new Date().toISOString() });
     return { success: true, entries: maskAllEntries() };
   });
 
@@ -429,6 +430,8 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
     setVaultEntries(getVaultEntries().filter(e => e.id !== entryId));
     await removeFromNativeKeychain(entry);
     clearVaultUnlock();
+    const { appendAudit } = require('../../core/vault-handlers');
+    appendAudit(null, { action: 'delete', entryId: entry.id, site: entry.site, timestamp: new Date().toISOString() });
     return { success: true, entries: maskAllEntries() };
   });
 
@@ -455,6 +458,8 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
       }
     }
 
+    const { appendAudit } = require('../../core/vault-handlers');
+    appendAudit(null, { action: 'read', entryId: entry.id, site: entry.site, timestamp: new Date().toISOString() });
     return { success: true, password: password || '' };
   });
 
@@ -485,6 +490,8 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
 
     const { clipboard } = require('electron');
     clipboard.writeText(password);
+    const { appendAudit } = require('../../core/vault-handlers');
+    appendAudit(null, { action: 'copy', entryId: entry.id, site: entry.site, timestamp: new Date().toISOString() });
     return { success: true };
   });
 
@@ -723,5 +730,81 @@ module.exports = function registerAuthHandlers(ipcMain, handlers) {
     }
   });
 
-  console.log('[Handlers] Auth handlers registered (native keychain + vault migration)');
+  // ============================================================================
+  // TOTP 2FA Support
+  // ============================================================================
+
+  ipcMain.handle('vault-generate-totp', async (event, entryId) => {
+    try {
+      const entries = getVaultEntries();
+      const entry = entries.find(e => e.id === entryId);
+      if (!entry) return { success: false, error: 'Entry not found' };
+      if (!entry.totpSecret) return { success: false, error: 'No TOTP secret configured for this entry' };
+
+      const { generateTotpCode, getTotpRemainingSeconds } = require('../../core/vault-handlers');
+      const code = generateTotpCode(entry.totpSecret);
+      const remaining = getTotpRemainingSeconds();
+      return { success: true, code, remaining, entryId };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('vault-save-totp-secret', async (event, entryId, totpSecret) => {
+    try {
+      const entries = getVaultEntries();
+      const entry = entries.find(e => e.id === entryId);
+      if (!entry) return { success: false, error: 'Entry not found' };
+
+      const verification = await verifyVaultAccess({
+        reason: 'Unlock Neural Vault to save a TOTP secret.',
+        actionText: `Save TOTP for ${entry.site || 'unknown'}`,
+        store, permissionStore,
+      });
+      if (!verification.success) return { success: false, error: verification.error };
+
+      entry.totpSecret = totpSecret;
+      setVaultEntries(entries);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('vault-remove-totp-secret', async (event, entryId) => {
+    try {
+      const entries = getVaultEntries();
+      const entry = entries.find(e => e.id === entryId);
+      if (!entry) return { success: false, error: 'Entry not found' };
+
+      const verification = await verifyVaultAccess({
+        reason: 'Unlock Neural Vault to remove a TOTP secret.',
+        actionText: `Remove TOTP for ${entry.site || 'unknown'}`,
+        store, permissionStore,
+      });
+      if (!verification.success) return { success: false, error: verification.error };
+
+      delete entry.totpSecret;
+      setVaultEntries(entries);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // ============================================================================
+  // Vault Audit Log
+  // ============================================================================
+
+  ipcMain.handle('vault-read-audit-log', async (event, limit = 100) => {
+    try {
+      const { readAuditLog } = require('../../core/vault-handlers');
+      const entries = readAuditLog(null, limit);
+      return { success: true, entries };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  console.log('[Handlers] Auth handlers registered (native keychain + vault migration + TOTP + audit)');
 };

@@ -52,6 +52,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reload: () => ipcRenderer.send('browser-view-reload'),
   getCurrentUrl: () => ipcRenderer.invoke('get-browser-view-url'),
   getOpenTabs: () => ipcRenderer.invoke('get-open-tabs'),
+  getTabMetadata: (tabId) => ipcRenderer.invoke('get-tab-metadata', tabId),
+  getTabFavicon: (tabId) => ipcRenderer.invoke('get-tab-favicon', tabId),
+  getTabLoadingStates: () => ipcRenderer.invoke('get-tab-loading-states'),
   extractPageContent: (tabId) => ipcRenderer.invoke('extract-page-content', tabId),
   extractSecureDOM: () => ipcRenderer.invoke('extract-secure-dom'),
   searchDOM: (query) => ipcRenderer.invoke('search-dom', query),
@@ -174,6 +177,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   vaultCopySecret: (entryId) => ipcRenderer.invoke('vault-copy-secret', entryId),
   vaultCheckMigration: () => ipcRenderer.invoke('vault-check-migration'),
   vaultMigrateToModern: () => ipcRenderer.invoke('vault-migrate-to-modern'),
+  vaultGenerateTotp: (entryId) => ipcRenderer.invoke('vault-generate-totp', entryId),
+  vaultSaveTotpSecret: (entryId, totpSecret) => ipcRenderer.invoke('vault-save-totp-secret', entryId, totpSecret),
+  vaultRemoveTotpSecret: (entryId) => ipcRenderer.invoke('vault-remove-totp-secret', entryId),
+  vaultReadAuditLog: (limit) => ipcRenderer.invoke('vault-read-audit-log', limit),
   extractSearchResults: (tabId) => ipcRenderer.invoke('extract-search-results', tabId),
   translateWebsite: (args) => ipcRenderer.invoke('translate-website', args),
   translateText: (args) => ipcRenderer.invoke('translate-text', args),
@@ -271,6 +278,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleExtension: (id) => ipcRenderer.invoke('toggle-extension', id),
   uninstallExtension: (id) => ipcRenderer.invoke('uninstall-extension', id),
   openExtensionDir: () => ipcRenderer.send('open-extension-dir'),
+  installExtensionFolder: (folderPath) => ipcRenderer.invoke('install-extension-folder', folderPath),
+  installExtensionCRX: (crxPath) => ipcRenderer.invoke('install-extension-crx', crxPath),
+  enableExtension: (id) => ipcRenderer.invoke('enable-extension', id),
+  disableExtension: (id) => ipcRenderer.invoke('disable-extension', id),
+  selectAndInstallExtension: () => ipcRenderer.invoke('select-and-install-extension'),
+  onExtensionInstalled: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('extension-installed', subscription);
+    return () => ipcRenderer.removeListener('extension-installed', subscription);
+  },
+  onExtensionRemoved: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('extension-removed', subscription);
+    return () => ipcRenderer.removeListener('extension-removed', subscription);
+  },
+  onExtensionUpdated: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('extension-updated', subscription);
+    return () => ipcRenderer.removeListener('extension-updated', subscription);
+  },
+  getExtensionActions: () => ipcRenderer.invoke('get-extension-actions'),
+  openExtensionPopup: (extensionId) => ipcRenderer.invoke('open-extension-popup', extensionId),
+  closeExtensionPopup: () => ipcRenderer.send('close-extension-popup'),
+  onExtensionActionUpdated: (callback) => {
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on('extension-action-updated', subscription);
+    return () => ipcRenderer.removeListener('extension-action-updated', subscription);
+  },
+  // Autofill Profile Service
+  autofillList: () => ipcRenderer.invoke('autofill:list'),
+  autofillGet: (id) => ipcRenderer.invoke('autofill:get', id),
+  autofillAdd: (profile) => ipcRenderer.invoke('autofill:add', profile),
+  autofillUpdate: (id, updates) => ipcRenderer.invoke('autofill:update', id, updates),
+  autofillDelete: (id) => ipcRenderer.invoke('autofill:delete', id),
+  autofillDetect: () => ipcRenderer.invoke('autofill:detect'),
+  autofillFill: (profileId) => ipcRenderer.invoke('autofill:fill', profileId),
   toggleAdblocker: (enable) => ipcRenderer.send('toggle-adblocker', enable),
 
   // Window Controls

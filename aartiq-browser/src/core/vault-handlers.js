@@ -1,5 +1,7 @@
 const Store = require('electron-store');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
 
 const vaultStore = new Store({ name: 'comet-vault' });
 
@@ -362,6 +364,102 @@ const vaultCopySecret = async (entryId) => {
   return { success: true };
 };
 
+// ============================================================================
+// TOTP 2FA Support
+// ============================================================================
+
+const TOTP_WINDOW = 1;
+
+function generateTotpCode(secret) {
+  if (!secret) return null;
+  const epoch = Math.floor(Date.now() / 1000);
+  const counter = Math.floor(epoch / 30);
+  const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const cleanSecret = secret.replace(/[\s=-]/g, '').toUpperCase();
+  let bits = '';
+  for (const ch of cleanSecret) {
+    const val = base32Chars.indexOf(ch);
+    if (val === -1) continue;
+    bits += val.toString(2).padStart(5, '0');
+  }
+  const keyBytes = Buffer.alloc(Math.floor(bits.length / 8));
+  for (let i = 0; i < keyBytes.length; i++) {
+    keyBytes[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+  }
+  const counterBuf = Buffer.alloc(8);
+  counterBuf.writeUInt32BE(Math.floor(counter / 4294967296), 0);
+  counterBuf.writeUInt32BE(counter & 4294967295, 4);
+  const hmac = crypto.createHmac('sha1', keyBytes).update(counterBuf).digest();
+  const offset = hmac[hmac.length - 1] & 15;
+  const code = ((hmac[offset] & 127) << 24 | (hmac[offset + 1] & 255) << 16 | (hmac[offset + 2] & 255) << 8 | (hmac[offset + 3] & 255));
+  return (code % 1000000).toString().padStart(6, '0');
+}
+
+function getTotpRemainingSeconds() {
+  return 30 - (Math.floor(Date.now() / 1000) % 30);
+}
+
+// ============================================================================
+// Append-only Audit Log
+// ============================================================================
+
+const AUDIT_LOG_FILE = 'vault-audit.log';
+const AUDIT_LOG_MAX = 10000;
+
+function getAuditLogPath(userDataPath) {
+  return path.join(userDataPath || require('electron').app.getPath('userData'), AUDIT_LOG_FILE);
+}
+
+function appendAudit(userDataPath, entry) {
+  try {
+    const auditPath = getAuditLogPath(userDataPath);
+    fs.mkdirSync(path.dirname(auditPath), { recursive: true });
+    fs.appendFileSync(auditPath, JSON.stringify(entry) + '\n', { encoding: 'utf-8', mode: 0o600 });
+    try {
+      const stat = fs.statSync(auditPath);
+      if (stat.size > 1024 * 1024) {
+        const lines = fs.readFileSync(auditPath, 'utf-8').split('\n').filter(l => l.trim());
+        if (lines.length > AUDIT_LOG_MAX) {
+          fs.writeFileSync(auditPath, lines.slice(-AUDIT_LOG_MAX).join('\n') + '\n', { encoding: 'utf-8', mode: 0o600 });
+        }
+      }
+    } catch { }
+  } catch { }
+}
+
+function readAuditLog(userDataPath, limit = 100) {
+  try {
+    const auditPath = getAuditLogPath(userDataPath);
+    if (!fs.existsSync(auditPath)) return [];
+    const lines = fs.readFileSync(auditPath, 'utf-8').split('\n').filter(l => l.trim());
+    return lines.slice(-Math.min(limit, AUDIT_LOG_MAX)).map(line => JSON.parse(line)).reverse();
+  } catch {
+    return [];
+  }
+}
+
+// ============================================================================
+// Domain-scoped matching with wildcard support
+// ============================================================================
+
+function normalizeCredentialHost(value) {
+  try {
+    const parsed = new URL(value.includes('://') ? value : `https://${value}`);
+    return parsed.hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    const normalized = value.toLowerCase().trim().replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/.*$/, '');
+    return normalized && !normalized.includes(' ') ? normalized : null;
+  }
+}
+
+function domainMatches(pattern, hostname) {
+  const isWildcard = typeof pattern === 'string' && pattern.trim().startsWith('*.');
+  const p = normalizeCredentialHost(isWildcard ? pattern.slice(2) : pattern);
+  const h = normalizeCredentialHost(hostname);
+  if (!p || !h) return false;
+  return isWildcard ? h.endsWith('.' + p) || h === p : p === h;
+}
+
 module.exports = {
   vaultListEntries,
   vaultSaveEntry,
@@ -370,5 +468,11 @@ module.exports = {
   vaultCopySecret,
   migrateVaultToModernFormat,
   checkVaultMigrationStatus,
-  vaultStore
+  vaultStore,
+  generateTotpCode,
+  getTotpRemainingSeconds,
+  appendAudit,
+  readAuditLog,
+  normalizeCredentialHost,
+  domainMatches,
 };

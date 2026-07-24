@@ -65,6 +65,21 @@ Aartiq is a cross-platform AI-native browser with OS automation capabilities. It
 | `SiriShortcutsIntegration.ts` | macOS Siri and Shortcuts bridge |
 | `tesseract-service.js` | OCR via Tesseract.js |
 | `plugin-manager.js` | Dynamic plugin loading |
+| `BackgroundNotifications.tsx` | Shows completed background task events on re-open |
+| `AutomationPlanApproval.tsx` | Pre-execution plan with risk assessment + permission gates |
+| `AutomationSettings.tsx` (enhanced) | Directory allowlisting for background automations |
+| `WidgetContainer.tsx` | Collapsible/draggable/removable widget wrapper |
+| `CustomizationPanel.tsx` | Widget enable/disable/reorder modal |
+| `PrivacyControls.tsx` | Memory/preference/tab/animations toggles |
+| `AIVisualTheme.tsx` | Glow mode, color, intensity sliders |
+| `AITabAnimation.tsx` | CSS keyframe AI status animations |
+| `widgets/DashboardWidget.tsx` | Greeting + stats + contextual tab actions |
+| `widgets/MemoryWidget.tsx` | Learned preferences + session memory with search |
+| `widgets/SessionTimelineWidget.tsx` | Live action chain step display |
+| `widgets/TabIntelligenceWidget.tsx` | Domain-grouped tabs with smart icons |
+| `widgets/QuickActionsWidget.tsx` | AI-powered contextual + hardcoded suggestions |
+| `widgets/CapabilitiesWidget.tsx` | Lists AI capabilities |
+| `widgets/TasksWidget.tsx` | Past automation runs with retry failed |
 
 ## Communication Protocols
 

@@ -1,8 +1,9 @@
 // Memory-efficient virtualized tab bar for 50+ tabs with Drag-and-Drop and AI Grouping
-import React, { useMemo, useRef, useEffect, useState } from 'react';
+import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { Globe, Plus, Volume2, FolderOpen, Loader2, Sparkles } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { Reorder, AnimatePresence, motion } from 'framer-motion';
+import { tabGroupingService } from '@/lib/TabGroupingService';
 
 interface Tab {
   id: string;
@@ -42,6 +43,19 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
   const lastDirection = useRef<number>(0); // -1 for left, 1 for right
   const [isShaking, setIsShaking] = useState(false);
   const [isOrganizing, setIsOrganizing] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'g') {
+        e.preventDefault();
+        if (!tabGroupingService.isBusy) {
+          autoGroupTabsAI();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [tabs]);
 
   const handleTabClick = (tabId: string) => {
     const now = Date.now();
@@ -96,31 +110,34 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
     lastX.current = currentX;
   };
 
-  const autoGroupTabsAI = async () => {
+  const autoGroupTabsAI = useCallback(async () => {
     if (isOrganizing) return;
     setIsOrganizing(true);
     
-    // Safety timeout: Reset state after 10 seconds max if IPC hangs
     const safetyTimeout = setTimeout(() => {
       setIsOrganizing(false);
       setIsShaking(false);
     }, 10000);
     
     try {
-      const tabList = tabs.map(t => ({ id: t.id, title: t.title, url: t.url || '' }));
-      const result = await (window as any).electronAPI.classifyTabsAi({ tabs: tabList });
+      const classifyTabs = async (tabList: Array<{ id: string; title: string; url: string }>) => {
+        return await (window as any).electronAPI.classifyTabsAi({ tabs: tabList });
+      };
+
+      const result = await tabGroupingService.organizeTabs(
+        () => tabs.map(t => ({ id: t.id, title: t.title, url: t.url || '' })),
+        (tabIds, groupName) => store.groupTabs(tabIds, groupName),
+        (tabId) => store.removeTab(tabId),
+        classifyTabs,
+        { strategy: 'ai' }
+      );
       
-      if (result.success && result.classifications) {
-        // Group each tab
-        const classifications = result.classifications;
-        Object.entries(classifications).forEach(([tabId, groupName]) => {
-          store.groupTabs([tabId], groupName as string);
-        });
-        
-        // Final feedback
+      if (result.success) {
         if (window.electronAPI) {
-          const uniqueGroups = new Set(Object.values(classifications)).size;
-          window.electronAPI.sendToAIChatInput(`AI: I've successfully organized your tabs into ${uniqueGroups} logical groups based on their content.`);
+          const feedback = result.closedDuplicates.length > 0
+            ? `AI: Organized tabs into ${result.groups.length} groups and closed ${result.closedDuplicates.length} duplicate(s).`
+            : `AI: Organized tabs into ${result.groups.length} groups.`;
+          window.electronAPI.sendToAIChatInput(feedback);
         }
       }
     } catch (e) {
@@ -130,7 +147,7 @@ export const VirtualizedTabBar: React.FC<VirtualizedTabBarProps> = ({
       setIsOrganizing(false);
       setIsShaking(false);
     }
-  };
+  }, [tabs, isOrganizing]);
 
   // Group tabs by groupId for rendering with logic
   const renderedTabs = useMemo(() => {

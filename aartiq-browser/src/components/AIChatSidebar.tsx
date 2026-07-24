@@ -5226,6 +5226,13 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
+        case 'STATUS': {
+          const statusText = command.value || command.params?.text || 'Working...';
+          setCustomStatusText(statusText);
+          output = `Status set: ${statusText}`;
+          break;
+        }
+
         case 'SET_CHAT_STYLE': {
           const fontSizeVal = command.params?.fontSize ? parseInt(command.params.fontSize, 10) : undefined;
           const glowModeVal = command.params?.glowMode as GlowMode | undefined;
@@ -5917,6 +5924,10 @@ I've successfully executed the following real tasks:
         textLength: m.ocrText.length,
         content: m.ocrText.trim()
       }, null, 2)}\n[/${tag}]\n`;
+      // Also include raw page content as readable text so the AI actually uses it
+      if (isDomContent && m.ocrText.trim().length > 0) {
+        result += `\n--- Page Content ---\n${m.ocrText.trim()}\n--- End Page Content ---\n`;
+      }
     }
 
     // Action Chain (Separate JSON format)

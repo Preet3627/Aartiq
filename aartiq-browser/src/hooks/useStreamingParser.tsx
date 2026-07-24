@@ -77,7 +77,8 @@ const AI_COMMAND_TYPES = new Set([
   'DOM_SEARCH', 'DOM_READ_FILTERED',
   'OPEN_MCP_SETTINGS', 'OPEN_AUTOMATION_SETTINGS', 'LIST_AUTOMATIONS', 'DELETE_AUTOMATION',
   'OPEN_SCHEDULING_MODAL', 'SCHEDULE_TASK', 'OPEN_PDF', 'PLUGIN_COMMAND',
-  'ORGANIZE_TABS', 'CLOSE_TAB', 'GENERATE_IMAGE',
+  'ORGANIZE_TABS', 'GROUP_TABS', 'CLOSE_TAB', 'GENERATE_IMAGE', 'ANALYSE_TABS', 'ANALYZE_TABS',
+  'SUMMARIZE_TABS', 'STATUS',
 ]);
 
 const COMMAND_CATEGORIES: Record<string, string> = {
@@ -92,7 +93,11 @@ const COMMAND_CATEGORIES: Record<string, string> = {
   FIND_AND_CLICK: 'automation',
   FILL_FORM: 'automation',
   SCROLL_TO: 'automation',
+  ANALYSE_TABS: 'browser',
+  ANALYZE_TABS: 'browser',
+  SUMMARIZE_TABS: 'browser',
   ORGANIZE_TABS: 'automation',
+  GROUP_TABS: 'automation',
   SHELL_COMMAND: 'system',
   OPEN_APP: 'system',
   SET_VOLUME: 'system',
@@ -115,6 +120,7 @@ const COMMAND_CATEGORIES: Record<string, string> = {
   RELOAD: 'utility',
   GO_BACK: 'utility',
   GO_FORWARD: 'utility',
+  STATUS: 'utility',
   THINK: 'meta',
   PLAN: 'meta',
   EXPLAIN_CAPABILITIES: 'meta',

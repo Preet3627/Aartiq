@@ -486,7 +486,7 @@ class WebSearchProvider {
 
   async searchForContext(query, provider) {
     try {
-      const results = await this.search(query, provider, 5);
+      const results = await this.search(query, provider, 1);
       return results
         .map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.snippet}`)
         .join('\n\n');

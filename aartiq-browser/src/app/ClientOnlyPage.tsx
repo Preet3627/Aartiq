@@ -53,6 +53,7 @@ import { firebaseConfigStorage } from '@/lib/firebaseConfigStorage';
 import { QuickNavOverlay } from '@/components/QuickNavOverlay';
 import TitleBar from '@/components/TitleBar';
 import { useOptimizedTabs } from '@/hooks/useOptimizedTabs';
+import ExtensionActionBar from '@/components/ExtensionActionBar';
 import { VirtualizedTabBar } from '@/components/VirtualizedTabBar';
 import { TabSwitcherOverlay } from '@/components/TabSwitcherOverlay';
 import { selectClientOnlyPageStore } from '@/store/selectors';
@@ -1473,12 +1474,12 @@ export default function Home() {
 
   const handleGo = (urlToNavigate?: string, options?: { newTab?: boolean; active?: boolean }) => {
     const { newTab = false, active = true } = options || {};
-    let url = urlToNavigate || inputValue.trim();
-    if (!url) return;
+    let raw = urlToNavigate || inputValue.trim();
+    if (!raw) return;
 
-    if (url.startsWith('>>')) {
+    if (raw.startsWith('>>')) {
       if (window.electronAPI) {
-        window.electronAPI.wifiSyncBroadcast({ type: 'agent-task', task: url.substring(2).trim() });
+        window.electronAPI.wifiSyncBroadcast({ type: 'agent-task', task: raw.substring(2).trim() });
         setInputValue('');
         return;
       } else {
@@ -1496,17 +1497,17 @@ export default function Home() {
       }
     };
 
-    if (isAuthUrl(url) && window.electronAPI) {
-      window.electronAPI.openAuthWindow(url);
+    if (isAuthUrl(raw) && window.electronAPI) {
+      window.electronAPI.openAuthWindow(raw);
       return;
     }
 
     const mathChars = /^[0-9+\-*/().\s^%]+$/;
-    if (mathChars.test(url)) {
+    if (mathChars.test(raw)) {
       try {
-        const result = safeEval(url.replace(/\^/g, '**'));
+        const result = safeEval(raw.replace(/\^/g, '**'));
         if (typeof result === 'number' && !isNaN(result)) {
-          const searchUrl = `${searchEngines[store.selectedEngine as keyof typeof searchEngines].url}${encodeURIComponent(url + " = " + result)}`;
+          const searchUrl = `${searchEngines[store.selectedEngine as keyof typeof searchEngines].url}${encodeURIComponent(raw + " = " + result)}`;
           if (window.electronAPI) {
             window.electronAPI.navigateBrowserView({ tabId: store.activeTabId, url: searchUrl });
           }
@@ -1515,11 +1516,22 @@ export default function Home() {
       } catch (e) { }
     }
 
-    if (url.includes('.') && !url.includes(' ') && !url.startsWith('http')) {
-      url = `https://${url}`;
-    } else if (!url.startsWith('http')) {
-      url = `${searchEngines[store.selectedEngine as keyof typeof searchEngines].url}${encodeURIComponent(url)}`;
-      if (store.enableAIAssist) runAiOverview(store.currentUrl.trim());
+    // Normalize URL: detect if input is a URL or search query
+    let url = raw;
+    const hasProtocol = /^https?:\/\//i.test(url);
+    const hasDot = /\.\w{2,}/.test(url);
+    const hasSpace = url.includes(' ');
+    const isIp = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?(\/.*)?$/.test(url);
+    const isLocalhost = /^localhost(:\d+)?(\/.*)?$/i.test(url);
+    const isDomainWithPort = /^[a-zA-Z0-9-]+:\d+(\/.*)?$/.test(url);
+
+    if (!hasProtocol) {
+      if (isIp || isLocalhost || hasDot || isDomainWithPort) {
+        url = `https://${url}`;
+      } else {
+        url = `${searchEngines[store.selectedEngine as keyof typeof searchEngines].url}${encodeURIComponent(url)}`;
+        if (store.enableAIAssist) runAiOverview(raw);
+      }
     }
 
     if (newTab) {
@@ -2537,6 +2549,7 @@ export default function Home() {
                   )}
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 no-drag-region z-20 flex items-center gap-1.5">
                     {toolbarOrder.filter((id) => store.theme !== 'minimal' || id === 'downloads' || id === 'quick-search').map((id) => renderToolbarAction(id))}
+                    <ExtensionActionBar />
                   </div>
                   {isTyping && suggestions.length > 0 && (
                     <div

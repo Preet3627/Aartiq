@@ -34,7 +34,7 @@ class ProfessionalPDFGenerator {
       },
       footer: (currentPage, pageCount) => ({
         columns: [
-          { text: `© ${new Date().getFullYear()} Aartiq Browser`, fontSize: 8, color: '#666' },
+          { text: `© ${new Date().getFullYear()} Aartiq Browser — For the questions that matter.`, fontSize: 8, color: '#666' },
           { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8, color: '#666', alignment: 'right' }
         ],
         margin: [40, 10, 40, 0]
@@ -132,7 +132,7 @@ class ProfessionalPDFGenerator {
       color: rgb(0.58, 0.64, 0.72)
     });
     
-    page.drawText('Aartiq Browser - Premium AI Browser', {
+    page.drawText('Aartiq Browser — For the questions that matter.', {
       x: 40,
       y: 60,
       size: 12,
@@ -309,7 +309,7 @@ class ProfessionalPDFGenerator {
 <body>
   <section class="cover">
     <div class="brand">Aartiq</div>
-    <div class="tagline">Premium AI Browser</div>
+    <div class="tagline">For the questions that matter.</div>
     <h1>${title}</h1>
     <div class="category">Intelligence Report</div>
     <div class="meta">
@@ -320,6 +320,7 @@ class ProfessionalPDFGenerator {
   <div class="content">${content}</div>
   <div class="footer">
     <span>© ${new Date().getFullYear()} Aartiq Browser</span>
+    <span style="font-style: italic;">For the questions that matter.</span>
     <span>AI Generated</span>
   </div>
 </body>

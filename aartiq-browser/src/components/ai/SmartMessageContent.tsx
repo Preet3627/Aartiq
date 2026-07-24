@@ -585,8 +585,12 @@ function parseShellOutput(text: string): ShellOutputItem[] {
 function parseContent(content: string): ParsedSegment[] {
   if (!content) return [];
 
+  // Strip raw RAG source tags ([SOURCE N: ...] """ ... """) before parsing
+  let cleaned = content.replace(/\[SOURCE\s+\d+:.*?\]/gi, '');
+  cleaned = cleaned.replace(/""".*?"""/gs, '');
+
   const segments: ParsedSegment[] = [];
-  let remaining = content;
+  let remaining = cleaned;
 
   // Try to extract search result blocks
   const searchMarkers = [

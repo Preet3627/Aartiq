@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
     Lock, Eye, EyeOff, Search, Plus, Trash2, Key, Globe, User, 
-    ShieldCheck, Copy, Check, FileText, Database, Shield, ChevronDown, ChevronUp
+    ShieldCheck, Copy, Check, FileText, Database, Shield, ChevronDown, ChevronUp, 
+    Clock, Smartphone, X
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -17,6 +18,7 @@ type VaultEntry = {
     type?: 'login' | 'form' | 'note';
     title?: string;
     formData?: Array<{ label: string, value: string, name: string }>;
+    hasTotp?: boolean;
 };
 
 export default function NeuralVaultManager() {
@@ -29,6 +31,10 @@ export default function NeuralVaultManager() {
     const [addType, setAddType] = useState<'login' | 'form' | 'note'>('login');
     const [vaultStatus, setVaultStatus] = useState<string | null>(null);
     const [expandedForm, setExpandedForm] = useState<string | null>(null);
+    const [totpCodes, setTotpCodes] = useState<Record<string, { code: string; remaining: number }>>({});
+    const [addingTotp, setAddingTotp] = useState<string | null>(null);
+    const [totpInput, setTotpInput] = useState('');
+    const totpTimers = useRef<ReturnType<typeof setInterval> | null>(null);
     const store = useAppStore();
 
     // New Entry States
@@ -45,6 +51,30 @@ export default function NeuralVaultManager() {
         };
         loadVaultEntries();
     }, []);
+
+    const refreshTotpCode = useCallback(async (id: string) => {
+        if (!window.electronAPI?.vaultGenerateTotp) return;
+        const result = await window.electronAPI.vaultGenerateTotp(id);
+        if (result.success && result.code) {
+            setTotpCodes(prev => ({ ...prev, [id]: { code: result.code!, remaining: result.remaining! } }));
+        } else {
+            setTotpCodes(prev => {
+                const next = { ...prev };
+                delete next[id];
+                return next;
+            });
+        }
+    }, []);
+
+    useEffect(() => {
+        const totpEntries = entries.filter(e => e.hasTotp);
+        if (totpEntries.length === 0) return;
+        totpEntries.forEach(e => refreshTotpCode(e.id));
+        totpTimers.current = setInterval(() => {
+            totpEntries.forEach(e => refreshTotpCode(e.id));
+        }, 5000);
+        return () => { if (totpTimers.current) clearInterval(totpTimers.current); };
+    }, [entries, refreshTotpCode]);
 
     const pushVaultStatus = (message: string | null) => {
         setVaultStatus(message);
@@ -293,6 +323,23 @@ export default function NeuralVaultManager() {
                                     </div>
 
                                     <div className="flex items-center gap-4">
+                                        {item.hasTotp && totpCodes[item.id] && (
+                                            <div className="flex items-center gap-2 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
+                                                <Smartphone size={12} className="text-emerald-400" />
+                                                <span className="text-sm font-mono tracking-widest text-emerald-400 font-bold">
+                                                    {totpCodes[item.id].code}
+                                                </span>
+                                                <div className="w-4 h-4 rounded-full border-2 border-emerald-500/30 flex items-center justify-center">
+                                                    <div
+                                                        className="w-2 h-2 rounded-full bg-emerald-500 transition-all"
+                                                        style={{ opacity: totpCodes[item.id].remaining / 30 }}
+                                                    />
+                                                </div>
+                                                <span className="text-[8px] font-mono text-emerald-500/60 w-4 text-right">
+                                                    {totpCodes[item.id].remaining}
+                                                </span>
+                                            </div>
+                                        )}
                                         {item.type !== 'form' && (
                                             <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
                                                 <span className="text-[10px] font-mono tracking-widest text-[var(--primary-text)]/80 min-w-[80px] text-right">
@@ -308,6 +355,23 @@ export default function NeuralVaultManager() {
                                         )}
 
                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                            {item.hasTotp ? (
+                                                <button
+                                                    onClick={() => { setAddingTotp(item.id); setTotpInput(''); }}
+                                                    className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 rounded-lg transition-all"
+                                                    title="Remove TOTP"
+                                                >
+                                                    <Smartphone size={16} />
+                                                </button>
+                                            ) : item.type === 'login' ? (
+                                                <button
+                                                    onClick={() => { setAddingTotp(item.id); setTotpInput(''); }}
+                                                    className="p-2 bg-emerald-500/10 text-emerald-500/50 hover:text-emerald-500 hover:bg-emerald-500/20 rounded-lg transition-all"
+                                                    title="Add TOTP"
+                                                >
+                                                    <Smartphone size={16} />
+                                                </button>
+                                            ) : null}
                                             {item.type === 'form' ? (
                                                 <button
                                                     onClick={() => setExpandedForm(expandedForm === item.id ? null : item.id)}
@@ -361,6 +425,62 @@ export default function NeuralVaultManager() {
                     )}
                 </div>
             </div>
+
+            {addingTotp && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setAddingTotp(null)}>
+                    <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl p-6 w-96 shadow-2xl backdrop-blur-xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
+                                <Smartphone size={16} className="text-emerald-400" />
+                                {entries.find(e => e.id === addingTotp)?.hasTotp ? 'Remove TOTP' : 'Add TOTP Secret'}
+                            </h3>
+                            <button onClick={() => setAddingTotp(null)} className="text-white/20 hover:text-white/60 transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        {entries.find(e => e.id === addingTotp)?.hasTotp ? (
+                            <div className="space-y-4">
+                                <p className="text-xs text-white/50">Remove the TOTP two-factor authentication secret from this entry?</p>
+                                <div className="flex gap-3 justify-end">
+                                    <button onClick={() => setAddingTotp(null)} className="px-4 py-2 text-xs font-bold bg-white/5 hover:bg-white/10 rounded-xl transition-all">Cancel</button>
+                                    <button onClick={async () => {
+                                        if (!window.electronAPI?.vaultRemoveTotpSecret) return;
+                                        const r = await window.electronAPI.vaultRemoveTotpSecret(addingTotp);
+                                        if (r.success) {
+                                            setEntries(prev => prev.map(e => e.id === addingTotp ? { ...e, hasTotp: false } : e));
+                                            setTotpCodes(prev => { const n = { ...prev }; delete n[addingTotp]; return n; });
+                                            pushVaultStatus('TOTP secret removed.');
+                                        } else pushVaultStatus(r.error || 'Failed to remove TOTP.');
+                                        setAddingTotp(null);
+                                    }} className="px-4 py-2 text-xs font-bold bg-red-500 hover:bg-red-600 text-white rounded-xl transition-all">Remove TOTP</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <p className="text-xs text-white/50">Enter the base32-encoded TOTP secret key from your 2FA provider for <strong className="text-white/80">{entries.find(e => e.id === addingTotp)?.site}</strong>.</p>
+                                <input
+                                    value={totpInput}
+                                    onChange={e => setTotpInput(e.target.value.toUpperCase().replace(/[^A-Z2-7]/g, ''))}
+                                    className="w-full bg-[var(--primary-bg)]/20 border border-[var(--border-color)] rounded-xl p-3 text-sm font-mono tracking-widest focus:border-emerald-500/50 outline-none transition-colors"
+                                    placeholder="JBSWY3DPEHPK3PXP"
+                                />
+                                <div className="flex gap-3 justify-end">
+                                    <button onClick={() => setAddingTotp(null)} className="px-4 py-2 text-xs font-bold bg-white/5 hover:bg-white/10 rounded-xl transition-all">Cancel</button>
+                                    <button onClick={async () => {
+                                        if (!totpInput || !window.electronAPI?.vaultSaveTotpSecret) return;
+                                        const r = await window.electronAPI.vaultSaveTotpSecret(addingTotp, totpInput);
+                                        if (r.success) {
+                                            setEntries(prev => prev.map(e => e.id === addingTotp ? { ...e, hasTotp: true } : e));
+                                            pushVaultStatus('TOTP secret saved. Refresh the page to see the code.');
+                                        } else pushVaultStatus(r.error || 'Failed to save TOTP.');
+                                        setAddingTotp(null);
+                                    }} className="px-4 py-2 text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl transition-all disabled:opacity-50" disabled={totpInput.length < 8}>Save TOTP</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div className="p-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl flex items-center gap-4 z-10">
                 <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-400">

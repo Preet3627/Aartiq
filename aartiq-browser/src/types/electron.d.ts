@@ -609,6 +609,10 @@ declare global {
             vaultDeleteEntry: (entryId: string) => Promise<{ success: boolean; entries?: Array<{ id: string; site: string; url?: string; username: string; hasPassword: boolean; passwordMasked: string; type?: 'login' | 'form' | 'note'; title?: string; created?: string | null; formData?: Array<{ label: string; value: string; name: string }> }>; error?: string }>;
             vaultReadSecret: (entryId: string) => Promise<{ success: boolean; password?: string; entry?: { id: string; url: string; username: string; password: string }; error?: string }>;
             vaultCopySecret: (entryId: string) => Promise<{ success: boolean; error?: string }>;
+            vaultGenerateTotp: (entryId: string) => Promise<{ success: boolean; code?: string; remaining?: number; entryId?: string; error?: string }>;
+            vaultSaveTotpSecret: (entryId: string, totpSecret: string) => Promise<{ success: boolean; error?: string }>;
+            vaultRemoveTotpSecret: (entryId: string) => Promise<{ success: boolean; error?: string }>;
+            vaultReadAuditLog: (limit?: number) => Promise<{ success: boolean; entries?: Array<{ action: string; entryId: string; site?: string; type?: string; timestamp: string }>; error?: string }>;
             proposePasswordSave: (data: any) => void;
             onShowPasswordSaveDialog: (callback: (data: any) => void) => () => void;
 

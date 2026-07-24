@@ -94,6 +94,7 @@
     "pptxgenjs": "^3.12.0",
     "qrcode": "^1.5.4",
     "qs": "^6.13.1",
+    "remark-breaks": "^4.0.0",
     "screenshot-desktop": "^1.15.3",
     "sharp": "^0.34.5",
     "side-channel": "^1.1.0",
