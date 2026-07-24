@@ -231,8 +231,10 @@ class TaskScheduler extends EventEmitter {
     async onSuspend() {
         console.log('[Scheduler] System suspending, saving state');
         this.lastCheckTime = Date.now();
-        
-        // Save current task states
+
+        // Reset catch-up tracking for new sleep cycle
+        this.catchUpExecuted = new Set();
+
         const tasks = await this.storage.getAllTasks();
         for (const task of tasks) {
             if (this.scheduledTasks.has(task.id)) {
@@ -244,27 +246,54 @@ class TaskScheduler extends EventEmitter {
 
     async onResume() {
         console.log('[Scheduler] System resuming, checking missed tasks');
-        
-        // Wait a moment for system to stabilize
+
         await this.delay(2000);
-        
-        // Check for missed tasks
+
         const tasks = await this.storage.getAllTasks();
-        
+        const now = Date.now();
+        const caughtUpTasks = [];
+        this.catchUpExecuted = this.catchUpExecuted || new Set();
+
         for (const task of tasks) {
             if (!task.enabled) continue;
-            
+
+            const catchUpPolicy = task.catchUp !== undefined ? task.catchUp : 'once';
+
+            // Skip if catch-up is disabled for this task
+            if (catchUpPolicy === false) {
+                console.log(`[Scheduler] Skipping catch-up for task "${task.name}": catchUp=false`);
+                continue;
+            }
+
+            // Skip if already caught up once this cycle (for 'once' policy)
+            if (catchUpPolicy === 'once') {
+                const taskKey = `catchup_${task.id}`;
+                if (this.catchUpExecuted.has(taskKey)) {
+                    console.log(`[Scheduler] Skipping catch-up for task "${task.name}": already caught up once`);
+                    continue;
+                }
+            }
+
             if (task.nextRun) {
                 const nextRunTime = new Date(task.nextRun).getTime();
-                const now = Date.now();
-                
-                // If task was due while asleep
+
                 if (nextRunTime < this.lastCheckTime && nextRunTime > (task.lastActiveTime || 0)) {
-                    console.log(`[Scheduler] Catching up missed task: ${task.name}`);
+                    console.log(`[Scheduler] Catching up missed task: ${task.name} (catchUp=${catchUpPolicy})`);
                     await this.executeTask(task, { catchUp: true });
+                    caughtUpTasks.push(task.name);
+
+                    // Track 'once' tasks
+                    if (catchUpPolicy === 'once') {
+                        this.catchUpExecuted.add(`catchup_${task.id}`);
+                    }
                 }
             }
         }
+
+        return {
+            caughtUp: caughtUpTasks.length,
+            caughtUpTasks,
+        };
     }
 
     async toggleTask(taskId) {

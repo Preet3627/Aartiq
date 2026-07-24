@@ -1,4 +1,4 @@
-export type ActionRiskLevel = 'low' | 'medium' | 'high';
+export type ActionRiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
 export interface AIActionSecurityDefinition {
   actionType: string;
@@ -18,6 +18,96 @@ export interface SecuritySettingsSnapshot {
 }
 
 export const AI_ACTION_SECURITY_CATALOG: AIActionSecurityDefinition[] = [
+  {
+    actionType: 'LIST_OPEN_TABS',
+    label: 'List open tabs',
+    description: 'List all currently open browser tabs with metadata.',
+    category: 'Tab Intelligence',
+    risk: 'low',
+    detail: 'Read-only access to open tab metadata.',
+    toggleable: true,
+  },
+  {
+    actionType: 'READ_TAB_CONTENT',
+    label: 'Read tab content',
+    description: 'Extract readable content from an existing open tab.',
+    category: 'Tab Intelligence',
+    risk: 'low',
+    detail: 'Read-only DOM access of an existing open tab.',
+    toggleable: true,
+  },
+  {
+    actionType: 'SUMMARIZE_TABS',
+    label: 'Summarize tabs',
+    description: 'Create a summary of content from one or more open tabs.',
+    category: 'Tab Intelligence',
+    risk: 'low',
+    detail: 'Read-only analysis of existing tab content.',
+    toggleable: true,
+  },
+  {
+    actionType: 'COMPARE_TABS',
+    label: 'Compare tabs',
+    description: 'Compare content across multiple open browser tabs.',
+    category: 'Tab Intelligence',
+    risk: 'low',
+    detail: 'Read-only comparison of existing tab content.',
+    toggleable: true,
+  },
+  {
+    actionType: 'FIND_INFORMATION_IN_TABS',
+    label: 'Search across tabs',
+    description: 'Search for specific information across all open tabs.',
+    category: 'Tab Intelligence',
+    risk: 'low',
+    detail: 'Read-only search across existing tab content.',
+    toggleable: true,
+  },
+  {
+    actionType: 'CREATE_TAB_RESEARCH_CONTEXT',
+    label: 'Create research context',
+    description: 'Consolidate content from research tabs into a unified brief.',
+    category: 'Tab Intelligence',
+    risk: 'low',
+    detail: 'Read-only consolidation of existing tab content.',
+    toggleable: true,
+  },
+  {
+    actionType: 'ANALYSE_TABS',
+    label: 'Analyze all tabs',
+    description: 'List all open tabs, read their content, and return a consolidated analysis in one action.',
+    category: 'Tab Intelligence',
+    risk: 'low',
+    detail: 'Read-only compound analysis of all open tab content.',
+    toggleable: true,
+  },
+  {
+    actionType: 'GROUP_TABS',
+    label: 'Group tabs',
+    description: 'Organize tabs into logical groups using AI or domain-based grouping.',
+    category: 'Tab Intelligence',
+    risk: 'medium',
+    detail: 'Deduplicates and reorganizes tabs. Requires user confirmation.',
+    toggleable: true,
+  },
+  {
+    actionType: 'CLOSE_TAB',
+    label: 'Close tabs',
+    description: 'Close one or more open browser tabs.',
+    category: 'Tab Intelligence',
+    risk: 'medium',
+    detail: 'Can close tabs the user may need. Requires confirmation.',
+    toggleable: true,
+  },
+  {
+    actionType: 'MOVE_TAB',
+    label: 'Rearrange tabs',
+    description: 'Move or reorder open browser tabs.',
+    category: 'Tab Intelligence',
+    risk: 'medium',
+    detail: 'Changes tab ordering. Requires confirmation.',
+    toggleable: true,
+  },
   {
     actionType: 'NAVIGATE',
     label: 'Navigate tabs',
@@ -259,7 +349,7 @@ export const AI_ACTIONS_BY_RISK = AI_ACTION_SECURITY_CATALOG.reduce<Record<Actio
     acc[action.risk].push(action);
     return acc;
   },
-  { low: [], medium: [], high: [] }
+  { low: [], medium: [], high: [], critical: [] }
 );
 
 export function normalizeActionType(actionType: string | undefined | null): string {
@@ -268,11 +358,8 @@ export function normalizeActionType(actionType: string | undefined | null): stri
 
 export function normalizeRiskLevel(riskLevel: string | undefined | null): ActionRiskLevel {
   const normalized = `${riskLevel || 'medium'}`.trim().toLowerCase();
-  if (normalized === 'low' || normalized === 'medium' || normalized === 'high') {
+  if (normalized === 'low' || normalized === 'medium' || normalized === 'high' || normalized === 'critical') {
     return normalized;
-  }
-  if (normalized === 'critical') {
-    return 'high';
   }
   return 'medium';
 }
@@ -481,6 +568,10 @@ export function isActionAutoApproved(
   const normalizedType = normalizeActionType(actionType);
   const normalizedRisk = normalizeRiskLevel(riskLevel);
 
+  if (normalizedRisk === 'critical') {
+    return false;
+  }
+
   if (normalizedRisk === 'high') {
     return false;
   }
@@ -498,4 +589,9 @@ export function isActionAutoApproved(
   }
 
   return !!settings?.autoApproveMidRisk;
+}
+
+export function isActionDenied(riskLevel: string): boolean {
+  const normalized = normalizeRiskLevel(riskLevel);
+  return normalized === 'critical';
 }

@@ -8,18 +8,20 @@ import {
   Maximize2, Minimize2, FileText, Download, Wifi, WifiOff, X,
   ChevronLeft, ChevronRight, ChevronDown, Zap, Send, Paperclip,
   ScanLine,
+  Sliders,
   MoreVertical,
   Sparkles,
   Image as ImageIcon,
   Image,
   Eye, EyeOff, Search, Loader2, MousePointerClick,
   CheckCircle2, AlertCircle, Layers,
-  Share2, CopyIcon, Trash2, Printer, Cpu, Rocket, Camera, Terminal, MoreHorizontal, Play, History, Copy, Mic, Database
+  Share2, CopyIcon, Trash2, Printer, Cpu, Rocket, Camera, Terminal, MoreHorizontal, Play, History, Copy, Mic, Database, Shield
 } from 'lucide-react';
 import Tesseract from 'tesseract.js';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import remarkBreaks from 'remark-breaks';
 import rehypeKatex from 'rehype-katex';
 import 'katex/contrib/mhchem';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -34,7 +36,7 @@ import CollapsibleSkillMessage from './ai/CollapsibleSkillMessage';
 import MessageActions from './ai/MessageActions';
 import ConversationHistoryPanel, { type Conversation, type ChatMessage } from './ai/ConversationHistoryPanel';
 import { useAIActionSecurityManager } from './ai/useAIActionSecurityManager';
-import { getShellCommandRisk } from '@/lib/ai-action-security';
+import { getShellCommandRisk, isActionDenied, getActionSecurityDefinition, normalizeActionType } from '@/lib/ai-action-security';
 import {
   robustJSONParse,
   extractAIReasoning,
@@ -68,6 +70,8 @@ import {
   type ResearchUiState,
 } from '@/lib/researchState';
 
+import { compactMessages, estimateTokens } from '@/lib/context-compactor';
+
 // Logic & Utils
 import {
   getThreatRecord, setThreatRecord, checkThreat, scrubbedContent,
@@ -86,6 +90,28 @@ import { aiCommandOutput, stripCommandsFromOutput } from '@/lib/AICommandOutput'
 import { searchContextStore } from '@/lib/SearchContextStore';
 import { matchSkills, AVAILABLE_SKILLS, listAllSkills } from '@/lib/SkillRegistry';
 import { actionLogsStore, type ActionLog } from '@/lib/ActionLogsStore';
+import WidgetContainer from './sidebar/WidgetContainer';
+import { WidgetErrorBoundary } from './sidebar/WidgetErrorBoundary';
+import AIFallback from './sidebar/AIFallback';
+import MemoryWidget from './sidebar/widgets/MemoryWidget';
+import SessionTimelineWidget from './sidebar/widgets/SessionTimelineWidget';
+import TabIntelligenceWidget from './sidebar/widgets/TabIntelligenceWidget';
+import QuickActionsWidget from './sidebar/widgets/QuickActionsWidget';
+import CapabilitiesWidget from './sidebar/widgets/CapabilitiesWidget';
+import TasksWidget from './sidebar/widgets/TasksWidget';
+import DashboardWidget from './sidebar/widgets/DashboardWidget';
+import CustomizationPanel from './sidebar/CustomizationPanel';
+import PrivacyControls from './sidebar/PrivacyControls';
+import AIVisualThemeControl, { getCSSForAIVisual } from './sidebar/AIVisualTheme';
+import { injectTabAnimationCSS, removeTabAnimationCSS } from './sidebar/AITabAnimation';
+import BackgroundNotifications from './sidebar/BackgroundNotifications';
+import {
+  getSidebarPreferences, saveSidebarPreferences,
+  getAIVisualSettings, saveAIVisualSettings,
+  getPrivacySettings, savePrivacySettings,
+  type SidebarPreferences, type AIVisualSettings, type PrivacySettings, type WidgetId,
+  WIDGET_DEFINITIONS,
+} from './sidebar/types';
 import { buildFrontendReasoningOptions, type LlmMode } from '@/lib/aiReasoningOptions';
 import { getRecommendedGeminiModel } from '@/lib/modelRegistry';
 import firebaseService from '@/lib/FirebaseService';
@@ -303,7 +329,7 @@ function SourceLink({ href, children }: { href?: string; children: React.ReactNo
 
 const renderMarkdownContent = (content: string) => (
   <ReactMarkdown
-    remarkPlugins={[remarkGfm, remarkMath]}
+    remarkPlugins={[remarkGfm, remarkMath, remarkBreaks]}
     rehypePlugins={[rehypeKatex]}
     components={{
       a({ href, children }) {
@@ -405,7 +431,7 @@ const StreamingMarkdownMessage = memo(function StreamingMarkdownMessage({
 });
 
 const collapseRawSearchDump = (content: string): string => {
-  if (!/(Search Results for|Web Search Results for|pages read|Content:|PAGE CONTENT)/i.test(content)) {
+  if (!/(Search Results for|Web Search Results for|pages read|Content:|PAGE CONTENT|\[SOURCE \d+:)/i.test(content)) {
     return content;
   }
 
@@ -416,6 +442,12 @@ const collapseRawSearchDump = (content: string): string => {
   for (const line of lines) {
     const trimmed = line.trim();
     if (/^(🔍\s*)?(Web\s+)?Search Results for/i.test(trimmed)) continue;
+    if (/^\[SOURCE\s+\d+:/i.test(trimmed)) { skippingContentBlock = true; continue; }
+    if (/^"""$/.test(trimmed)) {
+      if (skippingContentBlock) { skippingContentBlock = false; }
+      else { skippingContentBlock = true; }
+      continue;
+    }
     if (/^(Content|PAGE CONTENT|Full page content)\s*:/i.test(trimmed)) {
       skippingContentBlock = true;
       continue;
@@ -464,6 +496,10 @@ const sanitizeVisibleMessage = (content: string): string => {
 
   // Strip ACTION_CHAIN_JSON = {...} patterns at end of string
   cleaned = cleaned.replace(/ACTION_CHAIN_JSON\s*[:=]?\s*\{[\s\S]*?\}\s*$/gi, '');
+
+  // Strip [SOURCE N: ...] raw RAG context tags
+  cleaned = cleaned.replace(/\[SOURCE\s+\d+:.*?\]/gi, '');
+  cleaned = cleaned.replace(/""".*?"""/gs, '');
 
   // Strip ```json blocks that contain command/action structure
   cleaned = cleaned.replace(/```(?:json)?\s*\n?\s*\{[\s\S]*?"(?:type|actions|commands|command|tool_calls|action_chain)"[\s\S]*?\}\s*```/gi, '');
@@ -707,6 +743,47 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [isOnline, setIsOnline] = useState(true);
   const [isDragOver, setIsDragOver] = useState(false);
 
+  // Sidebar widget system
+  const [sidebarPrefs, setSidebarPrefs] = useState<SidebarPreferences>(() => getSidebarPreferences());
+  const [aiVisualSettings, setAiVisualSettings] = useState<AIVisualSettings>(() => getAIVisualSettings());
+  const [privacySettings, setPrivacySettings] = useState<PrivacySettings>(() => getPrivacySettings());
+  const [showCustomization, setShowCustomization] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showThemeSettings, setShowThemeSettings] = useState(false);
+
+  // Sync visual settings to CSS
+  useEffect(() => {
+    const css = getCSSForAIVisual(aiVisualSettings);
+    const root = document.documentElement;
+    Object.entries(css).forEach(([key, val]) => root.style.setProperty(key, val));
+    injectTabAnimationCSS(aiVisualSettings);
+    return () => { removeTabAnimationCSS(); };
+  }, [aiVisualSettings]);
+
+  const activeWidgetIds = sidebarPrefs.enabledWidgets;
+  const widgetOrder = sidebarPrefs.widgetOrder.filter(id => activeWidgetIds.includes(id));
+  const sidebarMode = sidebarPrefs.sidebarMode;
+  const collapsedWidgets = new Set(sidebarPrefs.collapsedWidgets);
+
+  const toggleWidgetCollapse = useCallback((id: WidgetId) => {
+    setSidebarPrefs(prev => {
+      const collapsed = prev.collapsedWidgets.includes(id)
+        ? prev.collapsedWidgets.filter(w => w !== id)
+        : [...prev.collapsedWidgets, id];
+      const updated = { ...prev, collapsedWidgets: collapsed };
+      saveSidebarPreferences(updated);
+      return updated;
+    });
+  }, []);
+
+  const removeWidget = useCallback((id: WidgetId) => {
+    setSidebarPrefs(prev => {
+      const updated = { ...prev, enabledWidgets: prev.enabledWidgets.filter(w => w !== id) };
+      saveSidebarPreferences(updated);
+      return updated;
+    });
+  }, []);
+
   // Command queue
   const [commandQueue, setCommandQueue] = useState<AICommand[]>([]);
   const [currentCommandIndex, setCurrentCommandIndex] = useState(0);
@@ -735,6 +812,17 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   // Action Chain Execution Timeline
   const [actionChainSteps, setActionChainSteps] = useState<ActionChainStep[]>([]);
   const actionChainStepIdCounter = useRef(0);
+
+  interface AutomationReport {
+    totalCommands: number;
+    successCount: number;
+    failedCount: number;
+    startTime: number;
+    endTime: number;
+    commands: { type: string; label: string; status: string; error?: string }[];
+  }
+  const [automationReport, setAutomationReport] = useState<AutomationReport | null>(null);
+  const automationStartTimeRef = useRef<number>(0);
 
   // Agent State
   const [agentState, setAgentState] = useState<AgentState>('idle');
@@ -1227,23 +1315,54 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     setThinkingSteps((prev) => prev.map((s) => s.id === id ? { ...s, detail } : s));
   }, []);
 
+  const persistActionChain = useCallback((steps: ActionChainStep[]) => {
+    try { localStorage.setItem('aartiq_action_chain', JSON.stringify(steps.slice(-20))); } catch { }
+  }, []);
+
   const addActionChainStep = useCallback((label: string, detail?: string): string => {
     const id = `acs-${Date.now()}-${actionChainStepIdCounter.current++}`;
-    setActionChainSteps((prev) => [...prev, { id, label, status: 'running', detail, timestamp: Date.now() }]);
+    const newStep: ActionChainStep = { id, label, status: 'running', detail, timestamp: Date.now() };
+    setActionChainSteps((prev) => {
+      const next = [...prev, newStep];
+      persistActionChain(next);
+      return next;
+    });
     return id;
-  }, []);
+  }, [persistActionChain]);
 
   const resolveActionChainStep = useCallback((id: string, status: 'done' | 'error' | 'skipped', detail?: string) => {
-    setActionChainSteps((prev) => prev.map((s) => s.id === id ? { ...s, status, detail: detail ?? s.detail } : s));
-  }, []);
+    setActionChainSteps((prev) => {
+      const next = prev.map((s) => s.id === id ? { ...s, status, detail: detail ?? s.detail } : s);
+      persistActionChain(next);
+      return next;
+    });
+  }, [persistActionChain]);
 
   const updateActionChainStepLabel = useCallback((id: string, label: string, detail?: string, detailNode?: React.ReactNode) => {
-    setActionChainSteps((prev) => prev.map((s) => s.id === id ? { ...s, label, detail: detail ?? s.detail, detailNode: detailNode ?? s.detailNode } : s));
-  }, []);
+    setActionChainSteps((prev) => {
+      const next = prev.map((s) => s.id === id ? { ...s, label, detail: detail ?? s.detail, detailNode: detailNode ?? s.detailNode } : s);
+      persistActionChain(next);
+      return next;
+    });
+  }, [persistActionChain]);
 
   const resetActionChainSteps = useCallback(() => {
     setActionChainSteps([]);
     actionChainStepIdCounter.current = 0;
+    try { localStorage.removeItem('aartiq_action_chain'); } catch { }
+  }, []);
+
+  // Restore action chain from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('aartiq_action_chain');
+      if (saved) {
+        const parsed: ActionChainStep[] = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setActionChainSteps(parsed.map(s => ({ ...s, status: s.status as ActionChainStep['status'] })));
+        }
+      }
+    } catch { }
   }, []);
 
   const preloadAartiqIconLocal = useCallback(async (): Promise<void> => {
@@ -1734,6 +1853,8 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
       ];
 
+      currentHistory = compactMessages(currentHistory, { maxTokens: 64000 });
+
       let iterations = 0;
       let finalSynthesisDone = false;
       let recoveryAttempts = 0;
@@ -1925,6 +2046,8 @@ I couldn't schedule the task. The background service may not be running. Please 
         // Save AI's response including the commands to history
         currentHistory = [...currentHistory, { role: 'assistant', content: response.text }];
 
+        currentHistory = compactMessages(currentHistory, { maxTokens: 64000 });
+
         // Action Execution
         console.log('[AI] Setting up command queue with', commands.length, 'commands');
         const cmdId = addThinkingStep(`Executing Actions (${commands.length})...`);
@@ -1947,7 +2070,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           id: `plan-${i}`,
           label: c.type.replace(/_/g, ' ').toLowerCase(),
           icon: '⚡',
-          risk: (c.risk as 'low' | 'medium' | 'high') || 'low',
+          risk: (c.risk as 'low' | 'medium' | 'high' | 'critical') || 'low',
         })));
 
         const finalCommandResult = await waitForCommandQueueCompletion(120000);
@@ -2046,6 +2169,8 @@ I couldn't schedule the task. The background service may not be running. Please 
               }\n\nIf you need another action pass, emit at most 3 focused commands. If you cannot safely continue, explain the blocker clearly to the user and ask one specific clarification question. If the steps succeeded or you already have enough information, provide the final answer now without more commands.`
           }
         ];
+
+        currentHistory = compactMessages(currentHistory, { maxTokens: 64000 });
       }
 
 
@@ -2073,8 +2198,26 @@ I couldn't schedule the task. The background service may not be running. Please 
     const command = commandQueue[currentCommandIndex];
     const COMMAND_TIMEOUT = 10000;
 
+    if (currentCommandIndex === 0) automationStartTimeRef.current = Date.now();
+
     const acsStepId = addActionChainStep(`${command.type.replace(/_/g, ' ').toLowerCase()}`, command.value?.slice(0, 60));
     currentActionChainStepIdRef.current = acsStepId;
+
+    // Check if this command type is denied by policy (critical risk)
+    const actionDef = getActionSecurityDefinition(command.type);
+    const commandRisk = actionDef ? actionDef.risk : getShellCommandRisk(command.value || '');
+    if (isActionDenied(commandRisk)) {
+      setCommandQueue(prev => prev.map((cmd, i) => i === currentCommandIndex ? {
+        ...cmd,
+        status: 'failed',
+        error: `Command "${command.type}" is denied by security policy (critical risk)`,
+        endTime: Date.now(),
+      } : cmd));
+      resolveActionChainStep(acsStepId, 'error', 'Denied by policy');
+      processingQueueRef.current = false;
+      setCurrentCommandIndex(prev => prev + 1);
+      return;
+    }
 
     setCustomStatusText('');
     setAgentState('executing');
@@ -2608,8 +2751,9 @@ I couldn't schedule the task. The background service may not be running. Please 
           // ── Primary: server-side search via MCP BrowserMcpServer (DuckDuckGo, offscreen) ──
           let searchResults: Array<{ title: string; url: string; snippet: string; content: string }> = [];
           let usedEngine = 'duckduckgo';
+          const effectivePages = pagesOverride || 1;
           try {
-            const mcpSearchResult = await (window.electronAPI as any).aiWebSearch(originalQuery, 'duckduckgo', pagesOverride || 5);
+            const mcpSearchResult = await (window.electronAPI as any).aiWebSearch(originalQuery, 'duckduckgo', effectivePages);
             if (mcpSearchResult?.results?.length > 0) {
               searchResults = mcpSearchResult.results;
               usedEngine = mcpSearchResult.engine || 'duckduckgo';
@@ -2623,7 +2767,7 @@ I couldn't schedule the task. The background service may not be running. Please 
             try {
               const ragResults = await window.electronAPI.webSearchRag(originalQuery);
               const normalized = normalizeSearchResults(ragResults as any[]);
-              searchResults = normalized.slice(0, pagesOverride || 5).map(r => ({
+              searchResults = normalized.slice(0, effectivePages).map(r => ({
                 title: r.title,
                 url: r.url,
                 snippet: r.snippet,
@@ -2688,10 +2832,11 @@ I couldn't schedule the task. The background service may not be running. Please 
               </span>
             );
             if (currentActionChainStepIdRef.current) {
+              const totalPages = effectivePages > 1 ? effectivePages : websites.length;
               updateActionChainStepLabel(
                 currentActionChainStepIdRef.current,
                 `🔍 Searched: "${originalQuery}"`,
-                `${websites.length} sites`,
+                totalPages > 1 ? `${websites.length} sites · ${totalPages} pages fetched` : `${websites.length} site`,
                 websiteDetailNode
               );
             }
@@ -3068,6 +3213,7 @@ I couldn't schedule the task. The background service may not be running. Please 
           break;
         }
 
+        case 'GROUP_TABS':
         case 'ORGANIZE_TABS': {
           const organizeStepId = addThinkingStep('AI is Classifying Tabs...');
           try {
@@ -3148,6 +3294,42 @@ I couldn't schedule the task. The background service may not be running. Please 
             output = 'No open tabs.';
           } else {
             output = `Open tabs (${tabs.length}):\n${tabs.map((t, i) => `${i + 1}. ${t.title || 'Untitled'} (id: ${t.id}) ${t.id === store.activeTabId ? '[ACTIVE]' : ''}\n   URL: ${t.url}`).join('\n')}`;
+          }
+          break;
+        }
+
+        case 'ANALYSE_TABS':
+        case 'ANALYZE_TABS':
+        case 'SUMMARIZE_TABS': {
+          const analyseStepId = addThinkingStep('Analysing all open tabs...');
+          try {
+            const allTabs = store.tabs;
+            if (allTabs.length === 0) {
+              output = 'No open tabs to analyse.';
+              resolveThinkingStep(analyseStepId, 'done', 'No tabs found');
+              break;
+            }
+            const tabSummaries: string[] = [];
+            for (let i = 0; i < allTabs.length; i++) {
+              const tab = allTabs[i];
+              const readingStep = addThinkingStep(`Reading tab ${i + 1}/${allTabs.length}: ${tab.title || 'Untitled'}`);
+              let content = '';
+              if (tab.id === store.activeTabId) {
+                const pageContent = await window.electronAPI?.extractPageContent?.();
+                content = pageContent?.content || pageContent || '';
+              } else {
+                const pageContent = await window.electronAPI?.extractPageContent?.(tab.id);
+                content = pageContent?.content || pageContent || '';
+              }
+              resolveThinkingStep(readingStep, 'done', `${content.length} chars read`);
+              const preview = content ? content.slice(0, 500).replace(/\s+/g, ' ').trim() : '(no readable content)';
+              tabSummaries.push(`### ${tab.title || 'Untitled'}\nURL: ${tab.url}\nPreview: ${preview}${content.length > 500 ? '...' : ''}`);
+            }
+            resolveThinkingStep(analyseStepId, 'done', `${allTabs.length} tabs analysed`);
+            output = `## Tab Analysis (${allTabs.length} tabs)\n\n${tabSummaries.join('\n\n')}`;
+          } catch (e: any) {
+            output = `Tab analysis error: ${e.message}`;
+            resolveThinkingStep(analyseStepId, 'error', e.message);
           }
           break;
         }
@@ -5960,6 +6142,55 @@ I've successfully executed the following real tasks:
     }
   }, [commandQueue, currentCommandIndex, processNextCommand]);
 
+  useEffect(() => {
+    if (commandQueue.length > 0 && currentCommandIndex >= commandQueue.length && !processingQueueRef.current) {
+      const successCount = commandQueue.filter(c => c.status === 'executed' || c.status === 'success' || c.status === 'done').length;
+      const failedCount = commandQueue.filter(c => c.status === 'failed' || c.status === 'error').length;
+      if (successCount > 0 || failedCount > 0) {
+        const report = {
+          totalCommands: commandQueue.length,
+          successCount,
+          failedCount,
+          startTime: automationStartTimeRef.current,
+          endTime: Date.now(),
+          commands: commandQueue.map(c => ({
+            type: c.type,
+            label: c.value?.slice(0, 60) || c.type,
+            status: c.status || 'unknown',
+            error: c.error,
+          })),
+        };
+        setAutomationReport(report);
+        const runId = `run-${Date.now()}`;
+        try {
+          const runsKey = 'aartiq_automation_runs';
+          const existing = JSON.parse(localStorage.getItem(runsKey) || '[]');
+          if (Array.isArray(existing)) {
+            existing.push({ id: runId, ...report });
+            localStorage.setItem(runsKey, JSON.stringify(existing.slice(-10)));
+          }
+        } catch { }
+        try {
+          const eventsKey = 'aartiq_background_task_events';
+          const existing = JSON.parse(localStorage.getItem(eventsKey) || '[]');
+          if (Array.isArray(existing)) {
+            existing.push({
+              id: runId,
+              taskName: commandQueue[0]?.value?.slice(0, 60) || 'Automation run',
+              taskType: commandQueue[0]?.type || 'unknown',
+              status: failedCount > 0 ? 'failed' : 'success',
+              timestamp: Date.now(),
+              error: failedCount > 0 ? `${failedCount} step${failedCount > 1 ? 's' : ''} failed` : undefined,
+              seen: false,
+            });
+            localStorage.setItem(eventsKey, JSON.stringify(existing.slice(-20)));
+          }
+        } catch { }
+        window.dispatchEvent(new CustomEvent('automation-task-completed'));
+      }
+    }
+  }, [commandQueue, currentCommandIndex]);
+
   // ---------------------------------------------------------------------------
   // Effects
   // ---------------------------------------------------------------------------
@@ -6827,6 +7058,44 @@ I've successfully executed the following real tasks:
                   </span>
                   Theme: {props.theme === 'light' ? 'Light' : props.theme === 'minimal' ? 'Minimal' : props.theme === 'vibrant' ? 'Vibrant' : props.theme === 'custom' ? 'Custom' : 'Dark'}
                 </button>
+                <button onClick={() => { setShowCustomization(true); setShowThemeSettings(false); setShowPrivacy(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
+                  <Layers size={14} className="text-purple-400" /> Customize Workspace
+                </button>
+                <button onClick={() => { setShowPrivacy(true); setShowCustomization(false); setShowThemeSettings(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
+                  <Shield size={14} className="text-sky-400" /> AI Privacy Controls
+                </button>
+                <button onClick={() => { setShowThemeSettings(true); setShowCustomization(false); setShowPrivacy(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
+                  <Eye size={14} className="text-amber-400" /> AI Visual Theme
+                </button>
+                <div className="my-1 border-t border-white/10" />
+                <div className="px-3 py-1">
+                  <span className="text-[8px] font-bold uppercase tracking-widest text-secondary-text/40">Sidebar Mode</span>
+                  <div className="flex gap-1 mt-1">
+                    {(['full', 'compact', 'hidden'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => {
+                          const updated = { ...sidebarPrefs, sidebarMode: mode };
+                          setSidebarPrefs(updated);
+                          saveSidebarPreferences(updated);
+                          if (mode === 'hidden') props.toggleCollapse();
+                        }}
+                        className={`flex-1 text-[9px] font-medium px-2 py-1 rounded-lg border transition-all capitalize ${
+                          sidebarPrefs.sidebarMode === mode
+                            ? 'bg-sky-500/15 border-sky-500/30 text-sky-400'
+                            : 'bg-white/[0.04] border-white/[0.06] text-secondary-text/50 hover:text-secondary-text'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[8px] text-secondary-text/30 mt-1">
+                    {sidebarPrefs.sidebarMode === 'full' ? 'All widgets + chat' :
+                     sidebarPrefs.sidebarMode === 'compact' ? 'Minimal input only' :
+                     'Hide sidebar entirely'}
+                  </p>
+                </div>
                 <button onClick={() => setShowLLMProviderSettings(!showLLMProviderSettings)} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
                   <Cpu size={14} className="text-green-400" /> Intelligence Settings
                 </button>
@@ -6837,6 +7106,9 @@ I've successfully executed the following real tasks:
             </div>
             <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle} title={isFullScreen ? 'Exit full screen' : 'Full screen'}>
               {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+            </button>
+            <button onClick={() => setShowCustomization(true)} className="hidden sm:flex p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle} title="Edit widgets">
+              <Sliders size={16} />
             </button>
             {store.tabs.some(t => t.groupId === 'ai-session') && (
               <button
@@ -6867,38 +7139,10 @@ I've successfully executed the following real tasks:
       {/* Chat Messages */}
       <div className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden modern-scrollbar transition-[padding] duration-[180ms] ease-[var(--ease-spring)] backdrop-blur-sm px-4 py-4 pb-6 space-y-3`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 95%, transparent), color-mix(in srgb, var(--primary-bg) 99%, transparent))' }}>
         <AnimatePresence mode="popLayout">
-          {messages.length === 0 && (
-            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }} className="mx-auto flex max-w-[650px] flex-col items-center justify-center py-8 text-center">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl border shadow-sm overflow-hidden" style={softPanelStyle}>
-                <img src="/logo-transparent.png" alt="Aartiq" className="h-7 w-7 object-contain" />
-              </div>
-              <div className="mb-4">
-                <h3 className="text-[14px] font-semibold text-primary-text">What should Aartiq handle?</h3>
-                <p className="mt-0.5 text-[11px] text-secondary-text">Navigate, read, organize, and automate from one calm workspace.</p>
-              </div>
-              <div className="grid w-full max-w-sm grid-cols-2 gap-1.5">
-                {[
-                  { label: 'Organize Downloads', icon: <FileText size={13} />, cmd: 'Organize my Downloads folder' },
-                  { label: 'Generate PDF', icon: <Download size={13} />, cmd: 'Generate a PDF report' },
-                  { label: 'Research AI', icon: <Search size={13} />, cmd: 'Research latest AI news' },
-                  { label: 'Summarize Page', icon: <FileText size={13} />, cmd: 'Summarize the current page' },
-                  { label: 'Open App', icon: <Rocket size={13} />, cmd: 'Open VS Code' },
-                  { label: 'Find Duplicates', icon: <ScanLine size={13} />, cmd: 'Find duplicate files in Downloads' },
-                ].map((suggestion, i) => (
-                  <motion.button
-                    key={i}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18, delay: i * 0.03, ease: [0.32, 0.72, 0, 1] }}
-                    onClick={() => { setInputMessage(suggestion.cmd); }}
-                    className="flex items-center gap-2 rounded-lg border border-[color-mix(in_srgb,var(--border-color)_45%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_70%,transparent)] px-2.5 py-1.5 text-left transition-all duration-[150ms] ease-[var(--ease-spring)] hover:bg-[color-mix(in_srgb,var(--card-bg)_92%,transparent)] hover:border-[color-mix(in_srgb,var(--border-color)_70%,transparent)]"
-                  >
-                    <span className="text-secondary-text">{suggestion.icon}</span>
-                    <span className="truncate text-[10px] font-medium text-secondary-text">{suggestion.label}</span>
-                  </motion.button>
-                ))}
-              </div>
-            </motion.div>
+          {messages.length === 0 && !isLoading && (
+            <div className="mx-auto w-full max-w-[650px] px-1 py-4">
+              <DashboardWidget tabs={store.tabs} activeTabId={store.activeTabId} onAction={(cmd) => setInputMessage(cmd)} />
+            </div>
           )}
           {messages.map((msg, i) => {
             let displayContent = msg.content;
@@ -7254,8 +7498,145 @@ I've successfully executed the following real tasks:
             />
           )}
         </AnimatePresence>
+
+        {/* Widget Panel — hide after first message */}
+        {sidebarMode !== 'compact' && !isFullScreen && messages.length === 0 && (
+          <div className="px-1 mt-4 space-y-2">
+            {widgetOrder.map((widgetId) => {
+              const def = WIDGET_DEFINITIONS.find(w => w.id === widgetId);
+              if (!def) return null;
+              const isCollapsed = collapsedWidgets.has(widgetId);
+              return (
+                <WidgetContainer
+                  key={widgetId}
+                  id={widgetId}
+                  label={def.label}
+                  icon={def.icon}
+                  isCollapsed={isCollapsed}
+                  onToggleCollapse={() => toggleWidgetCollapse(widgetId)}
+                  onRemove={() => removeWidget(widgetId)}
+                >
+                  <WidgetErrorBoundary widgetName={def.label}>
+                    {widgetId === 'memory' && <MemoryWidget />}
+                    {widgetId === 'session-timeline' && <SessionTimelineWidget steps={actionChainSteps} />}
+                    {widgetId === 'tab-intelligence' && <TabIntelligenceWidget tabs={store.tabs} setInputMessage={setInputMessage} />}
+                    {widgetId === 'quick-actions' && <QuickActionsWidget onAction={(cmd) => setInputMessage(cmd)} tabs={store.tabs} activeTabId={store.activeTabId} history={store.history} />}
+                    {widgetId === 'capabilities' && <CapabilitiesWidget />}
+                    {widgetId === 'tasks' && <TasksWidget onAction={(cmd) => setInputMessage(cmd)} activeRunSteps={actionChainSteps} />}
+                    {widgetId === 'dashboard' && sidebarPrefs.sidebarMode === 'full' && <DashboardWidget tabs={store.tabs} activeTabId={store.activeTabId} onAction={(cmd) => setInputMessage(cmd)} />}
+                  </WidgetErrorBoundary>
+                </WidgetContainer>
+              );
+            })}
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Overlays: Customization / Privacy / Theme */}
+      <AnimatePresence>
+        {showCustomization && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
+            <CustomizationPanel
+              currentPrefs={sidebarPrefs}
+              onUpdatePrefs={(prefs) => { setSidebarPrefs(prefs); saveSidebarPreferences(prefs); }}
+              onClose={() => setShowCustomization(false)}
+            />
+          </div>
+        )}
+        {showPrivacy && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
+            <PrivacyControls onClose={() => setShowPrivacy(false)} />
+          </div>
+        )}
+        {showThemeSettings && (
+          <div className="absolute inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
+            <div className="rounded-xl border border-[color-mix(in_srgb,var(--border-color)_30%,transparent)] bg-[color-mix(in_srgb,var(--card-bg)_96%,transparent)] backdrop-blur-2xl overflow-hidden shadow-2xl w-full max-w-xs">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+                <h3 className="text-[11px] font-bold uppercase tracking-widest text-secondary-text">AI Visual Theme</h3>
+                <button onClick={() => setShowThemeSettings(false)} className="p-1 rounded-md hover:bg-white/10 text-secondary-text/50 hover:text-secondary-text transition-all">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="px-4 py-3">
+                <AIVisualThemeControl
+                  current={aiVisualSettings}
+                  onUpdate={(s) => setAiVisualSettings(s)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Compact mode: minimal input only */}
+      {sidebarMode === 'compact' && messages.length === 0 && (
+        <div className="flex-1 flex items-center justify-center px-4">
+          <div className="text-center">
+            <div className="w-8 h-8 rounded-xl mx-auto mb-2 border flex items-center justify-center" style={softPanelStyle}>
+              <img src="/logo-transparent.png" alt="Aartiq" className="w-5 h-5 object-contain" />
+            </div>
+            <p className="text-[10px] text-secondary-text/50">Compact mode</p>
+            <p className="text-[9px] text-secondary-text/30 mt-0.5">Type a message to start</p>
+          </div>
+        </div>
+      )}
+
+      {/* Background Task Notifications */}
+      <BackgroundNotifications />
+
+      {/* Automation Report Toast */}
+      <AnimatePresence>
+        {automationReport && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+            className="mx-4 mb-2 rounded-xl border border-white/[0.08] bg-[color-mix(in_srgb,var(--card-bg)_92%,transparent)] backdrop-blur-2xl overflow-hidden shadow-lg"
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.05]">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-secondary-text/70">
+                Automation Complete
+              </span>
+              <button onClick={() => setAutomationReport(null)} className="p-0.5 rounded text-secondary-text/30 hover:text-secondary-text transition-colors">
+                <X size={11} />
+              </button>
+            </div>
+            <div className="px-3 py-2">
+              <div className="flex items-center gap-3 mb-1.5">
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] text-emerald-400/80 font-bold">{automationReport.successCount}</span>
+                  <span className="text-[7px] text-secondary-text/40 uppercase tracking-wider">succeeded</span>
+                </div>
+                {automationReport.failedCount > 0 && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] text-red-400/80 font-bold">{automationReport.failedCount}</span>
+                    <span className="text-[7px] text-secondary-text/40 uppercase tracking-wider">failed</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-1 ml-auto">
+                  <span className="text-[7px] text-secondary-text/30 uppercase tracking-wider">
+                    {Math.round((automationReport.endTime - automationReport.startTime) / 1000)}s
+                  </span>
+                </div>
+              </div>
+              {automationReport.failedCount > 0 && (
+                <div className="space-y-0.5 mt-1 pt-1 border-t border-white/[0.04]">
+                  {automationReport.commands.filter(c => c.status === 'failed' || c.status === 'error').slice(0, 3).map((c, i) => (
+                    <div key={i} className="flex items-start gap-1 text-[8px]">
+                      <span className="text-red-400/60 mt-0.5">●</span>
+                      <span className="text-secondary-text/50 truncate flex-1">{c.label}</span>
+                      {c.error && <span className="text-red-400/40 truncate max-w-[100px]">{c.error}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Input Area */}
       <footer className="flex-shrink-0 px-4 pb-3 pt-2" suppressHydrationWarning style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 72%, transparent), color-mix(in srgb, var(--primary-bg) 98%, transparent) 32%, var(--primary-bg) 100%)', backdropFilter: 'blur(18px)' }}>
@@ -7301,7 +7682,7 @@ I've successfully executed the following real tasks:
                 <button onClick={() => exportChat('text')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><FileText size={14} /> Export text</button>
                 <button onClick={() => exportChat('pdf')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><Download size={14} /> Export PDF</button>
                 <button onClick={copyChatToClipboard} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><CopyIcon size={14} /> Copy context</button>
-                <button onClick={() => { setShowSidebarCustomize(true); setShowActionsMenu(false); playClickSound(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><Cpu size={14} /> Customize chat</button>
+                <button onClick={() => { setShowCustomization(true); setShowActionsMenu(false); playClickSound(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><Layers size={14} /> Customize workspace</button>
               </motion.div>
             )}
           </AnimatePresence>

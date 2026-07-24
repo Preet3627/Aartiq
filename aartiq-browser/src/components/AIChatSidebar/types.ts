@@ -71,7 +71,7 @@ export interface PlanningStep {
   id: string;
   label: string;
   icon: string;
-  risk: 'low' | 'medium' | 'high';
+  risk: 'low' | 'medium' | 'high' | 'critical';
   estimatedTime?: number;
 }
 

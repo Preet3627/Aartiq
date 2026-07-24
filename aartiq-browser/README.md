@@ -72,6 +72,23 @@ aartiq-browser/
 | `SiriShortcutsIntegration.ts` | macOS Siri/Shortcuts bridge |
 | `tesseract-service.js` | OCR via Tesseract.js |
 | `plugin-manager.js` | Dynamic plugin loading |
+| `context-compactor.ts` | Token-aware message history compaction |
+| `command-validator.js` | Pre-execution command validation with audit log |
+| `policy-generator.ts` | Natural language → structured policy rules |
+| `policy-engine.ts` | Dual-layer (local+cloud) policy evaluation |
+| `approval-gate.js` | SHA-256 input-bound approval tickets |
+| `entity-extractor.ts` | Regex extraction of prices, PII, API keys from page content |
+| `domain-tracker.ts` | Per-domain cumulative agent time tracking |
+| `guardrails/` | Two-tier content sanitization (normal/strict) |
+| `task-lifecycle.ts` | Formal task state machine with guarded transitions |
+| `approval-waiter.ts` | Promise-based async approval with timeout |
+| `agent/` | Planner + Navigator multi-agent architecture |
+| `action-replay.ts` | Action replay with element remapping and retry |
+| `event-bus.ts` | Typed pub/sub event system |
+| `llm-factory.ts` | Multi-provider LLM factory (10+ providers) |
+| `content-tagging.ts` | XML tagging for anti-prompt-injection |
+| `structured-output.ts` | Dual-path JSON parser with repair fallback |
+| `sw-resilience.js` | Service worker lifecycle approval persistence |
 
 ## Security
 
@@ -99,6 +116,39 @@ AI file access is restricted to user-approved directories via a configurable all
 - Vault encryption key stored in native OS keychain (not plaintext config)
 - Windows AppContainer sandbox for process isolation
 - WebAuthn credentials in `~/.aartiq/webauthn-credentials.json` (mode `0600`)
+
+## Context Compaction
+
+Long AI conversations can exceed the LLM's context window. `context-compactor.ts` provides token-aware message history compaction that runs automatically during chat:
+
+### How It Works
+
+1. **Token Estimation**: Each message is scanned and its token count is estimated (~0.4 tokens per ASCII char, ~0.8 per Unicode char, +4 per message overhead)
+2. **Compaction Trigger**: When total tokens exceed `maxTokens` (default 64K for chat, 128K general), compaction activates
+3. **Preservation Rules**:
+   - **System messages** — always preserved (instructions, skill context, preferences)
+   - **Recent messages** — last 6 exchanges kept in full
+   - **Middle messages** — compressed into a structured summary block
+4. **Summary Generation**: Middle messages are grouped into blocks (≤2000 tokens each) and summarized per block using a template that captures the last user query and AI response
+5. **Size Check**: If the compressed history is actually larger than the original (e.g., very few messages), the original is kept
+6. **Last-Resort Truncation**: If still over the limit after compression, messages are progressively truncated from the oldest
+
+### Integration Points
+
+Compaction runs at three points in `AIChatSidebar.tsx`:
+- After building the initial message history for a new AI request
+- After appending the assistant's response
+- After appending action execution results
+
+### Configuration
+
+```typescript
+interface CompactionOptions {
+  maxTokens: number;          // Token limit before compaction (default: 64000)
+  preserveSystem: boolean;    // Always keep system messages (default: true)
+  preserveRecentCount: number;// Recent exchanges to keep in full (default: 6)
+}
+```
 
 ## DOM Engine v2
 
