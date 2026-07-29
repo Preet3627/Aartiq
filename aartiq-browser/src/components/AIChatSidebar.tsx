@@ -90,17 +90,10 @@ import { aiCommandOutput, stripCommandsFromOutput } from '@/lib/AICommandOutput'
 import { searchContextStore } from '@/lib/SearchContextStore';
 import { matchSkills, AVAILABLE_SKILLS, listAllSkills } from '@/lib/SkillRegistry';
 import { actionLogsStore, type ActionLog } from '@/lib/ActionLogsStore';
-import WidgetContainer from './sidebar/WidgetContainer';
-import { WidgetErrorBoundary } from './sidebar/WidgetErrorBoundary';
 import AIFallback from './sidebar/AIFallback';
-import MemoryWidget from './sidebar/widgets/MemoryWidget';
-import SessionTimelineWidget from './sidebar/widgets/SessionTimelineWidget';
-import TabIntelligenceWidget from './sidebar/widgets/TabIntelligenceWidget';
-import QuickActionsWidget from './sidebar/widgets/QuickActionsWidget';
-import CapabilitiesWidget from './sidebar/widgets/CapabilitiesWidget';
-import TasksWidget from './sidebar/widgets/TasksWidget';
-import DashboardWidget from './sidebar/widgets/DashboardWidget';
+import AIHomeExperience from './sidebar/AIHomeExperience';
 import CustomizationPanel from './sidebar/CustomizationPanel';
+import { useTabIntelligenceStore } from '@/store/tabIntelligenceStore';
 import PrivacyControls from './sidebar/PrivacyControls';
 import AIVisualThemeControl, { getCSSForAIVisual } from './sidebar/AIVisualTheme';
 import { injectTabAnimationCSS, removeTabAnimationCSS } from './sidebar/AITabAnimation';
@@ -109,8 +102,7 @@ import {
   getSidebarPreferences, saveSidebarPreferences,
   getAIVisualSettings, saveAIVisualSettings,
   getPrivacySettings, savePrivacySettings,
-  type SidebarPreferences, type AIVisualSettings, type PrivacySettings, type WidgetId,
-  WIDGET_DEFINITIONS,
+  type SidebarPreferences, type AIVisualSettings, type PrivacySettings,
 } from './sidebar/types';
 import { buildFrontendReasoningOptions, type LlmMode } from '@/lib/aiReasoningOptions';
 import { getRecommendedGeminiModel } from '@/lib/modelRegistry';
@@ -165,6 +157,13 @@ interface SearchResultEntry {
   title: string;
   url: string;
   snippet: string;
+}
+
+function getExtractedPageContentText(pageContent: string | { content?: string; error?: string } | undefined): string {
+  if (typeof pageContent === 'string') {
+    return pageContent;
+  }
+  return pageContent?.content || '';
 }
 
 const parseSearchResultEntry = (result: any): SearchResultEntry | null => {
@@ -763,26 +762,7 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const activeWidgetIds = sidebarPrefs.enabledWidgets;
   const widgetOrder = sidebarPrefs.widgetOrder.filter(id => activeWidgetIds.includes(id));
   const sidebarMode = sidebarPrefs.sidebarMode;
-  const collapsedWidgets = new Set(sidebarPrefs.collapsedWidgets);
-
-  const toggleWidgetCollapse = useCallback((id: WidgetId) => {
-    setSidebarPrefs(prev => {
-      const collapsed = prev.collapsedWidgets.includes(id)
-        ? prev.collapsedWidgets.filter(w => w !== id)
-        : [...prev.collapsedWidgets, id];
-      const updated = { ...prev, collapsedWidgets: collapsed };
-      saveSidebarPreferences(updated);
-      return updated;
-    });
-  }, []);
-
-  const removeWidget = useCallback((id: WidgetId) => {
-    setSidebarPrefs(prev => {
-      const updated = { ...prev, enabledWidgets: prev.enabledWidgets.filter(w => w !== id) };
-      saveSidebarPreferences(updated);
-      return updated;
-    });
-  }, []);
+  const sessionLabel = useTabIntelligenceStore((s) => s.sessionLabel);
 
   // Command queue
   const [commandQueue, setCommandQueue] = useState<AICommand[]>([]);
@@ -3316,10 +3296,10 @@ I couldn't schedule the task. The background service may not be running. Please 
               let content = '';
               if (tab.id === store.activeTabId) {
                 const pageContent = await window.electronAPI?.extractPageContent?.();
-                content = pageContent?.content || pageContent || '';
+                content = getExtractedPageContentText(pageContent);
               } else {
                 const pageContent = await window.electronAPI?.extractPageContent?.(tab.id);
-                content = pageContent?.content || pageContent || '';
+                content = getExtractedPageContentText(pageContent);
               }
               resolveThinkingStep(readingStep, 'done', `${content.length} chars read`);
               const preview = content ? content.slice(0, 500).replace(/\s+/g, ' ').trim() : '(no readable content)';
@@ -6155,8 +6135,8 @@ I've successfully executed the following real tasks:
 
   useEffect(() => {
     if (commandQueue.length > 0 && currentCommandIndex >= commandQueue.length && !processingQueueRef.current) {
-      const successCount = commandQueue.filter(c => c.status === 'executed' || c.status === 'success' || c.status === 'done').length;
-      const failedCount = commandQueue.filter(c => c.status === 'failed' || c.status === 'error').length;
+      const successCount = commandQueue.filter(c => c.status === 'completed').length;
+      const failedCount = commandQueue.filter(c => c.status === 'failed').length;
       if (successCount > 0 || failedCount > 0) {
         const report = {
           totalCommands: commandQueue.length,
@@ -7150,10 +7130,18 @@ I've successfully executed the following real tasks:
       {/* Chat Messages */}
       <div className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden modern-scrollbar transition-[padding] duration-[180ms] ease-[var(--ease-spring)] backdrop-blur-sm px-4 py-4 pb-6 space-y-3`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 95%, transparent), color-mix(in srgb, var(--primary-bg) 99%, transparent))' }}>
         <AnimatePresence mode="popLayout">
-          {messages.length === 0 && !isLoading && (
-            <div className="mx-auto w-full max-w-[650px] px-1 py-4">
-              <DashboardWidget tabs={store.tabs} activeTabId={store.activeTabId} onAction={(cmd) => setInputMessage(cmd)} />
-            </div>
+          {messages.length === 0 && sidebarMode !== 'compact' && (
+            <AIHomeExperience
+              enabledWidgets={activeWidgetIds}
+              widgetOrder={widgetOrder}
+              tabs={store.tabs}
+              activeTabId={store.activeTabId}
+              history={store.history}
+              actionSteps={actionChainSteps}
+              sessionLabel={sessionLabel}
+              isWorking={isLoading}
+              onAction={(cmd) => setInputMessage(cmd)}
+            />
           )}
           {messages.map((msg, i) => {
             let displayContent = msg.content;
@@ -7509,38 +7497,6 @@ I've successfully executed the following real tasks:
             />
           )}
         </AnimatePresence>
-
-        {/* Widget Panel — hide after first message */}
-        {sidebarMode !== 'compact' && !isFullScreen && messages.length === 0 && (
-          <div className="px-1 mt-4 space-y-2">
-            {widgetOrder.map((widgetId) => {
-              const def = WIDGET_DEFINITIONS.find(w => w.id === widgetId);
-              if (!def) return null;
-              const isCollapsed = collapsedWidgets.has(widgetId);
-              return (
-                <WidgetContainer
-                  key={widgetId}
-                  id={widgetId}
-                  label={def.label}
-                  icon={def.icon}
-                  isCollapsed={isCollapsed}
-                  onToggleCollapse={() => toggleWidgetCollapse(widgetId)}
-                  onRemove={() => removeWidget(widgetId)}
-                >
-                  <WidgetErrorBoundary widgetName={def.label}>
-                    {widgetId === 'memory' && <MemoryWidget />}
-                    {widgetId === 'session-timeline' && <SessionTimelineWidget steps={actionChainSteps} />}
-                    {widgetId === 'tab-intelligence' && <TabIntelligenceWidget tabs={store.tabs} setInputMessage={setInputMessage} />}
-                    {widgetId === 'quick-actions' && <QuickActionsWidget onAction={(cmd) => setInputMessage(cmd)} tabs={store.tabs} activeTabId={store.activeTabId} history={store.history} />}
-                    {widgetId === 'capabilities' && <CapabilitiesWidget />}
-                    {widgetId === 'tasks' && <TasksWidget onAction={(cmd) => setInputMessage(cmd)} activeRunSteps={actionChainSteps} />}
-                    {widgetId === 'dashboard' && sidebarPrefs.sidebarMode === 'full' && <DashboardWidget tabs={store.tabs} activeTabId={store.activeTabId} onAction={(cmd) => setInputMessage(cmd)} />}
-                  </WidgetErrorBoundary>
-                </WidgetContainer>
-              );
-            })}
-          </div>
-        )}
 
         <div ref={messagesEndRef} />
       </div>

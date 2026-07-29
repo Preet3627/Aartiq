@@ -1,14 +1,13 @@
 "use client";
 
 export type WidgetId =
-  | 'dashboard'
-  | 'ai-chat'
-  | 'memory'
-  | 'session-timeline'
-  | 'tab-intelligence'
-  | 'quick-actions'
-  | 'capabilities'
-  | 'tasks';
+  | 'current-context'
+  | 'workspace-intelligence'
+  | 'ai-suggestions'
+  | 'session-resume'
+  | 'automation-monitor'
+  | 'memory-insights'
+  | 'ai-timeline';
 
 export interface SidebarWidget {
   id: WidgetId;
@@ -45,20 +44,19 @@ export interface PrivacySettings {
 }
 
 export const WIDGET_DEFINITIONS: SidebarWidget[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '👋', defaultVisible: true, defaultOrder: 0 },
-  { id: 'ai-chat', label: 'AI Chat', icon: '💬', defaultVisible: true, defaultOrder: 1 },
-  { id: 'memory', label: 'Memory', icon: '🧠', defaultVisible: true, defaultOrder: 2 },
-  { id: 'session-timeline', label: 'Session Timeline', icon: '⏱️', defaultVisible: true, defaultOrder: 3 },
-  { id: 'tab-intelligence', label: 'Tab Intelligence', icon: '📑', defaultVisible: true, defaultOrder: 4 },
-  { id: 'quick-actions', label: 'Quick Actions', icon: '⚡', defaultVisible: true, defaultOrder: 5 },
-  { id: 'capabilities', label: 'Capabilities', icon: '🛠️', defaultVisible: false, defaultOrder: 6 },
-  { id: 'tasks', label: 'Tasks', icon: '📋', defaultVisible: false, defaultOrder: 7 },
+  { id: 'current-context', label: 'Current Context', icon: '◎', defaultVisible: true, defaultOrder: 0 },
+  { id: 'ai-suggestions', label: 'AI Suggestions', icon: '✦', defaultVisible: true, defaultOrder: 1 },
+  { id: 'workspace-intelligence', label: 'Workspace Intelligence', icon: '◫', defaultVisible: true, defaultOrder: 2 },
+  { id: 'session-resume', label: 'Session Resume', icon: '↻', defaultVisible: true, defaultOrder: 3 },
+  { id: 'automation-monitor', label: 'Automation Monitor', icon: '⬡', defaultVisible: true, defaultOrder: 4 },
+  { id: 'memory-insights', label: 'Memory Insights', icon: '◈', defaultVisible: true, defaultOrder: 5 },
+  { id: 'ai-timeline', label: 'Timeline', icon: '│', defaultVisible: true, defaultOrder: 6 },
 ];
 
 export const DEFAULT_SIDEBAR_PREFERENCES: SidebarPreferences = {
   enabledWidgets: WIDGET_DEFINITIONS.filter(w => w.defaultVisible).map(w => w.id),
   widgetOrder: WIDGET_DEFINITIONS.sort((a, b) => a.defaultOrder - b.defaultOrder).map(w => w.id),
-  collapsedWidgets: ['dashboard', 'memory', 'session-timeline', 'tab-intelligence'],
+  collapsedWidgets: ['memory-insights', 'ai-timeline'],
   sidebarWidth: 380,
   sidebarMode: 'full',
 };
@@ -82,11 +80,56 @@ const STORAGE_KEY = 'aartiq_sidebar_preferences';
 const VISUAL_KEY = 'aartiq_ai_visual_settings';
 const PRIVACY_KEY = 'aartiq_ai_privacy_settings';
 
+const LEGACY_WIDGET_MAP: Record<string, WidgetId> = {
+  dashboard: 'current-context',
+  memory: 'memory-insights',
+  'session-timeline': 'ai-timeline',
+  'tab-intelligence': 'workspace-intelligence',
+  'quick-actions': 'ai-suggestions',
+  capabilities: 'ai-suggestions',
+  tasks: 'automation-monitor',
+};
+
+const VALID_WIDGET_IDS = new Set<string>(WIDGET_DEFINITIONS.map((w) => w.id));
+
+function migrateWidgetId(id: string): WidgetId | null {
+  if (VALID_WIDGET_IDS.has(id)) return id as WidgetId;
+  return LEGACY_WIDGET_MAP[id] ?? null;
+}
+
+function migratePreferences(raw: Partial<SidebarPreferences>): SidebarPreferences {
+  const enabled = (raw.enabledWidgets || [])
+    .map((id) => migrateWidgetId(String(id)))
+    .filter((id): id is WidgetId => id !== null);
+  const order = (raw.widgetOrder || [])
+    .map((id) => migrateWidgetId(String(id)))
+    .filter((id): id is WidgetId => id !== null);
+  const collapsed = (raw.collapsedWidgets || [])
+    .map((id) => migrateWidgetId(String(id)))
+    .filter((id): id is WidgetId => id !== null);
+
+  const dedupe = <T extends string>(arr: T[]) => Array.from(new Set(arr));
+
+  const enabledWidgets = dedupe(enabled.length ? enabled : DEFAULT_SIDEBAR_PREFERENCES.enabledWidgets);
+  const widgetOrder = dedupe(order.length ? order : DEFAULT_SIDEBAR_PREFERENCES.widgetOrder);
+  DEFAULT_SIDEBAR_PREFERENCES.widgetOrder.forEach((id) => {
+    if (!widgetOrder.includes(id)) widgetOrder.push(id);
+  });
+
+  return {
+    ...DEFAULT_SIDEBAR_PREFERENCES,
+    ...raw,
+    enabledWidgets,
+    widgetOrder,
+    collapsedWidgets: dedupe(collapsed),
+  };
+}
+
 export function getSidebarPreferences(): SidebarPreferences {
   try {
     if (typeof localStorage !== 'undefined') {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return { ...DEFAULT_SIDEBAR_PREFERENCES, ...JSON.parse(raw) };
+      if (raw) return migratePreferences(JSON.parse(raw));
     }
   } catch { }
   return { ...DEFAULT_SIDEBAR_PREFERENCES };
@@ -94,7 +137,7 @@ export function getSidebarPreferences(): SidebarPreferences {
 
 export function saveSidebarPreferences(prefs: Partial<SidebarPreferences>): SidebarPreferences {
   const current = getSidebarPreferences();
-  const updated = { ...current, ...prefs };
+  const updated = migratePreferences({ ...current, ...prefs });
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));

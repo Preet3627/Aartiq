@@ -15,13 +15,14 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import type { ActionRiskLevel } from '@/lib/ai-action-security';
 
 interface BatchCommandInfo {
   index: number;
   command: string;
   description: string;
   irreversible: boolean;
-  risk: 'low' | 'medium' | 'high';
+  risk: ActionRiskLevel;
   reason: string;
 }
 
@@ -30,7 +31,7 @@ interface ClickPermissionModalProps {
     action: string;
     target?: string;
     reason: string;
-    risk: 'low' | 'medium' | 'high';
+    risk: ActionRiskLevel;
     actionType?: string;
     what?: string;
     requiresDeviceUnlock?: boolean;
@@ -47,6 +48,7 @@ const riskTone = {
   low: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/20',
   medium: 'text-amber-600 bg-amber-500/10 border-amber-500/20',
   high: 'text-red-600 bg-red-500/10 border-red-500/20',
+  critical: 'text-rose-600 bg-rose-500/10 border-rose-500/20',
 };
 
 const actionIcon = (actionType?: string) => {
@@ -91,16 +93,16 @@ function TechnicalDetails({ children, label = 'Show Technical Details' }: { chil
   );
 }
 
-function DangerousActionNotice({ command, risk }: { command?: string; risk: 'low' | 'medium' | 'high' }) {
+function DangerousActionNotice({ command, risk }: { command?: string; risk: ActionRiskLevel }) {
   const destructiveCommand = command && /^(rm\s+-rf|dd\s+|mkfs|format|fdisk)/i.test(command.trim());
   const pipedCommand = command && /[|>]/.test(command);
-  if (risk !== 'high' && !destructiveCommand && !pipedCommand) return null;
+  if (risk !== 'high' && risk !== 'critical' && !destructiveCommand && !pipedCommand) return null;
 
   return (
     <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-3">
       <div className="flex items-center gap-2 text-[13px] font-medium text-red-500">
         <FileWarning size={15} />
-        {risk === 'high' || destructiveCommand ? 'This action can modify or delete data' : 'This command redirects or pipes output'}
+        {risk === 'high' || risk === 'critical' || destructiveCommand ? 'This action can modify or delete data' : 'This command redirects or pipes output'}
       </div>
       <p className="mt-1 text-[12px] leading-relaxed text-secondary-text">
         Review the details before allowing Aartiq to continue.
@@ -216,7 +218,7 @@ function SinglePermissionCard({
 }) {
   const [alwaysAllow, setAlwaysAllow] = useState(false);
   const actionName = humanAction(context.action, context.actionType);
-  const isHighRisk = context.risk === 'high';
+  const isHighRisk = context.risk === 'high' || context.risk === 'critical';
 
   const [qrImage, setQrImage] = useState<string | null>(null);
   const [expectedPin, setExpectedPin] = useState('');
@@ -318,13 +320,17 @@ function SinglePermissionCard({
       <div className="p-5">
         <div className="mb-5 flex items-start gap-4">
           <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${riskTone[context.risk]}`}>
-            {context.risk === 'high' ? <Shield size={19} /> : actionIcon(context.actionType)}
+            {context.risk === 'high' || context.risk === 'critical' ? <Shield size={19} /> : actionIcon(context.actionType)}
           </div>
           <div className="min-w-0 flex-1">
             <div className="text-[13px] text-secondary-text">Allow Aartiq to</div>
             <h2 className="mt-0.5 text-lg font-semibold leading-tight text-primary-text">{actionName}</h2>
             <div className={`mt-2 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${riskTone[context.risk]}`}>
-              {context.risk === 'high' ? 'High risk — QR + PIN required' : context.risk === 'medium' ? 'Needs approval' : 'Low risk'}
+              {context.risk === 'high' || context.risk === 'critical'
+                ? 'High risk — QR + PIN required'
+                : context.risk === 'medium'
+                  ? 'Needs approval'
+                  : 'Low risk'}
             </div>
           </div>
           <button type="button" onClick={onDeny} className="rounded-md p-2 text-secondary-text hover:bg-[color-mix(in_srgb,var(--primary-text)_8%,transparent)] hover:text-primary-text" title="Deny">
@@ -380,7 +386,7 @@ function SinglePermissionCard({
             />
           )}
 
-          {context.requiresDeviceUnlock && context.risk !== 'high' && (
+          {context.requiresDeviceUnlock && context.risk !== 'high' && context.risk !== 'critical' && (
             <div className="rounded-lg border border-[color-mix(in_srgb,var(--accent)_25%,transparent)] bg-[color-mix(in_srgb,var(--accent)_8%,transparent)] px-3 py-3">
               <div className="flex items-center gap-2 text-[13px] font-medium text-primary-text">
                 <Lock size={15} />
@@ -430,7 +436,7 @@ function SinglePermissionCard({
         </button>
         <button
           type="button"
-          onClick={() => onAllow(context.risk === 'high' ? false : alwaysAllow)}
+          onClick={() => onAllow(context.risk === 'high' || context.risk === 'critical' ? false : alwaysAllow)}
           disabled={!canApprove}
           className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm ${
             canApprove

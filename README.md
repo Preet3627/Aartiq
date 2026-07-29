@@ -29,6 +29,20 @@ An Electron-based browser with an integrated AI chat that executes LLM-planned b
 - [License](#license)
 
 ---
+> [!IMPORTANT]
+> ## 🚧 Project Status
+>
+> **Aartiq™ is temporarily on hold while I focus on my JEE preparation.**
+>
+> Development, feature work, and issue responses will be limited until my exams are over.
+>
+> The repository will remain public, and existing releases will continue to be available. Once JEE is completed, development will resume with new features, improvements, and bug fixes.
+>
+> Thank you for your patience and support. ❤️
+>
+> — Preet Patel
+
+
 
 ## Why Aartiq?
 
