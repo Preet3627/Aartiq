@@ -1,6 +1,11 @@
-# Aartiq — For the questions that matter
+Aartiq™ — For the questions that matter
 
-An Electron-based browser with an integrated AI chat that executes LLM-planned browser actions, system commands, and document generation — every action is permission-gated before execution.
+>The most important question isn't what you ask AI.It's what AI asks you before it acts.
+
+
+
+Aartiq™ is an open-source AI browser that plans tasks, explains every non-trivial action, asks for permission, and only then executes it.
+
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.3.5-blue.svg)](https://github.com/Preet3627/Aartiq/releases/tag/v0.3.5)
@@ -11,7 +16,7 @@ An Electron-based browser with an integrated AI chat that executes LLM-planned b
 [![Android](https://img.shields.io/badge/Android-Passing-blue?logo=android)](https://github.com/Preet3627/Aartiq/releases/latest)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Listed-blue?logo=microsoft)](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN)
 
-<img width="1512" height="1012" alt="Aartiq Browser" src="https://github.com/user-attachments/assets/f289221f-4d40-451a-94bc-bf4392f28145" />
+<img width="1912" height="1168" alt="Screenshot 2026-07-25 at 2 28 01 PM" src="https://github.com/user-attachments/assets/fe9131d4-cfcf-4d3b-aea5-9cc451b4fbd1" />
 
 ---
 
@@ -29,46 +34,103 @@ An Electron-based browser with an integrated AI chat that executes LLM-planned b
 - [License](#license)
 
 ---
-> [!IMPORTANT]
-> ## 🚧 Project Status
->
-> **Aartiq™ is temporarily on hold while I focus on my JEE preparation.**
->
-> Development, feature work, and issue responses will be limited until my exams are over.
->
-> The repository will remain public, and existing releases will continue to be available. Once JEE is completed, development will resume with new features, improvements, and bug fixes.
->
-> Thank you for your patience and support. ❤️
->
-> — Preet Patel
+
+
+> "Aartiq™ exists because one unasked question taught me that the questions we don't ask matter most."
+
+That idea became the foundation of Aartiq's permission-first design: before any non-trivial action, the AI explains its plan, asks for your approval, and only then executes it.
 
 
 
-## Why Aartiq?
 
-Most browsers answer questions. Aartiq **does the work**.
+## Why Aartiq™?
 
-Instead of opening 15 tabs yourself, you tell Aartiq what you need and it executes the steps — navigating pages, clicking elements, running commands, generating documents — then shows you exactly what it did before anything non-trivial runs.
-
-| | Chrome / Edge | Modern AI Browsers | Aartiq |
-|---|---|---|---|
-| AI chat | Extensions only | Built-in (answers questions) | Built-in (executes tasks) |
-| OS automation | None | None | Shell, apps, volume, brightness, alarms |
-| Document generation | None | None | PDF, Excel, PowerPoint from chat |
-| Local LLM | No | No | Ollama (fully offline) |
-| Permission gating | No | No | Permission-gated AI actions |
-| Cross-platform sync | Via Google account | Limited | WiFi P2P + E2EE cloud |
-| MCP integration | No | No | 64 tools for Claude Desktop |
-| Open source | No | No | Apache 2.0 |
+Traditional browsers help you navigate the web. AI chatbots answer questions. Aartiq helps you complete real tasks.
+Instead of opening 15 tabs yourself, you tell Aartiq what you need. It plans the steps, explains every non-trivial action, asks for your approval, and only then executes them.
 
 ---
+## Permission-First AI
 
+Unlike most AI assistants that immediately execute actions, Aartiq explains **exactly what it intends to do**, asks for your approval, and only then proceeds.
+## Permission Workflow
+
+| Plan | Permission | Results |
+|:----:|:----------:|:-------:|
+| <img src="https://github.com/user-attachments/assets/c55e93c0-fa3c-4ae1-b6ec-e4423b87a9c4" width="250" alt="Plan"> | <img src="https://github.com/user-attachments/assets/e554869b-b156-4538-bf5e-062468752c6c" width="250" alt="Permission"> | <img src="https://github.com/user-attachments/assets/ecdbd0d6-b673-4473-9f54-68d74ddb75c9" width="250" alt="Results"> |
+
+**Plan → Explain → Ask → Execute**
+
+Before accessing files, running shell commands, or performing sensitive actions, Aartiq:
+
+-  Explains exactly what it wants to do
+-  Shows the affected files, directories, or commands
+-  Waits for your approval
+-  Executes only after permission is granted
+---
 ## How It Works
 
 1. You type a task in the AI chat sidebar (e.g. "search for Rust tutorials and save the top 3 as a PDF")
 2. The LLM returns structured commands (`NAVIGATE`, `CLICK_ELEMENT`, `SHELL_COMMAND`, etc.)
 3. Aartiq parses the commands and shows a permission dialog for anything non-trivial
 4. You approve, and Aartiq executes the actions in the browser
+
+
+   ```text
+                   ┌───────────────────────────┐
+                   │           USER            │
+                   └─────────────┬─────────────┘
+                                 │
+                                 ▼
+                     Natural Language Request
+                                 │
+                                 ▼
+                   ┌───────────────────────────┐
+                   │      AI ORCHESTRATOR      │
+                   │ GPT • Claude • Gemini ... │
+                   └─────────────┬─────────────┘
+                                 │
+                         Structured Commands
+                                 │
+                                 ▼
+                   ┌───────────────────────────┐
+                   │      COMMAND PARSER       │
+                   └─────────────┬─────────────┘
+                                 │
+                                 ▼
+
+          ┌──────────────────────────────────────────────┐
+          │      DEFENSE-IN-DEPTH SECURITY (7 Layers)    │
+          │                                              │
+          │  Regex Blocklist                             │
+          │        ↓                                     │
+          │  Permission Store                            │
+          │        ↓                                     │
+          │  Capability Controller                       │
+          │        ↓                                     │
+          │  Directory Allowlist                         │
+          │        ↓                                     │
+          │  OS-Level Sandboxing                         │
+          │        ↓                                     │
+          │  Native File API Bypass                      │
+          │        ↓                                     │
+          │  Renderer Approval                           │
+          └──────────────────┬───────────────────────────┘
+                             │
+                        Approved?
+                       Yes │   │ No
+                           ▼   ▼
+              ┌────────────────────────────┐
+              │ Browser / Desktop / Files  │
+              │ OCR / Office / Automation  │
+              └─────────────┬──────────────┘
+                            ▼
+                    ┌──────────────┐
+                    │   Results    │
+                    └──────────────┘
+```
+```
+
+
 
 **Supported providers:** Gemini, GPT, Claude, Groq, xAI, Azure OpenAI, Ollama (offline), Apple Intelligence (macOS).
 
@@ -89,8 +151,32 @@ Try these after installing:
 | `"Fill this form with my details"` | Detects fields, fills them atomically |
 | `"Search Google for 'electron performance' and extract results"` | Real browser search, extracts page text |
 
----
 
+
+---
+## See Aartiq in Action
+
+> **Prompt:** *"Search for today's news, create a PDF summary, move it to my Desktop, and open it."*
+
+<p align="center">
+  <img width="744" height="480" alt="3" src="https://github.com/user-attachments/assets/051f5188-6e20-4b58-8087-74b9dd61b2e2" />
+
+</p>
+
+Aartiq doesn't just answer questions—it plans the task, explains every non-trivial action, asks for your approval, and then executes it.
+
+**What happens in this demo:**
+
+1.  Searches the web for today's news
+2.  Summarizes the results into a formatted PDF
+3.  Moves the PDF to the Desktop
+4.  Opens the generated document
+5.  Shows the completed result
+
+**Plan → Explain → Ask → Execute**
+
+
+---
 ## Installation
 
 ### Pre-built Binaries
@@ -163,9 +249,11 @@ Every non-trivial action requires explicit approval before execution:
 Aartiq enforces security through multiple independent layers:
 
 1. **Regex blocklist** (`SecurityValidator.js`) — fast first-pass reject of obvious dangerous patterns. Cheap to run but bypassable by construction; not relied upon as the primary defense.
-2. **Permission store** (`command-validator.js:checkShellPermission`) — risk-tiered permission checks against an explicit grant store. Commands are denied unless a matching grant exists at a sufficient level.
+2. **Permission store** (`command-validator.js:checkShellPermission`) — risk-tiered permission checks against an explicit grant store. Commands are denied unless a matching grant exists at a sufficient level.<img width="324" height="422" alt="Screenshot 2026-07-25 at 12 02 56 PM" src="https://github.com/user-attachments/assets/5ca82b06-5643-492c-b1df-db36e1db296e" />
+
 3. **Capability controller** (`capability-controller.js`) — ticket-based approval system that prevents param tampering across the IPC trust boundary. Every shell-execution and system-command entry point is routed through registered actions; unregistered actions are rejected outright.
-4. **Directory allowlist** (`directory-allowlist.js`) — user-controlled set of directories the AI can access, replacing the single hardcoded sandbox workspace. Paths are canonicalized via `fs.realpath()` before checking (follows symlinks, prevents `../` traversal). Each entry specifies read-only or read-write access. The AI must request permission for directories not on the list.
+4. **Directory allowlist** (`directory-allowlist.js`) — user-controlled set of directories the AI can access, replacing the single hardcoded sandbox workspace. Paths are canonicalized via `fs.realpath()` before checking (follows symlinks, prevents `../` traversal). Each entry specifies read-only or read-write access. The AI must request permission for directories not on the list.<img width="485" height="710" alt="Screenshot 2026-07-25 at 12 03 12 PM" src="https://github.com/user-attachments/assets/3ba9c577-36a6-4526-9364-8228426b82e4" />
+
 5. **OS-level sandboxing** (`sandbox-executor.js`) — filesystem and network confinement via platform-specific mechanisms (macOS Seatbelt, Linux bubblewrap, Windows Job Objects with ACL-based filesystem restrictions and Windows Firewall network rules). Sandbox profiles are generated dynamically from the directory allowlist — read-only entries get `--ro-bind`/`file-read*`, read-write entries get `--bind`/`file-write*`. The spawned process physically cannot write outside the allowlisted directories.
 6. **File management bypass** — `move_file`, `copy_file`, `open_file`, `print_file` route directly through `fs` APIs with `isPathAllowed()` checks on both source and destination. No subprocess spawn for common file operations: faster, more auditable, no shell injection surface.
 7. **Renderer-side approval dialog** (`AIChatSidebar.tsx:requestActionPermission`) — user-facing confirmation before command dispatch.
@@ -213,7 +301,35 @@ Built by [Preet3627](https://github.com/Preet3627) with contributions from the c
 </a>
 
 ---
+> [!IMPORTANT]
+> ## 🚧 Project Status
+>
+> **Aartiq™ is temporarily on hold.**
+>
+> This project started as a simple experiment called **Comet-AI** — a question about what AI could become. Over time, that question evolved into **Aartiq™**, an AI-native browser built around the idea that AI should not only answer questions, but help execute tasks while keeping humans in control.
+>
+> After five months of building Aartiq independently, including its AI systems, security architecture, MCP integration, synchronization features, and multi-platform releases, I am taking a temporary pause to focus on my studies and recharge after balancing development with academics.
+>
+> Development, feature work, and issue responses will be limited until my exams are over.
+>
+> The repository will remain public, and existing releases will continue to be available. Once Exam is completed, development will resume with new features, improvements, and bug fixes.
+>
+> **"What happened to my private diary should never happen to a computer system."**
+>
+> Aartiq was built on one belief:
+>
+> **"Aartiq exists because one unasked question taught me that the questions we don't ask matter most."**
+>
+> This is not the end of the journey.
+>
+> **Aartiq is just 1 CM away from the future.**
+>
+> Thank you for your patience and support. ❤️
+>
+> — Preet Patel
 
+
+---
 ## License
 
 Aartiq uses a **dual-license** model:
