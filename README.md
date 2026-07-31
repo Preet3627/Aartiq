@@ -1,6 +1,6 @@
 Aartiq™ — For the questions that matter
 
->The most important question isn't what you ask AI.It's what AI asks you before it acts.
+>The most important question isn't what you ask AI. It's what AI asks you before it acts.
 
 
 
@@ -51,7 +51,8 @@ Instead of opening 15 tabs yourself, you tell Aartiq what you need. It plans the
 ---
 ## Permission-First AI
 
-Unlike most AI assistants that immediately execute actions, Aartiq explains **exactly what it intends to do**, asks for your approval, and only then proceeds.
+Aartiq makes planning, explanation, and user approval part of the action workflow—not an afterthought.
+
 ## Permission Workflow
 
 | Plan | Permission | Results |
@@ -323,6 +324,8 @@ Built by [Preet3627](https://github.com/Preet3627) with contributions from the c
 > This is not the end of the journey.
 >
 > **Aartiq is just 1 CM away from the future.**
+>
+> “The ‘1 CM’ in Aartiq is a personal reminder that respecting a boundary often begins with asking before crossing it.”
 >
 > Thank you for your patience and support. ❤️
 >
