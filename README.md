@@ -7,10 +7,10 @@ Aartiq™ is an open-source AI browser that plans tasks, explains every non-triv
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.3.5-blue.svg)](https://github.com/Preet3627/Aartiq/releases/tag/v0.3.5)
 [![Downloads](https://img.shields.io/github/downloads/Preet3627/Aartiq/total?color=success&label=Downloads)](https://github.com/Preet3627/Aartiq/releases)
-[![Windows](https://img.shields.io/badge/Windows-Passing-blue?logo=windows)](https://github.com/Preet3627/Aartiq/releases/latest)
-[![macOS](https://img.shields.io/badge/macOS-Passing-blue?logo=apple)](https://github.com/Preet3627/Aartiq/releases/latest)
-[![Linux](https://img.shields.io/badge/Linux-Passing-blue?logo=linux)](https://github.com/Preet3627/Aartiq/releases/latest)
-[![Android](https://img.shields.io/badge/Android-Passing-blue?logo=android)](https://github.com/Preet3627/Aartiq/releases/latest)
+[![Windows](https://img.shields.io/badge/Windows-Supported-blue?logo=windows)](https://github.com/Preet3627/Aartiq/releases/latest)
+[![macOS](https://img.shields.io/badge/macOS-Supported-blue?logo=apple)](https://github.com/Preet3627/Aartiq/releases/latest)
+[![Linux](https://img.shields.io/badge/Linux-Supported-blue?logo=linux)](https://github.com/Preet3627/Aartiq/releases/latest)
+[![Android](https://img.shields.io/badge/Android-Supported-blue?logo=android)](https://github.com/Preet3627/Aartiq/releases/latest)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Listed-blue?logo=microsoft)](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN)
 
 <img width="1912" height="1168" alt="Screenshot 2026-07-25 at 2 28 01 PM" src="https://github.com/user-attachments/assets/fe9131d4-cfcf-4d3b-aea5-9cc451b4fbd1" />
@@ -40,7 +40,7 @@ Instead of opening 15 tabs yourself, you tell Aartiq what you need. It plans the
 
 ## Permission-First AI
 
-Unlike most AI assistants that immediately execute actions, Aartiq explains **exactly what it intends to do**, asks for your approval, and only then proceeds.
+Aartiq is designed around explicit approval for non-trivial actions, so users can review what the AI intends to do before execution.
 
 ### Permission Workflow
 
@@ -100,7 +100,7 @@ Before accessing files, running shell commands, or performing sensitive actions,
       │        ↓                                     │
       │  OS-Level Sandboxing                         │
       │        ↓                                     │
-      │  Native File API Bypass                      │
+      │  Native File API Mediation                   │
       │        ↓                                     │
       │  Renderer Approval                           │
       └──────────────────┬───────────────────────────┘
@@ -196,9 +196,18 @@ flutter run
 
 ## Performance
 
-Measured on a MacBook Pro M4 Pro (12-core, 24 GB), macOS 26.5: **0.32s cold start**, **0.31s warm start**, **< 1% CPU idle**, **~1.7 GB total memory**, **1.2 GB app bundle**.
+Measured on a MacBook Pro M4 Pro (12-core, 24 GB), macOS 26.5 (app v0.3.4, 2026-07-20):
 
-> Measures time to first visible window, not full initialization. Aartiq displays the Chromium window immediately while AI providers, MCP bridge, sync, and OCR continue loading asynchronously.
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Cold Start (Window Visible) | 0.32s | Average of 3 runs, ±0.00s |
+| Warm Start (Window Visible) | 0.31s | From OS file cache (second launch) |
+| Main Process RSS | 430 MB | Stabilizes to ~610 MB after tab activity |
+| Total RSS (all processes) | 1,712 MB | Main, renderer, GPU, utility, and helper processes |
+| CPU (idle after init) | < 1% | After background services finish loading |
+| App Bundle Size | 1.2 GB | Frameworks: 276 MB, Resources: 958 MB |
+
+> Measures time to first visible window, not full initialization. Aartiq displays the Chromium window immediately while AI providers, MCP bridge, sync, and OCR continue loading asynchronously. Results may vary depending on hardware, OS version, and installed extensions.
 
 Full benchmark methodology, per-run data, and reproduction scripts are on the [Performance Benchmarks](https://aartiq.ponsrischool.in/docs/overview#performance-benchmarks) page.
 
@@ -288,5 +297,7 @@ Aartiq uses a **dual-license** model:
 The MCP server is MIT-licensed for maximum compatibility with Claude Desktop and other MCP clients. All other components remain Apache 2.0.
 
 "Aartiq™ is a trademark of Preet Patel (Latestinssan, Preet3627). While our source code is freely available under the Apache 2.0 License, this license does not grant permission to use the trade name, logos, or branding of Aartiq. Any modified distributions of this browser must be rebranded under a completely different name."
+
+The source code may be used, modified, and redistributed under its applicable open-source license. The Aartiq name, logo, and visual identity are not granted by that license and may not be used for modified or unofficial distributions.
 
 © 2026 Aartiq™. All rights reserved.
