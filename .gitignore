@@ -159,6 +159,7 @@ __tests__/
 # Project specific
 Aartiq_/
 /Landing_Page
+/Aartiq-Landing-Page/
 
 # Compiled native binaries
 aartiq-browser/bin/

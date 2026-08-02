@@ -1,793 +1,164 @@
 /**
- * sandbox-executor.js — OS-level sandboxing for shell command execution.
+ * sandbox-executor.js — OS-level sandboxing for command execution.
  *
- * This module wraps child_process.spawn/exec with platform-specific sandboxing
- * to enforce filesystem, network, and process boundaries that a spawned process
- * physically cannot cross. This is the structural defense-in-depth layer: even
- * if the regex blocklist in SecurityValidator.js misses a dangerous command, the
- * OS-level sandbox prevents writes outside the workspace and blocks network access
- * to non-allowlisted destinations.
+ * SECURITY MODEL
+ * --------------
+ * All execution is FAIL-CLOSED. When `useSandbox` is true (the default), the
+ * command is executed only after the platform sandbox has been created AND
+ * verified. If sandbox setup is unavailable, malformed, or cannot be verified,
+ * the command is NOT executed and a structured failure is returned.
  *
- * Approach by platform:
- *   macOS  — Seatbelt sandbox profiles via sandbox-exec
- *   Linux  — bubblewrap (bwrap) for filesystem/namespace isolation
- *   Windows — Job Objects for process confinement (flagged for full design)
+ * There is NO automatic fallback to unsandboxed execution. The only way to run
+ * unsandboxed is the explicit `useSandbox: false` escape hatch, which is
+ * documented as unsandboxed execution and reported as such in the result.
  *
- * The regex blocklist in SecurityValidator.js remains as a fast first-pass reject
- * (cheap, catches obvious cases early) but must NOT be treated as sufficient on
- * its own. Enforcement happens at the OS/kernel level here.
+ * Platform guarantees (v0.3.5+):
+ *   macOS  — Seatbelt (sandbox-exec) with a closed-by-default profile:
+ *            deny file-read/write, re-allow only system paths + allowlisted
+ *            directories, deny all network, confine process-exec.
+ *   Linux  — bubblewrap (bwrap): namespaces (pid/net/ipc/uts), read-only
+ *            system mounts, allowlisted bind mounts (read-only vs read-write),
+ *            private /tmp, network disabled via --unshare-net.
+ *   Windows — "Windows Job Object containment": the target process is created
+ *            suspended and assigned to a Job Object (verified) whose handles
+ *            live for the entire target lifetime. Windows does NOT provide
+ *            OS-level filesystem or network isolation in this release; those
+ *            are NOT claimed. Requests for per-process network policy on
+ *            Windows fail closed.
  *
- * Audit-doc line item: §6 (OS-level sandboxing).
+ * The regex blocklist in SecurityValidator.js remains a fast first-pass reject
+ * but is NOT treated as sufficient on its own.
  */
 
 const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const { canonicalizePath, getSandboxDirs } = require('./directory-allowlist');
+
+// ---------------------------------------------------------------------------
+// Error types
+// ---------------------------------------------------------------------------
+
+const SANDBOX_ERROR_CODES = [
+  'SANDBOX_UNAVAILABLE',
+  'SANDBOX_SETUP_FAILED',
+  'SANDBOX_VERIFICATION_FAILED',
+  'SANDBOX_POLICY_INVALID',
+];
+
+class SandboxError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+    this.name = 'SandboxError';
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
-/**
- * Default workspace directory for sandboxed execution.
- * Write operations are confined to this directory tree.
- */
-const DEFAULT_WORKSPACE = path.join(
-  os.homedir(),
-  '.aartiq',
-  'sandbox-workspace',
-);
-
-/**
- * Network domain allowlist. Commands that open network connections will be
- * restricted to these destinations when the sandbox enforces network policy.
- * An empty array means all network access is denied (most restrictive).
- */
+const DEFAULT_WORKSPACE = path.join(os.homedir(), '.aartiq', 'sandbox-workspace');
 const DEFAULT_NETWORK_ALLOWLIST = [];
 
-/**
- * Environment variables that are explicitly passed to sandboxed processes.
- * All other ambient env vars (including credentials, API keys, tokens) are
- * stripped to prevent credential leakage.
- */
 const SAFE_ENV_KEYS = [
   'PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR', 'SHELL',
   'TERM', 'COLORTERM', 'EDITOR', 'VISUAL',
 ];
 
+// Windows needs these to launch and run a native process; they carry no
+// credentials. Everything else (API keys, tokens, database URLs) is stripped.
+const WINDOWS_SAFE_ENV_KEYS = [
+  'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'SYSTEMDRIVE', 'PATHEXT', 'COMSPEC',
+  'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
+  'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'PROCESSOR_IDENTIFIER',
+];
+
+// Default Windows Job Object limits. Deliberately generous enough for real
+// pipelines/builds but still a hard ceiling against fork bombs.
+const DEFAULT_MAX_PROCESSES = 64;
+
 // ---------------------------------------------------------------------------
-// macOS Seatbelt Sandbox
+// Structured failure
+// ---------------------------------------------------------------------------
+
+function createFailure(code, message, extra = {}) {
+  if (!SANDBOX_ERROR_CODES.includes(code)) code = 'SANDBOX_SETUP_FAILED';
+  return { success: false, code, error: message, sandboxed: false, ...extra };
+}
+
+// ---------------------------------------------------------------------------
+// Path / allowlist validation (shared)
 // ---------------------------------------------------------------------------
 
 /**
- * Generate a Seatbelt sandbox profile for macOS sandbox-exec.
+ * Validate and canonicalize the directory allowlist. Every entry must exist
+ * and resolve to a canonical path. Invalid entries are a policy error, never
+ * silently skipped.
  *
- * The profile:
- *   - Allows read access to /usr, /bin, /sbin, /System, /Library, /tmp
- *   - Allows read/write to each allowlisted directory per its access level
- *   - Denies write to all other paths (home, etc)
- *   - Denies all network operations (except explicitly allowlisted domains)
- *   - Denies process tracing, kernel control, device access
- *
- * Reference: Apple's sandbox-exec documentation and Claude Code's sandboxed
- * Bash tool approach.
- *
- * @param {object} options
- * @param {string} options.workspace — fallback workspace directory
- * @param {Array}  options.directoryAllowlist — array of allowlist entries
- * @param {string[]} options.networkAllowlist — allowed network domains
+ * @returns {{readDirs: string[], writeDirs: string[]}}
  */
-function generateSeatbeltProfile(options = {}) {
-  const workspace = options.workspace || DEFAULT_WORKSPACE;
-  const networkAllowlist = options.networkAllowlist || DEFAULT_NETWORK_ALLOWLIST;
-  const allowlist = options.directoryAllowlist || null;
-
-  // Build filesystem rules from allowlist or fallback to workspace-only
-  let writeClauses = '';
-  let extraReadClauses = '';
-
-  if (allowlist && Array.isArray(allowlist) && allowlist.length > 0) {
-    const { readDirs, writeDirs } = getSandboxDirs(allowlist);
-    writeClauses = writeDirs
-      .map(d => `  (subpath "${d.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`) 
-      .join('\n');
-    // Read-only dirs go directly into the same file-read* block — no nesting
-    extraReadClauses = readDirs
-      .filter(d => !writeDirs.includes(d))
-      .map(d => `  (subpath "${d.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}")`) 
-      .join('\n');
-  } else {
-    // Fallback: workspace-only access
-    writeClauses = `  (subpath "${workspace}")`;
-    extraReadClauses = '';
+function validateAllowlist(allowlist) {
+  if (allowlist == null) return { readDirs: [], writeDirs: [] };
+  if (!Array.isArray(allowlist)) {
+    throw new SandboxError('SANDBOX_POLICY_INVALID', 'directoryAllowlist must be an array');
   }
-
-  let networkFilter = '';
-  if (networkAllowlist.length > 0) {
-    networkFilter = `(deny network*)
-(allow network-outbound
-  (require-not (require-any
-    ${networkAllowlist.map(d => `(require-regex "${d.replace(/\./g, '\\.')}")`).join('\n    ')}
-  ))
-)`;
-  } else {
-    networkFilter = '(deny network*)';
+  const readDirs = new Set();
+  const writeDirs = new Set();
+  for (const entry of allowlist) {
+    if (!entry || typeof entry.path !== 'string' || entry.path.length === 0) {
+      throw new SandboxError('SANDBOX_POLICY_INVALID', 'Allowlist entry is missing a path');
+    }
+    const { canonical } = canonicalizePath(entry.path);
+    if (!canonical) {
+      throw new SandboxError('SANDBOX_POLICY_INVALID', `Could not canonicalize allowlisted path: ${entry.path}`);
+    }
+    if (!fs.existsSync(canonical)) {
+      throw new SandboxError('SANDBOX_POLICY_INVALID', `Allowlisted path does not exist: ${entry.path}`);
+    }
+    const access = entry.access || 'read';
+    if (access === 'read-write') {
+      writeDirs.add(canonical);
+      readDirs.add(canonical);
+    } else {
+      readDirs.add(canonical);
+    }
   }
-
-  // Write clauses include the workspace, /tmp, and user-allowlisted write dirs
-  const writeBlock = [
-    writeClauses,
-    `  (subpath "/tmp")`,
-    `  (subpath "${os.tmpdir()}")`,
-    // Also allow writing to the real home dir (needed for ~/Downloads, etc.)
-    `  (subpath "${(process.env.HOME || os.homedir()).replace(/"/g, '\\"')}")`,
-  ].filter(Boolean).join('\n');
-
-  // All readable paths go into ONE file-read* block — nested blocks are invalid Seatbelt syntax
-  const readBlock = [
-    `  (subpath "/usr")`,
-    `  (subpath "/bin")`,
-    `  (subpath "/sbin")`,
-    `  (subpath "/System")`,
-    `  (subpath "/Library")`,
-    `  (subpath "/System/Library")`,
-    `  (subpath "/dev")`,
-    `  (subpath "/private/tmp")`,
-    `  (subpath "/etc")`,
-    // User home (covers ~/Downloads, ~/Documents, ~/Desktop, etc.)
-    `  (subpath "${(process.env.HOME || os.homedir()).replace(/"/g, '\\"')}")`,
-    extraReadClauses,
-  ].filter(Boolean).join('\n');
-
-  return `
-(version 1)
-(allow default)
-
-; Filesystem: deny writes outside allowlisted directories
-(deny file-write*)
-(allow file-write*
-${writeBlock}
-)
-
-; Filesystem: allow reads for system paths + user home
-(allow file-read*
-${readBlock}
-)
-
-; Network
-${networkFilter}
-
-; Process execution — allow standard system binaries and sh for pipes
-(allow process-exec
-  (subpath "/usr")
-  (subpath "/bin")
-  (subpath "/sbin")
-  (subpath "/System")
-)
-(allow process-fork)
-`.trim();
+  return { readDirs: [...readDirs], writeDirs: [...writeDirs] };
 }
 
 // ---------------------------------------------------------------------------
-// Linux bubblewrap Sandbox
+// Safe environment builder
 // ---------------------------------------------------------------------------
 
 /**
- * Build bubblewrap (bwrap) arguments for Linux sandboxing.
- *
- * bwrap creates a new namespace with:
- *   - Read-only /usr, /bin, /sbin, /lib, /lib64
- *   - Per-entry bind/ro-bind for allowlisted directories
- *   - Private /tmp
- *   - No network access (unless explicitly allowlisted)
- *   - Unshared PID namespace
- *
- * Requires: bubblewrap (bwrap) package installed on the system.
- *
- * @param {string} command — the command to run
- * @param {string[]} args — command arguments
- * @param {object} options
- * @param {string} options.workspace — fallback workspace directory
- * @param {Array}  options.directoryAllowlist — array of allowlist entries
- */
-function buildBubblewrapArgs(command, args, options = {}) {
-  const workspace = options.workspace || DEFAULT_WORKSPACE;
-  const allowlist = options.directoryAllowlist || null;
-
-  const bwrapArgs = [
-    // Unshare namespaces for isolation
-    '--unshare-pid',
-    '--unshare-net',
-
-    // Filesystem bindings (read-only system paths)
-    '--ro-bind', '/usr', '/usr',
-    '--ro-bind', '/bin', '/bin',
-    '--ro-bind', '/sbin', '/sbin',
-    '--ro-bind', '/lib', '/lib',
-    '--ro-bind', '/lib64', '/lib64',
-  ];
-
-  // Add allowlisted directories
-  if (allowlist && Array.isArray(allowlist) && allowlist.length > 0) {
-    for (const entry of allowlist) {
-      if (!entry || !entry.path) continue;
-      const { canonical } = canonicalizePath(entry.path);
-      if (!canonical) continue;
-
-      if (entry.access === 'read-write') {
-        bwrapArgs.push('--bind', canonical, canonical);
-      } else {
-        bwrapArgs.push('--ro-bind', canonical, canonical);
-      }
-    }
-  } else {
-    // Fallback: workspace-only
-    bwrapArgs.push('--bind', workspace, workspace);
-  }
-
-  bwrapArgs.push(
-    // Private /tmp
-    '--tmpfs', '/tmp',
-
-    // Dev filesystem
-    '--dev', '/dev',
-
-    // Proc filesystem
-    '--proc', '/proc',
-
-    // Set working directory to workspace
-    '--chdir', workspace,
-
-    // Die with parent
-    '--die-with-parent',
-
-    // The actual command
-    command,
-    ...args,
-  );
-
-  return bwrapArgs;
-}
-
-// ---------------------------------------------------------------------------
-// Windows AppContainer Sandboxing
-// ---------------------------------------------------------------------------
-
-/**
- * Windows sandboxing approach (multi-layer):
- *
- * 1. **Job Objects**: Process confinement via Win32 API:
- *    - JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE — child dies when parent exits
- *    - JOB_OBJECT_LIMIT_ACTIVE_PROCESS — limit process count to prevent forks
- *    - JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION — crash isolation
- *    - JOB_OBJECT_SECURITY_NO_SECURITY — prevent token escalation
- *
- * 2. **Restricted Token**: Create a restricted token with low-box SID:
- *    - Removes dangerous SIDs (Administrators, SYSTEM, etc.)
- *    - Adds low-box SID for filesystem write restrictions
- *    - Prevents privilege escalation from child processes
- *
- * 3. **Filesystem Restrictions**: Directory ACLs via icacls:
- *    - Only allowlisted directories get read/write access
- *    - All other paths are deny-listed for write operations
- *    - Symlinks are resolved before checking against allowlist
- *
- * 4. **Network Restrictions**: Windows Firewall rules:
- *    - Create temporary inbound/outbound block rules
- *    - Only explicitly allowlisted domains are permitted
- *    - Rules are cleaned up after execution
- *
- * 5. **Environment Sanitization**: Strip ambient credentials:
- *    - Only PATH, HOME, USER, LANG, etc. are passed
- *    - API keys, tokens, and secrets are never exposed
- *
- * Implementation uses PowerShell P/Invoke for Win32 APIs since
- * we avoid native addon dependencies (ffi-napi, koffi).
- *
- * Audit-doc line item: §6 (OS-level sandboxing).
- */
-
-/**
- * Generate a PowerShell script that creates a Job Object and assigns
- * the current process to it with security restrictions.
- *
- * @param {object} options
- * @param {number} options.maxProcesses — max active processes (default: 1)
- * @param {boolean} options.killOnClose — kill children when job closes (default: true)
- * @returns {string} PowerShell script content
- */
-function generateJobObjectScript(options = {}) {
-  const maxProcesses = options.maxProcesses || 1;
-  const killOnClose = options.killOnClose !== false;
-
-  return `
-# Windows Job Object creation via P/Invoke
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-
-public class JobObject {
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-    public static extern IntPtr CreateJobObject(IntPtr lpJobAttributes, string name);
-
-    [DllImport("kernel32.dll")]
-    public static extern bool AssignProcessToJobObject(IntPtr hJob, IntPtr hProcess);
-
-    [DllImport("kernel32.dll")]
-    public static extern bool SetInformationJobObject(IntPtr hJob, int jobObjectInfoClass, IntPtr lpJobObjectInfo, uint cbJobObjectInfoLength);
-
-    [DllImport("kernel32.dll")]
-    public static extern bool TerminateJobObject(IntPtr hJob, uint uExitCode);
-
-    [DllImport("kernel32.dll")]
-    public static extern bool CloseHandle(IntPtr hObject);
-
-    // Job object info classes
-    public const int JobObjectBasicLimitInformation = 2;
-    public const int JobObjectExtendedLimitInformation = 18;
-    public const int JobObjectBasicUIRestrictions = 4;
-    public const int JobObjectSecurityLimitInformation = 5;
-
-    // Limit flags
-    public const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;
-    public const uint JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION = 0x400;
-    public const uint JOB_OBJECT_LIMIT_ACTIVE_PROCESS = 0x8;
-    public const uint JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100;
-    public const uint JOB_OBJECT_LIMIT_JOB_MEMORY = 0x200;
-
-    // UI restriction flags
-    public const uint JOB_OBJECT_UILIMIT_DESKTOP = 0x40;
-    public const uint JOB_OBJECT_UILIMIT_DISPLAYSETTINGS = 0x10;
-    public const uint JOB_OBJECT_UILIMIT_GLOBALATOMS = 0x20;
-    public const uint JOB_OBJECT_UILIMIT_HANDLES = 0x1;
-    public const uint JOB_OBJECT_UILIMIT_READCLIPBOARD = 0x2;
-    public const uint JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS = 0x8;
-    public const uint JOB_OBJECT_UILIMIT_WRITECLIPBOARD = 0x4;
-
-    // Security flags
-    public const uint JOB_OBJECT_SECURITY_NO_ADMIN = 0x1;
-    public const uint JOB_OBJECT_SECURITY_RESTRICTED_TOKEN = 0x2;
-    public const uint JOB_OBJECT_SECURITY_NO_TOKEN = 0x4;
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct JOBOBJECT_BASIC_LIMIT_INFORMATION {
-        public long PerProcessUserTimeLimit;
-        public long PerJobUserTimeLimit;
-        public uint LimitFlags;
-        public IntPtr MinimumWorkingSetSize;
-        public IntPtr MaximumWorkingSetSize;
-        public uint ActiveProcessLimit;
-        public long Affinity;
-        public uint PriorityClass;
-        public uint SchedulingClass;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct IO_COUNTERS {
-        public ulong ReadOperationCount;
-        public ulong WriteOperationCount;
-        public ulong OtherOperationCount;
-        public ulong ReadTransferCount;
-        public ulong WriteTransferCount;
-        public ulong OtherTransferCount;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
-        public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
-        public IO_COUNTERS IoInfo;
-        public IntPtr ProcessMemoryLimit;
-        public IntPtr JobMemoryLimit;
-        public IntPtr PeakProcessMemoryUsed;
-        public IntPtr PeakJobMemoryUsed;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct JOBOBJECT_BASIC_UI_RESTRICTIONS {
-        public uint UILimitFlags;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct JOBOBJECT_SECURITY_LIMIT_INFORMATION {
-        public uint SecurityLimitFlags;
-        public IntPtr JobToken;
-        public IntPtr SidsToDisable;
-        public IntPtr PrivilegesToDelete;
-        public IntPtr RestrictedSids;
-    }
-}
-"@;
-
-# Create the Job Object
-$jobHandle = [JobObject]::CreateJobObject([IntPtr]::Zero, "AartiqSandbox_" + [System.Diagnostics.Process]::GetCurrentProcess().Id)
-if ($jobHandle -eq [IntPtr]::Zero) {
-    Write-Error "Failed to create Job Object"
-    exit 1
-}
-
-# Configure extended limit information
-$extendedInfo = New-Object JobObject+JOBOBJECT_EXTENDED_LIMIT_INFORMATION
-$extendedInfo.BasicLimitInformation.LimitFlags = [JobObject]::JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE -bor
-    [JobObject]::JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION -bor
-    [JobObject]::JOB_OBJECT_LIMIT_ACTIVE_PROCESS
-$extendedInfo.BasicLimitInformation.ActiveProcessLimit = ${maxProcesses}
-
-$extendedInfoSize = [System.Runtime.InteropServices.Marshal]::SizeOf($extendedInfo)
-$extendedInfoPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($extendedInfoSize)
-[System.Runtime.InteropServices.Marshal]::StructureToPtr($extendedInfo, $extendedInfoPtr, $false)
-
-$result = [JobObject]::SetInformationJobObject($jobHandle, [JobObject]::JobObjectExtendedLimitInformation, $extendedInfoPtr, $extendedInfoSize)
-[System.Runtime.InteropServices.Marshal]::FreeHGlobal($extendedInfoPtr)
-
-if (-not $result) {
-    Write-Warning "Failed to set extended limit information, falling back to basic limits"
-}
-
-# Configure UI restrictions (prevent GUI interaction)
-$uiRestrictions = New-Object JobObject+JOBOBJECT_BASIC_UI_RESTRICTIONS
-$uiRestrictions.UILimitFlags = [JobObject]::JOB_OBJECT_UILIMIT_DESKTOP -bor
-    [JobObject]::JOB_OBJECT_UILIMIT_DISPLAYSETTINGS -bor
-    [JobObject]::JOB_OBJECT_UILIMIT_GLOBALATOMS -bor
-    [JobObject]::JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS
-
-$uiSize = [System.Runtime.InteropServices.Marshal]::SizeOf($uiRestrictions)
-$uiPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($uiSize)
-[System.Runtime.InteropServices.Marshal]::StructureToPtr($uiRestrictions, $uiPtr, $false)
-[JobObject]::SetInformationJobObject($jobHandle, [JobObject]::JobObjectBasicUIRestrictions, $uiPtr, $uiSize) | Out-Null
-[System.Runtime.InteropServices.Marshal]::FreeHGlobal($uiPtr)
-
-# Configure security restrictions (prevent token escalation)
-$securityInfo = New-Object JobObject+JOBOBJECT_SECURITY_LIMIT_INFORMATION
-$securityInfo.SecurityLimitFlags = [JobObject]::JOB_OBJECT_SECURITY_NO_ADMIN -bor
-    [JobObject]::JOB_OBJECT_SECURITY_RESTRICTED_TOKEN
-
-$secSize = [System.Runtime.InteropServices.Marshal]::SizeOf($securityInfo)
-$secPtr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($secSize)
-[System.Runtime.InteropServices.Marshal]::StructureToPtr($securityInfo, $secPtr, $false)
-[JobObject]::SetInformationJobObject($jobHandle, [JobObject]::JobObjectSecurityLimitInformation, $secPtr, $secSize) | Out-Null
-[System.Runtime.InteropServices.Marshal]::FreeHGlobal($secPtr)
-
-# Assign current process to the job
-$currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
-$assigned = [JobObject]::AssignProcessToJobObject($jobHandle, $currentProcess.Handle)
-
-if (-not $assigned) {
-    Write-Warning "Failed to assign process to Job Object"
-}
-
-# Store handle for cleanup
-$env:AARTIQ_JOB_HANDLE = $jobHandle.ToInt64()
-
-Write-Output "Job Object created and configured successfully"
-Write-Output "Job Handle: $($jobHandle.ToInt64())"
-`.trim();
-}
-
-/**
- * Generate a PowerShell script that restricts filesystem access
- * by modifying directory ACLs to deny write access outside the allowlist.
- *
- * @param {string[]} allowedWriteDirs — directories allowed for write
- * @param {string[]} allowedReadDirs — directories allowed for read-only
- * @returns {string} PowerShell script content
- */
-function generateFilesystemRestrictionScript(allowedWriteDirs, allowedReadDirs) {
-  const denyPaths = [
-    path.join(os.homedir(), 'Documents'),
-    path.join(os.homedir(), 'Desktop'),
-    path.join(os.homedir(), 'Downloads'),
-    path.join(os.homedir(), 'Pictures'),
-    path.join(os.homedir(), 'Music'),
-    path.join(os.homedir(), 'Videos'),
-  ];
-
-  return `
-# Filesystem restriction via ACLs
-Add-Type -TypeDefinition @"
-using System;
-using System.IO;
-using System.Security.AccessControl;
-using System.Security.Principal;
-
-public class FsRestriction {
-    public static void DenyWriteAccess(string path, string sid) {
-        try {
-            var di = new DirectoryInfo(path);
-            if (!di.Exists) return;
-
-            var acl = di.GetAccessControl();
-            var rule = new FileSystemAccessRule(
-                new SecurityIdentifier(sid),
-                FileSystemRights.Write | FileSystemRights.CreateFiles | FileSystemRights.Delete | FileSystemRights.Modify,
-                AccessControlType.Deny
-            );
-            acl.AddAccessRule(rule);
-            di.SetAccessControl(acl);
-        } catch (Exception) { }
-    }
-
-    public static void AllowReadAccess(string path, string sid) {
-        try {
-            var di = new DirectoryInfo(path);
-            if (!di.Exists) return;
-
-            var acl = di.GetAccessControl();
-            var rule = new FileSystemAccessRule(
-                new SecurityIdentifier(sid),
-                FileSystemRights.Read | FileSystemRights.ListDirectory,
-                AccessControlType.Allow
-            );
-            acl.AddAccessRule(rule);
-            di.SetAccessControl(acl);
-        } catch (Exception) { }
-    }
-}
-"@;
-
-# Low-box SID for restricted processes
-$lowBoxSid = "S-1-15-3-1024-1024-1024-1024-1024-1024-1024-1024"
-
-# Deny write access to sensitive user directories
-${denyPaths.map(p => `FsRestriction::DenyWriteAccess("${p.replace(/\\/g, '\\\\')}", $lowBoxSid)`).join('\n    ')}
-
-Write-Output "Filesystem restrictions applied"
-`.trim();
-}
-
-/**
- * Generate a PowerShell script that creates temporary Windows Firewall
- * rules to block network access except for explicitly allowlisted destinations.
- *
- * @param {string[]} allowlistDomains — domains allowed for network access
- * @param {number} ruleDurationMinutes — how long the rules last (default: 5)
- * @returns {string} PowerShell script content
- */
-function generateNetworkRestrictionScript(allowlistDomains = [], ruleDurationMinutes = 5) {
-  const ruleName = `AartiqSandbox_${Date.now()}`;
-
-  return `
-# Network restriction via Windows Firewall
-$ruleName = "${ruleName}"
-
-# Block all outbound by default
-New-NetFirewallRule -DisplayName "$ruleName-BlockOut" \`
-    -Direction Outbound -Action Block \`
-    -Profile Any -Enabled True \`
-    -Description "Aartiq sandbox: block outbound network" \`
-    -ErrorAction SilentlyContinue
-
-# Block all inbound by default
-New-NetFirewallRule -DisplayName "$ruleName-BlockIn" \`
-    -Direction Inbound -Action Block \`
-    -Profile Any -Enabled True \`
-    -Description "Aartiq sandbox: block inbound network" \`
-    -ErrorAction SilentlyContinue
-
-${allowlistDomains.length > 0 ? `
-# Allow specific domains
-${allowlistDomains.map(domain => `New-NetFirewallRule -DisplayName "$ruleName-Allow_${domain.replace(/\./g, '_')}" `
-    + `\n    -Direction Outbound -Action Allow `
-    + `\n    -RemoteAddress "${domain}" `
-    + `\n    -Profile Any -Enabled True `
-    + `\n    -Description "Aartiq sandbox: allow ${domain}" `
-    + `\n    -ErrorAction SilentlyContinue`).join('\n')}
-` : '# No domains in allowlist — all network access denied'}
-
-# Schedule cleanup
-Start-Job -ScriptBlock {
-    Start-Sleep -Seconds ${ruleDurationMinutes * 60}
-    Remove-NetFirewallRule -DisplayName "$using:ruleName-BlockOut" -ErrorAction SilentlyContinue
-    Remove-NetFirewallRule -DisplayName "$using:ruleName-BlockIn" -ErrorAction SilentlyContinue
-${allowlistDomains.map(domain => `    Remove-NetFirewallRule -DisplayName "$using:ruleName-Allow_${domain.replace(/\./g, '_')}" -ErrorAction SilentlyContinue`).join('\n')}
-} | Out-Null
-
-Write-Output "Network restrictions applied (auto-cleanup in ${ruleDurationMinutes} minutes)"
-`.trim();
-}
-
-/**
- * Execute a PowerShell script with elevated privileges for sandbox setup.
- *
- * @param {string} script — PowerShell script content
- * @param {object} options
- * @param {number} options.timeout — timeout in ms (default: 10000)
- * @returns {Promise<{success: boolean, stdout?: string, stderr?: string}>}
- */
-function executePowerShellScript(script, options = {}) {
-  const timeout = options.timeout || 10000;
-
-  return new Promise((resolve) => {
-    const child = spawn('powershell.exe', [
-      '-NoProfile',
-      '-NonInteractive',
-      '-ExecutionPolicy', 'Bypass',
-      '-Command', script,
-    ], {
-      windowsHide: true,
-      timeout,
-    });
-
-    let stdout = '';
-    let stderr = '';
-
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
-    child.stderr.on('data', (data) => { stderr += data.toString(); });
-
-    child.on('close', (code) => {
-      resolve({
-        success: code === 0,
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-      });
-    });
-
-    child.on('error', (error) => {
-      resolve({
-        success: false,
-        error: error.message,
-      });
-    });
-  });
-}
-
-/**
- * Windows AppContainer sandboxing — the main entry point for Windows.
- *
- * This function orchestrates all Windows sandbox layers:
- * 1. Creates a Job Object for process confinement
- * 2. Sets up filesystem restrictions via ACLs
- * 3. Configures network restrictions via firewall rules
- * 4. Returns spawn options with the configured environment
- *
- * @param {string} command — the command to execute
- * @param {string[]} args — command arguments
- * @param {object} options
- * @param {string} options.workspace — workspace directory
- * @param {Array}  options.directoryAllowlist — directory allowlist entries
- * @param {string[]} options.networkAllowlist — allowed network domains
- * @returns {Promise<{command: string, args: string[], spawnOptions: object}>}
- */
-async function createWindowsSandbox(command, args, options = {}) {
-  const workspace = options.workspace || DEFAULT_WORKSPACE;
-  const allowlist = options.directoryAllowlist || [];
-  const networkAllowlist = options.networkAllowlist || DEFAULT_NETWORK_ALLOWLIST;
-
-  // Step 1: Create Job Object
-  const jobScript = generateJobObjectScript({ maxProcesses: 4, killOnClose: true });
-  const jobResult = await executePowerShellScript(jobScript);
-  if (!jobResult.success) {
-    console.warn('[Sandbox] Windows Job Object creation failed:', jobResult.stderr);
-  }
-
-  // Step 2: Set up filesystem restrictions
-  const { readDirs, writeDirs } = getSandboxDirs(allowlist.length > 0 ? allowlist : [{ path: workspace, access: 'read-write' }]);
-  const fsScript = generateFilesystemRestrictionScript(writeDirs, readDirs);
-  const fsResult = await executePowerShellScript(fsScript);
-  if (!fsResult.success) {
-    console.warn('[Sandbox] Windows filesystem restrictions failed:', fsResult.stderr);
-  }
-
-  // Step 3: Set up network restrictions
-  const netScript = generateNetworkRestrictionScript(networkAllowlist);
-  const netResult = await executePowerShellScript(netScript);
-  if (!netResult.success) {
-    console.warn('[Sandbox] Windows network restrictions failed:', netResult.stderr);
-  }
-
-  // Step 4: Build spawn options
-  const spawnOptions = {
-    env: buildSafeEnv(options),
-    cwd: workspace,
-    windowsHide: true,
-    // Use CREATE_NO_WINDOW to suppress console window
-    // windowsHide is the Node.js equivalent of CREATE_NO_WINDOW
-  };
-
-  return { command, args, spawnOptions };
-}
-
-/**
- * Synchronous Windows sandbox setup (for non-async contexts).
- * Falls back to basic environment sanitization if PowerShell is unavailable.
- *
- * @param {string} command — the command to execute
- * @param {string[]} args — command arguments
- * @param {object} options
- * @returns {{command: string, args: string[], spawnOptions: object}}
- */
-function createWindowsSandboxSync(command, args, options = {}) {
-  const workspace = options.workspace || DEFAULT_WORKSPACE;
-
-  // Synchronous fallback: just sanitize environment and set cwd
-  // Full sandbox setup requires async PowerShell calls
-  const spawnOptions = {
-    env: buildSafeEnv(options),
-    cwd: workspace,
-    windowsHide: true,
-  };
-
-  return { command, args, spawnOptions };
-}
-
-// ---------------------------------------------------------------------------
-// Child Process Handler Setup
-// ---------------------------------------------------------------------------
-
-/**
- * Set up event handlers for a child process.
- * Extracted to avoid code duplication in async/sync paths.
- *
- * @param {ChildProcess} child — the spawned child process
- * @param {Function} resolve — the promise resolve function
- * @param {string} platform — the current platform
- * @param {string} effectiveCommand — the command that was actually executed
- * @param {string[]} effectiveArgs — the args that were actually passed
- */
-function setupChildHandlers(child, resolve, platform, effectiveCommand, effectiveArgs) {
-  let stdout = '';
-  let stderr = '';
-
-  child.stdout.on('data', (data) => { stdout += data.toString(); });
-  child.stderr.on('data', (data) => { stderr += data.toString(); });
-
-  child.on('close', (code) => {
-    // Clean up temp profile if created (macOS)
-    try {
-      if (platform === 'darwin' && effectiveCommand === 'sandbox-exec') {
-        const profilePath = effectiveArgs[1];
-        if (profilePath && profilePath.startsWith(os.tmpdir())) {
-          fs.unlinkSync(profilePath);
-        }
-      }
-    } catch (e) { /* ignore cleanup errors */ }
-
-    resolve({
-      success: code === 0,
-      code,
-      stdout: stdout.trim(),
-      stderr: stderr.trim(),
-    });
-  });
-
-  child.on('error', (error) => {
-    resolve({
-      success: false,
-      error: error.message,
-    });
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Safe Environment Builder
-// ---------------------------------------------------------------------------
-
-/**
- * Build a sanitized environment for the spawned process.
- * Only explicitly allowlisted variables are passed through.
- * This prevents credential leakage from ambient env vars.
+ * Build a sanitized environment for sandboxed processes. Only allowlisted
+ * variables pass through. Secrets, API keys, and tokens never reach the
+ * sandboxed process.
  */
 function buildSafeEnv(options = {}) {
-  const workspace = options.workspace || DEFAULT_WORKSPACE;
   const extraEnv = options.extraEnv || {};
-
   const safeEnv = {};
+
   for (const key of SAFE_ENV_KEYS) {
-    if (process.env[key] !== undefined) {
-      safeEnv[key] = process.env[key];
+    if (process.env[key] !== undefined) safeEnv[key] = process.env[key];
+  }
+  if (process.platform === 'win32') {
+    for (const key of WINDOWS_SAFE_ENV_KEYS) {
+      if (process.env[key] !== undefined) safeEnv[key] = process.env[key];
     }
   }
 
-  // Keep HOME as the real user home directory so that ~ expands correctly
-  // inside sandboxed processes (e.g. ls ~/Downloads, mkdir ~/Downloads/Images).
-  // We set cwd=workspace separately to confine the working directory.
+  // HOME/TMPDIR are functional, non-secret. cwd confines the working dir.
   safeEnv.HOME = process.env.HOME || os.homedir();
   safeEnv.TMPDIR = process.env.TMPDIR || os.tmpdir();
 
-  // Add any explicitly allowed extra env vars
   for (const [key, value] of Object.entries(extraEnv)) {
-    if (SAFE_ENV_KEYS.includes(key) || key.startsWith('AARTIQ_')) {
+    if (SAFE_ENV_KEYS.includes(key)
+      || WINDOWS_SAFE_ENV_KEYS.includes(key)
+      || key.startsWith('AARTIQ_')) {
       safeEnv[key] = value;
     }
   }
@@ -796,195 +167,855 @@ function buildSafeEnv(options = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Main Entry Point
+// macOS Seatbelt sandbox
 // ---------------------------------------------------------------------------
 
-/**
- * Execute a command within an OS-level sandbox.
- *
- * @param {string} command - The command to execute
- * @param {string[]} args - Command arguments
- * @param {object} options - Sandbox options
- * @param {string} options.workspace - Workspace directory (default: ~/.aartiq/sandbox-workspace)
- * @param {Array}  options.directoryAllowlist - Directory allowlist entries
- * @param {string[]} options.networkAllowlist - Allowed network domains
- * @param {object} options.extraEnv - Additional env vars to pass
- * @param {number} options.timeout - Execution timeout in ms
- * @param {boolean} options.useSandbox - Whether to apply sandboxing (default: true)
- * @returns {Promise<{success: boolean, stdout?: string, stderr?: string, error?: string}>}
- */
-function executeSandboxed(command, args = [], options = {}) {
-  const useSandbox = options.useSandbox !== false;
-  const timeout = options.timeout || 30000;
-  const platform = process.platform;
+const SYSTEM_READ_PATHS = [
+  '/usr', '/bin', '/sbin', '/System', '/Library', '/opt',
+  '/private/etc', '/private/tmp', '/private/var/db', '/dev',
+];
 
-  // Ensure workspace exists
-  const workspace = options.workspace || DEFAULT_WORKSPACE;
-  try {
-    fs.mkdirSync(path.join(workspace, 'tmp'), { recursive: true });
-  } catch (e) {
-    // Workspace may already exist
-  }
+const SYSTEM_EXEC_PATHS = [
+  '/usr', '/bin', '/sbin', '/System', '/Library', '/opt',
+];
 
-  // Reconstruct the full shell command string from binary + args.
-  // We always run via sh -c so that shell features work: pipes (|), redirects
-  // (>, >>), glob expansion (*), process substitution, shell builtins, etc.
-  // Without this, spawn('find', ['~/Downloads', '|', 'sort']) passes '|' as a
-  // literal argument to find, breaking every piped command.
-  const originalCommand = args.length > 0
-    ? `${command} ${args.map(a => (a.includes(' ') && !a.startsWith('"') ? `"${a}"` : a)).join(' ')}`
-    : command;
+// Literal root paths required to resolve/stat path components.
+const ROOT_LITERALS = [
+  '/', '/var', '/etc', '/tmp', '/private', '/dev', '/usr', '/bin', '/sbin', '/System',
+];
 
-  return new Promise((resolve) => {
-    let effectiveCommand = 'sh';
-    let effectiveArgs = ['-c', originalCommand];
-    let spawnOptions = {
-      env: buildSafeEnv(options),
-      timeout,
-      cwd: workspace,
-    };
-
-    if (useSandbox && platform === 'darwin') {
-      // macOS: Use sandbox-exec with Seatbelt profile
-      const profile = generateSeatbeltProfile({
-        workspace,
-        directoryAllowlist: options.directoryAllowlist,
-        networkAllowlist: options.networkAllowlist || DEFAULT_NETWORK_ALLOWLIST,
-      });
-
-      const profilePath = path.join(os.tmpdir(), `aartiq-sandbox-${Date.now()}.sb`);
-      let profileWritten = false;
-      try {
-        fs.writeFileSync(profilePath, profile, 'utf8');
-        profileWritten = true;
-      } catch (e) {
-        console.warn('[Sandbox] Failed to write Seatbelt profile:', e.message);
-      }
-
-      if (profileWritten && fs.existsSync(profilePath)) {
-        // sandbox-exec -f <profile> sh -c <command>
-        effectiveCommand = 'sandbox-exec';
-        effectiveArgs = ['-f', profilePath, 'sh', '-c', originalCommand];
-      }
-      // If profile write failed, fall through to unsandboxed sh -c execution
-    } else if (useSandbox && platform === 'linux') {
-      // Linux: Use bubblewrap if available
-      try {
-        const bwrapCheck = spawnSync('which', ['bwrap'], { encoding: 'utf8' });
-        if (bwrapCheck.status === 0) {
-          effectiveCommand = 'bwrap';
-          effectiveArgs = buildBubblewrapArgs('sh', ['-c', originalCommand], {
-            workspace,
-            directoryAllowlist: options.directoryAllowlist,
-          });
-        } else {
-          console.warn('[Sandbox] bubblewrap (bwrap) not available — falling back to unsandboxed execution');
-        }
-      } catch (e) {
-        console.warn('[Sandbox] bubblewrap check failed:', e.message);
-      }
-    } else if (useSandbox && platform === 'win32') {
-      // Windows: Use AppContainer sandbox (Job Objects + ACLs + Firewall)
-      createWindowsSandbox('sh', ['-c', originalCommand], {
-        workspace,
-        directoryAllowlist: options.directoryAllowlist,
-        networkAllowlist: options.networkAllowlist || DEFAULT_NETWORK_ALLOWLIST,
-      }).then((sandboxConfig) => {
-        effectiveCommand = sandboxConfig.command;
-        effectiveArgs = sandboxConfig.args;
-        spawnOptions = { ...spawnOptions, ...sandboxConfig.spawnOptions };
-
-        const child = spawn(effectiveCommand, effectiveArgs, spawnOptions);
-        setupChildHandlers(child, resolve, platform, effectiveCommand, effectiveArgs);
-      }).catch((err) => {
-        console.warn('[Sandbox] Windows AppContainer setup failed, falling back:', err.message);
-        const syncConfig = createWindowsSandboxSync('sh', ['-c', originalCommand], { workspace });
-        effectiveCommand = syncConfig.command;
-        effectiveArgs = syncConfig.args;
-        spawnOptions = { ...spawnOptions, ...syncConfig.spawnOptions };
-
-        const child = spawn(effectiveCommand, effectiveArgs, spawnOptions);
-        setupChildHandlers(child, resolve, platform, effectiveCommand, effectiveArgs);
-      });
-      return; // Early return since we handle the promise in the .then()
-    }
-
-    const child = spawn(effectiveCommand, effectiveArgs, spawnOptions);
-    setupChildHandlers(child, resolve, platform, effectiveCommand, effectiveArgs);
-  });
+function seatbeltQuote(p) {
+  return String(p).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 /**
- * Synchronous (non-async) sandboxed execution for simple commands.
- * Uses spawnSync internally. Not recommended for long-running commands.
+ * Generate a Seatbelt sandbox profile.
+ *
+ * Closed-by-default filesystem policy:
+ *   - `(deny file-read*)` + explicit re-allow of system paths + allowlisted
+ *     directories + workspace. Home is NOT broadly readable.
+ *   - `(deny file-write*)` + explicit re-allow of write allowlist + workspace
+ *     + temp directories. Read-only allowlist entries never receive write.
+ *   - `(deny network*)` — full network denial. Seatbelt cannot express
+ *     per-domain allowlists, so requesting one is a hard policy error.
+ *   - `(deny process-exec*)` + re-allow of system + allowlisted paths.
+ *
+ * @throws {SandboxError} if a domain network allowlist is requested or the
+ *   allowlist cannot be canonicalized.
  */
-function executeSandboxedSync(command, args = [], options = {}) {
+function generateSeatbeltProfile(options = {}) {
   const workspace = options.workspace || DEFAULT_WORKSPACE;
-  const useSandbox = options.useSandbox !== false;
+  const networkAllowlist = options.networkAllowlist || DEFAULT_NETWORK_ALLOWLIST;
+  const allowlist = options.directoryAllowlist || null;
 
+  if (Array.isArray(networkAllowlist) && networkAllowlist.length > 0) {
+    throw new SandboxError(
+      'SANDBOX_UNAVAILABLE',
+      'Domain-level network allowlisting is not supported by macOS Seatbelt. ' +
+      'Use an empty allowlist to deny all network, or pass useSandbox:false for unsandboxed execution.'
+    );
+  }
+
+  const { readDirs, writeDirs } = validateAllowlist(allowlist);
+  const workspaceCanonical = canonicalizePath(workspace).canonical || path.normalize(workspace);
+
+  const tmpCanonical = canonicalizePath(os.tmpdir()).canonical || os.tmpdir();
+
+  const sub = (p) => `  (subpath "${seatbeltQuote(p)}")`;
+  const lit = (p) => `  (literal "${seatbeltQuote(p)}")`;
+
+  const readBlock = [
+    ...SYSTEM_READ_PATHS.map(sub),
+    ...ROOT_LITERALS.map(lit),
+    sub('/private/var/folders'),
+    sub(workspaceCanonical),
+    ...readDirs.map(sub),
+  ].join('\n');
+
+  const writeBlock = [
+    sub(workspaceCanonical),
+    sub('/private/tmp'),
+    sub(tmpCanonical),
+    lit('/dev/null'),
+    ...writeDirs.map(sub),
+  ].join('\n');
+
+  // Read-only allowlist entries never receive write access, even when nested
+  // inside a writable directory. Placed last so the deny wins on ties.
+  const carveOuts = readDirs
+    .filter((d) => !writeDirs.includes(d))
+    .map((d) => `(deny file-write* (subpath "${seatbeltQuote(d)}"))`)
+    .join('\n');
+
+  const execBlock = [
+    ...SYSTEM_EXEC_PATHS.map(sub),
+    sub(workspaceCanonical),
+    ...readDirs.map(sub),
+    ...writeDirs.map(sub),
+  ].join('\n');
+
+  return `
+(version 1)
+(allow default)
+
+; Network: fully denied. Seatbelt cannot match per-domain destinations.
+(deny network*)
+
+; Filesystem: closed by default, then allowlisted.
+(deny file-read*)
+(deny file-write*)
+
+(allow file-read*
+${readBlock}
+)
+
+(allow file-write*
+${writeBlock}
+)
+
+; Read-only allowlist entries can never be written.
+${carveOuts}
+
+; Process execution confined to system + allowlisted paths.
+(deny process-exec*)
+(allow process-exec*
+${execBlock}
+)
+(allow process-fork)
+(allow signal (target self))
+(allow signal (target children))
+`.trim();
+}
+
+/**
+ * Validate a Seatbelt profile by applying it to a harmless system binary.
+ * The profile must compile and the bootstrap must succeed before any real
+ * command is allowed to run under it.
+ *
+ * @returns {{ok: boolean, code?: string, error?: string}}
+ */
+function validateSeatbeltProfile(profilePath, sandboxExecPath, workspace) {
+  const cwd = workspace || DEFAULT_WORKSPACE;
+  let result;
   try {
-    fs.mkdirSync(path.join(workspace, 'tmp'), { recursive: true });
-  } catch (e) {}
-
-  const spawnOptions = {
-    env: buildSafeEnv(options),
-    cwd: workspace,
-    encoding: 'utf8',
-    timeout: options.timeout || 30000,
-  };
-
-  let effectiveCommand = command;
-  let effectiveArgs = args;
-
-  if (useSandbox && process.platform === 'darwin') {
-    const profile = generateSeatbeltProfile({
-      workspace,
-      directoryAllowlist: options.directoryAllowlist,
-      networkAllowlist: options.networkAllowlist || DEFAULT_NETWORK_ALLOWLIST,
+    result = spawnSync(sandboxExecPath, ['-f', profilePath, '/usr/bin/true'], {
+      timeout: 10000,
+      encoding: 'utf8',
+      cwd,
     });
-    const profilePath = path.join(os.tmpdir(), `aartiq-sandbox-${Date.now()}.sb`);
-    try {
-      fs.writeFileSync(profilePath, profile, 'utf8');
-      effectiveCommand = 'sandbox-exec';
-      effectiveArgs = ['-f', profilePath, command, ...args];
-      const result = spawnSync(effectiveCommand, effectiveArgs, spawnOptions);
-      try { fs.unlinkSync(profilePath); } catch (e) {}
-      return {
-        success: result.status === 0,
-        code: result.status,
-        stdout: (result.stdout || '').trim(),
-        stderr: (result.stderr || '').trim(),
-      };
-    } catch (e) {
-      try { fs.unlinkSync(profilePath); } catch (e2) {}
+  } catch (e) {
+    return { ok: false, code: 'SANDBOX_SETUP_FAILED', error: e.message };
+  }
+  if (result.error) {
+    if (result.error.code === 'ENOENT') {
+      return { ok: false, code: 'SANDBOX_UNAVAILABLE', error: `sandbox-exec not found: ${sandboxExecPath}` };
+    }
+    return { ok: false, code: 'SANDBOX_SETUP_FAILED', error: result.error.message };
+  }
+  if (result.status !== 0) {
+    return {
+      ok: false,
+      code: 'SANDBOX_POLICY_INVALID',
+      error: (result.stderr || result.stdout || 'Seatbelt profile failed to compile').trim(),
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Build the macOS sandboxed launch configuration.
+ *
+ * The Seatbelt profile is written to a temp file, validated with a pre-flight
+ * `sandbox-exec` run, and only then used to launch the target command.
+ *
+ * @throws {SandboxError} on any failure — the caller must not execute.
+ */
+function createDarwinSandbox(command, args, options) {
+  const workspace = options.workspace || DEFAULT_WORKSPACE;
+  const sandboxExecPath = options.sandboxExecPath || '/usr/bin/sandbox-exec';
+
+  if (!fs.existsSync(sandboxExecPath)) {
+    throw new SandboxError('SANDBOX_UNAVAILABLE', `sandbox-exec not found at ${sandboxExecPath}`);
+  }
+  try {
+    fs.accessSync(sandboxExecPath, fs.constants.X_OK);
+  } catch (e) {
+    throw new SandboxError('SANDBOX_UNAVAILABLE', `sandbox-exec is not executable: ${sandboxExecPath}`);
+  }
+
+  const profile = generateSeatbeltProfile(options);
+  const profilePath = path.join(
+    os.tmpdir(),
+    `aartiq-sandbox-${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.sb`
+  );
+  try {
+    fs.writeFileSync(profilePath, profile, { encoding: 'utf8', mode: 0o600 });
+  } catch (e) {
+    throw new SandboxError('SANDBOX_SETUP_FAILED', `Failed to write Seatbelt profile: ${e.message}`);
+  }
+
+  const validation = validateSeatbeltProfile(profilePath, sandboxExecPath, workspace);
+  if (!validation.ok) {
+    try { fs.unlinkSync(profilePath); } catch (e) { /* best-effort */ }
+    throw new SandboxError(validation.code, `Seatbelt profile validation failed: ${validation.error}`);
+  }
+
+  return {
+    command: sandboxExecPath,
+    args: ['-f', profilePath, command, ...args],
+    spawnOptions: {
+      env: buildSafeEnv(options),
+      cwd: workspace,
+      timeout: options.timeout || 30000,
+    },
+    platform: 'darwin',
+    cleanup: () => {
+      try { fs.unlinkSync(profilePath); } catch (e) { /* best-effort */ }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Linux bubblewrap sandbox
+// ---------------------------------------------------------------------------
+
+/**
+ * Build bubblewrap (bwrap) arguments.
+ *
+ * Namespaces: pid, net, ipc, uts. System mounts are read-only. Allowlisted
+ * directories are bound read-only or read-write per entry access. Home is NOT
+ * exposed unless explicitly allowlisted. /tmp is private. Network is disabled
+ * via --unshare-net (domain allowlisting is not supported).
+ *
+ * @throws {SandboxError} if the network allowlist requests domains, or any
+ *   allowlist path is invalid/missing.
+ */
+function buildBubblewrapArgs(command, args, options = {}) {
+  const workspace = options.workspace || DEFAULT_WORKSPACE;
+  const allowlist = options.directoryAllowlist || [];
+  const networkAllowlist = options.networkAllowlist || DEFAULT_NETWORK_ALLOWLIST;
+
+  if (Array.isArray(networkAllowlist) && networkAllowlist.length > 0) {
+    throw new SandboxError(
+      'SANDBOX_UNAVAILABLE',
+      'Domain-level network allowlisting is not supported by bubblewrap (--unshare-net only). ' +
+      'Use an empty allowlist to deny all network, or pass useSandbox:false for unsandboxed execution.'
+    );
+  }
+
+  const { readDirs, writeDirs } = validateAllowlist(allowlist);
+
+  const bwrapArgs = [
+    '--unshare-pid',
+    '--unshare-net',
+    '--unshare-ipc',
+    '--unshare-uts',
+    '--ro-bind', '/usr', '/usr',
+    '--ro-bind', '/bin', '/bin',
+    '--ro-bind', '/sbin', '/sbin',
+    '--ro-bind', '/lib', '/lib',
+    '--ro-bind', '/lib64', '/lib64',
+    '--ro-bind', '/etc', '/etc',
+    '--dev', '/dev',
+    '--proc', '/proc',
+    '--tmpfs', '/tmp',
+  ];
+
+  for (const dir of writeDirs) {
+    bwrapArgs.push('--bind', dir, dir);
+  }
+  for (const dir of readDirs) {
+    if (!writeDirs.includes(dir)) {
+      bwrapArgs.push('--ro-bind', dir, dir);
     }
   }
 
-  const result = spawnSync(effectiveCommand, effectiveArgs, spawnOptions);
+  const workspaceCanonical = canonicalizePath(workspace).canonical || path.normalize(workspace);
+  bwrapArgs.push('--bind', workspaceCanonical, workspaceCanonical);
+  bwrapArgs.push('--chdir', workspaceCanonical);
+  bwrapArgs.push('--die-with-parent');
+
+  bwrapArgs.push(command, ...args);
+  return bwrapArgs;
+}
+
+/**
+ * Build the Linux sandboxed launch configuration.
+ *
+ * @throws {SandboxError} if bubblewrap is unavailable or the policy is invalid.
+ */
+function createLinuxSandbox(command, args, options) {
+  const bwrapPath = options.bwrapPath || 'bwrap';
+  const workspace = options.workspace || DEFAULT_WORKSPACE;
+
+  // Availability check: bwrap --version must succeed.
+  let check;
+  try {
+    check = spawnSync(bwrapPath, ['--version'], { encoding: 'utf8', timeout: 5000 });
+  } catch (e) {
+    throw new SandboxError('SANDBOX_UNAVAILABLE', `Failed to check bubblewrap: ${e.message}`);
+  }
+  if (check.error) {
+    if (check.error.code === 'ENOENT') {
+      throw new SandboxError('SANDBOX_UNAVAILABLE', `bubblewrap (bwrap) is not available at ${bwrapPath}`);
+    }
+    throw new SandboxError('SANDBOX_UNAVAILABLE', `bubblewrap check failed: ${check.error.message}`);
+  }
+  if (check.status !== 0) {
+    throw new SandboxError('SANDBOX_UNAVAILABLE', `bubblewrap (bwrap) is not functional (exit ${check.status})`);
+  }
+
+  const bwrapArgs = buildBubblewrapArgs(command, args, options);
+
   return {
-    success: result.status === 0,
-    code: result.status,
-    stdout: (result.stdout || '').trim(),
-    stderr: (result.stderr || '').trim(),
+    command: bwrapPath,
+    args: bwrapArgs,
+    spawnOptions: {
+      env: buildSafeEnv(options),
+      cwd: process.cwd(),
+      timeout: options.timeout || 30000,
+    },
+    platform: 'linux',
+    cleanup: () => {},
   };
+}
+
+// ---------------------------------------------------------------------------
+// Windows Job Object containment
+// ---------------------------------------------------------------------------
+
+const WIN_JOB_RUNNER = path.join(__dirname, 'win-job-runner.ps1');
+
+function getWindowsJobRunnerScript() {
+  try {
+    return fs.readFileSync(WIN_JOB_RUNNER, 'utf8');
+  } catch (e) {
+    throw new SandboxError('SANDBOX_UNAVAILABLE', `Windows job runner script is missing: ${WIN_JOB_RUNNER}`);
+  }
+}
+
+function resolveWindowsPowershellPath() {
+  if (process.env.SystemRoot) {
+    const candidate = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return 'powershell.exe';
+}
+
+/**
+ * Build the Windows sandboxed launch configuration.
+ *
+ * The target command is run by win-job-runner.ps1, which creates a Job Object,
+ * applies + verifies limits, creates the target SUSPENDED, assigns it to the
+ * job, verifies the assignment, resumes it, and holds the job handles for the
+ * target's entire lifetime (KILL_ON_JOB_CLOSE).
+ *
+ * Windows does NOT provide OS-level filesystem or network isolation in this
+ * release. The directory allowlist is enforced at the application layer by
+ * isPathAllowed() in directory-allowlist.js, not by the Job Object. Requesting
+ * a per-process network policy (networkAllowlist !== undefined) fails closed.
+ *
+ * @throws {SandboxError} on any failure — the caller must not execute.
+ */
+function createWindowsSandbox(command, args, options = {}) {
+  const workspace = options.workspace || DEFAULT_WORKSPACE;
+  const networkAllowlist = options.networkAllowlist;
+
+  if (networkAllowlist !== undefined) {
+    throw new SandboxError(
+      'SANDBOX_UNAVAILABLE',
+      'Per-process network policy cannot be enforced on Windows in this release (requires AppContainer ' +
+      'or elevated WFP rules). Pass networkAllowlist:undefined to run under Job Object containment.'
+    );
+  }
+
+  // Even though Windows does not enforce the allowlist at the OS layer, invalid
+  // or missing paths are still a policy error — never silently ignored.
+  validateAllowlist(options.directoryAllowlist);
+
+  const payload = {
+    command,
+    args,
+    env: buildSafeEnv(options),
+    cwd: workspace,
+    maxProcesses: options.maxProcesses || DEFAULT_MAX_PROCESSES,
+    maxMemoryBytes: options.maxMemoryBytes || 0,
+    timeoutMs: options.timeout || 30000,
+  };
+
+  const runnerScript = getWindowsJobRunnerScript();
+  const tmpTag = `${process.pid}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+  const payloadPath = path.join(os.tmpdir(), `aartiq-payload-${tmpTag}.json`);
+  const runnerPath = path.join(os.tmpdir(), `aartiq-runner-${tmpTag}.ps1`);
+
+  try {
+    fs.writeFileSync(payloadPath, JSON.stringify(payload), { encoding: 'utf8', mode: 0o600 });
+    fs.writeFileSync(runnerPath, runnerScript, { encoding: 'utf8', mode: 0o600 });
+  } catch (e) {
+    try { fs.unlinkSync(payloadPath); } catch (e2) { /* best-effort */ }
+    try { fs.unlinkSync(runnerPath); } catch (e2) { /* best-effort */ }
+    throw new SandboxError('SANDBOX_SETUP_FAILED', `Failed to stage Windows sandbox files: ${e.message}`);
+  }
+
+  const powershell = resolveWindowsPowershellPath();
+
+  return {
+    command: powershell,
+    args: ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', runnerPath, payloadPath],
+    spawnOptions: {
+      env: { ...process.env, AARTIQ_SANDBOXED: '1' },
+      windowsHide: true,
+      timeout: (options.timeout || 30000) + 10000,
+    },
+    platform: 'win32',
+    cleanup: () => {
+      try { fs.unlinkSync(payloadPath); } catch (e) { /* best-effort */ }
+      try { fs.unlinkSync(runnerPath); } catch (e) { /* best-effort */ }
+    },
+  };
+}
+
+/**
+ * Synchronous alias. The runner script itself is synchronous (it waits on the
+ * target), so spawnSync of the helper is the synchronous execution path.
+ */
+function createWindowsSandboxSync(command, args, options) {
+  return createWindowsSandbox(command, args, options);
+}
+
+// ---------------------------------------------------------------------------
+// Process launcher
+// ---------------------------------------------------------------------------
+
+const WIN_RESULT_MARKER = 'AARTIQ_SANDBOX_RESULT:';
+
+function parseWindowsHelperOutput(stdout, stderr) {
+  // Strip the result marker (and anything after it) from caller-visible output.
+  // The helper always emits its result last, so this never removes target data.
+  const clean = (s) => {
+    let text = String(s || '');
+    const m = text.lastIndexOf(WIN_RESULT_MARKER);
+    if (m !== -1) text = text.slice(0, m);
+    return text.trim();
+  };
+
+  // Locate the LAST occurrence of the marker. The marker can be merged onto
+  // the end of an unterminated target-output line, so we cannot require it to
+  // start a line. Parse the first complete line after the marker as JSON.
+  const out = String(stdout || '');
+  const idx = out.lastIndexOf(WIN_RESULT_MARKER);
+  let parsed = null;
+  if (idx !== -1) {
+    const after = out.slice(idx + WIN_RESULT_MARKER.length);
+    const firstLine = after.split('\n').find((l) => l.trim().length > 0) || '';
+    try {
+      parsed = JSON.parse(firstLine.trim());
+    } catch (e) {
+      parsed = null;
+    }
+  }
+  if (parsed && parsed.sandboxed === true && typeof parsed.exitCode === 'number') {
+    return {
+      success: parsed.exitCode === 0,
+      code: parsed.exitCode,
+      stdout: clean(stdout),
+      stderr: clean(stderr),
+      sandboxed: true,
+      sandboxPlatform: 'win32',
+      jobAssigned: parsed.jobAssigned === true,
+    };
+  }
+  if (parsed && parsed.sandboxed === false) {
+    return createFailure(parsed.code || 'SANDBOX_SETUP_FAILED', parsed.error || 'Windows sandbox setup failed');
+  }
+  return createFailure('SANDBOX_SETUP_FAILED', (stderr || stdout || 'Windows sandbox runner produced no result').trim());
+}
+
+function runProcess(command, args, spawnOptions, meta) {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    let child;
+    try {
+      child = spawn(command, args, spawnOptions);
+    } catch (e) {
+      resolve(createFailure('SANDBOX_SETUP_FAILED', `Failed to spawn ${command}: ${e.message}`));
+      return;
+    }
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+
+    child.on('error', (err) => {
+      const code = (err && err.code === 'ENOENT') ? 'SANDBOX_UNAVAILABLE' : 'SANDBOX_SETUP_FAILED';
+      finish(createFailure(code, `Failed to launch sandbox: ${err.message}`));
+    });
+
+    child.on('close', (code) => {
+      if (meta.platform === 'win32') {
+        finish(parseWindowsHelperOutput(stdout, stderr));
+        return;
+      }
+      // bubblewrap setup errors are reported on stderr prefixed with "bwrap:".
+      if (meta.platform === 'linux' && code !== 0 && /^bwrap:/m.test(String(stderr))) {
+        finish(createFailure('SANDBOX_SETUP_FAILED', String(stderr).trim()));
+        return;
+      }
+      finish({
+        success: code === 0,
+        code,
+        stdout: String(stdout).trim(),
+        stderr: String(stderr).trim(),
+        sandboxed: meta.sandboxed,
+        sandboxPlatform: meta.platform,
+      });
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Workspace
+// ---------------------------------------------------------------------------
+
+function ensureWorkspace(workspace) {
+  try {
+    fs.mkdirSync(path.join(workspace, 'tmp'), { recursive: true });
+  } catch (e) {
+    throw new SandboxError('SANDBOX_SETUP_FAILED', `Failed to create workspace ${workspace}: ${e.message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main entry points
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute a command within a verified OS-level sandbox (fail-closed).
+ *
+ * @param {string} command - executable path or name
+ * @param {string[]} args - arguments (passed verbatim, never shell-reconstructed)
+ * @param {object} options
+ * @param {boolean} [options.useSandbox=true] - explicit escape hatch; when
+ *   false the command runs unsandboxed (environment still sanitized) and the
+ *   result reports sandboxed:false.
+ * @param {string} [options.workspace] - sandbox workspace directory
+ * @param {Array}  [options.directoryAllowlist] - allowlist entries
+ * @param {string[]} [options.networkAllowlist] - domain allowlist; platform
+ *   support is limited (see module header). Do not pass on Windows.
+ * @param {object} [options.extraEnv] - extra allowlisted env vars
+ * @param {number} [options.timeout] - timeout in ms
+ * @param {number} [options.maxProcesses] - Windows job active-process limit
+ * @param {number} [options.maxMemoryBytes] - Windows job memory limit (0 = none)
+ * @returns {Promise<{success:boolean, code:number|string, stdout?:string,
+ *   stderr?:string, sandboxed:boolean, sandboxPlatform?:string, error?:string}>}
+ */
+async function executeSandboxed(command, args = [], options = {}) {
+  const useSandbox = options.useSandbox !== false;
+  const platform = process.platform;
+  const workspace = options.workspace || DEFAULT_WORKSPACE;
+
+  if (!command || typeof command !== 'string') {
+    return createFailure('SANDBOX_POLICY_INVALID', 'A command is required');
+  }
+  if (!Array.isArray(args)) {
+    return createFailure('SANDBOX_POLICY_INVALID', 'args must be an array');
+  }
+
+  try {
+    // Explicit development/testing escape hatch. Never the automatic fallback.
+    if (!useSandbox) {
+      ensureWorkspace(workspace);
+      const result = await runProcess(command, args, {
+        env: buildSafeEnv(options),
+        cwd: workspace,
+        timeout: options.timeout || 30000,
+      }, { platform: 'none', sandboxed: false });
+      return result;
+    }
+
+    // 1. Ensure workspace exists (cwd inside the sandbox).
+    ensureWorkspace(workspace);
+
+    // 2. Build + verify the platform sandbox (throws SandboxError on failure).
+    let config;
+    if (platform === 'darwin') {
+      config = createDarwinSandbox(command, args, options);
+    } else if (platform === 'linux') {
+      config = createLinuxSandbox(command, args, options);
+    } else if (platform === 'win32') {
+      config = createWindowsSandbox(command, args, options);
+    } else {
+      throw new SandboxError('SANDBOX_UNAVAILABLE', `Platform ${platform} is not supported for sandboxed execution`);
+    }
+
+    // 3. Launch the target inside the verified sandbox. The target never
+    //    starts before mandatory sandbox setup succeeds.
+    const result = await runProcess(config.command, config.args, config.spawnOptions, {
+      platform: config.platform,
+      sandboxed: true,
+    });
+
+    // 4. Clean up sandbox resources (idempotent).
+    if (config.cleanup) {
+      try { config.cleanup(); } catch (e) { /* best-effort */ }
+    }
+
+    return result;
+  } catch (e) {
+    if (e instanceof SandboxError) return createFailure(e.code, e.message);
+    return createFailure('SANDBOX_SETUP_FAILED', e.message);
+  }
+}
+
+/**
+ * Synchronous, fail-closed sandboxed execution.
+ * Uses spawnSync; the Windows runner is itself synchronous.
+ */
+function executeSandboxedSync(command, args = [], options = {}) {
+  const useSandbox = options.useSandbox !== false;
+  const platform = process.platform;
+  const workspace = options.workspace || DEFAULT_WORKSPACE;
+
+  if (!command || typeof command !== 'string') {
+    return createFailure('SANDBOX_POLICY_INVALID', 'A command is required');
+  }
+  if (!Array.isArray(args)) {
+    return createFailure('SANDBOX_POLICY_INVALID', 'args must be an array');
+  }
+
+  try {
+    if (!useSandbox) {
+      ensureWorkspace(workspace);
+      const r = spawnSync(command, args, {
+        env: buildSafeEnv(options),
+        cwd: workspace,
+        encoding: 'utf8',
+        timeout: options.timeout || 30000,
+      });
+      if (r.error) return createFailure('SANDBOX_SETUP_FAILED', `Failed to launch: ${r.error.message}`);
+      return {
+        success: r.status === 0,
+        code: r.status,
+        stdout: (r.stdout || '').trim(),
+        stderr: (r.stderr || '').trim(),
+        sandboxed: false,
+        sandboxPlatform: 'none',
+      };
+    }
+
+    ensureWorkspace(workspace);
+
+    let config;
+    if (platform === 'darwin') {
+      config = createDarwinSandbox(command, args, options);
+    } else if (platform === 'linux') {
+      config = createLinuxSandbox(command, args, options);
+    } else if (platform === 'win32') {
+      config = createWindowsSandbox(command, args, options);
+    } else {
+      return createFailure('SANDBOX_UNAVAILABLE', `Platform ${platform} is not supported for sandboxed execution`);
+    }
+
+    let r;
+    try {
+      r = spawnSync(config.command, config.args, { ...config.spawnOptions, encoding: 'utf8' });
+    } catch (e) {
+      if (config.cleanup) { try { config.cleanup(); } catch (e2) { /* best-effort */ } }
+      return createFailure('SANDBOX_SETUP_FAILED', `Failed to launch sandbox: ${e.message}`);
+    }
+
+    if (config.cleanup) {
+      try { config.cleanup(); } catch (e) { /* best-effort */ }
+    }
+
+    if (r.error) {
+      return createFailure(
+        r.error.code === 'ENOENT' ? 'SANDBOX_UNAVAILABLE' : 'SANDBOX_SETUP_FAILED',
+        `Failed to launch sandbox: ${r.error.message}`
+      );
+    }
+
+    if (platform === 'win32') {
+      return parseWindowsHelperOutput(r.stdout, r.stderr);
+    }
+    if (platform === 'linux' && r.status !== 0 && /^bwrap:/m.test(String(r.stderr))) {
+      return createFailure('SANDBOX_SETUP_FAILED', String(r.stderr).trim());
+    }
+    return {
+      success: r.status === 0,
+      code: r.status,
+      stdout: (r.stdout || '').trim(),
+      stderr: (r.stderr || '').trim(),
+      sandboxed: true,
+      sandboxPlatform: platform,
+    };
+  } catch (e) {
+    if (e instanceof SandboxError) return createFailure(e.code, e.message);
+    return createFailure('SANDBOX_SETUP_FAILED', e.message);
+  }
+}
+
+/**
+ * Explicit shell-script execution mode.
+ *
+ * Shell interpretation is a separate, intentional feature: the script string
+ * is passed verbatim as a single argument to the platform shell (sh -c on
+ * POSIX, cmd.exe /d /s /c on Windows) INSIDE the sandbox. It is never built by
+ * string-concatenating arguments. Callers must have already completed the
+ * permission/risk classification before calling this.
+ */
+function executeShellScript(script, options = {}) {
+  if (typeof script !== 'string' || script.length === 0) {
+    return Promise.resolve(createFailure('SANDBOX_POLICY_INVALID', 'Shell script is required'));
+  }
+  const platform = process.platform;
+  if (platform === 'win32') {
+    const comspec = process.env.COMSPEC
+      || (process.env.SystemRoot ? path.join(process.env.SystemRoot, 'System32', 'cmd.exe') : 'C:\\Windows\\System32\\cmd.exe');
+    return executeSandboxed(comspec, ['/d', '/s', '/c', script], options);
+  }
+  return executeSandboxed('/bin/sh', ['-c', script], options);
+}
+
+// ---------------------------------------------------------------------------
+// Command tokenization & execution-mode selection
+// ---------------------------------------------------------------------------
+
+// Metacharacters that REQUIRE shell interpretation (outside quotes): pipes,
+// redirection, control operators, command substitution, globs, grouping,
+// comments, and newlines.
+const SHELL_META = '|&;<>`$()*?';
+
+const POSIX_SHELL_BUILTINS = new Set([
+  'cd', 'export', 'alias', 'unalias', 'source', 'set', 'unset', 'declare',
+  'typeset', 'local', 'readonly', 'shift', 'ulimit', 'umask', 'trap', 'type',
+  'hash', 'logout', 'exit', 'return', 'break', 'continue', 'wait', 'read',
+  'command', 'exec', 'builtin', 'eval', 'history', 'jobs', 'bg', 'fg',
+  'suspend', 'enable', 'let', 'time', 'getopts',
+]);
+
+const WINDOWS_SHELL_BUILTINS = new Set([
+  'cd', 'chdir', 'dir', 'type', 'copy', 'del', 'erase', 'mkdir', 'md',
+  'rmdir', 'rd', 'ren', 'rename', 'move', 'cls', 'date', 'time', 'ver',
+  'vol', 'echo', 'set', 'if', 'for', 'goto', 'pause', 'path', 'prompt',
+  'pushd', 'popd', 'shift', 'start', 'title', 'color', 'chcp', 'call',
+  'assoc', 'ftype', 'where', 'endlocal', 'setlocal', 'exit',
+]);
+
+/**
+ * Tokenize a command string the way a POSIX shell would, WITHOUT evaluating
+ * it. Quotes are respected, backslash escapes are honored inside/outside
+ * double quotes, and any shell metacharacter found outside quotes sets
+ * `hasShellMeta`. Used to decide between direct execution (spawn binary+args)
+ * and explicit shell-script mode (sh -c / cmd /c).
+ *
+ * @param {string} command
+ * @returns {{tokens: string[], hasShellMeta: boolean}}
+ */
+function tokenizeShellCommand(command) {
+  const tokens = [];
+  let current = '';
+  let quote = null;
+  let hasShellMeta = false;
+  let i = 0;
+  const str = String(command || '');
+  while (i < str.length) {
+    const c = str[i];
+    if (quote === "'") {
+      if (c === "'") quote = null;
+      else current += c;
+    } else if (quote === '"') {
+      if (c === '"') quote = null;
+      else if (c === '\\' && i + 1 < str.length && '"$`\\'.includes(str[i + 1])) {
+        current += str[i + 1];
+        i += 1;
+      } else if (c === '$' || c === '`') {
+        hasShellMeta = true;
+        current += c;
+      } else {
+        current += c;
+      }
+    } else if (c === "'" || c === '"') {
+      quote = c;
+    } else if (c === '\\' && i + 1 < str.length) {
+      current += str[i + 1];
+      i += 1;
+    } else if (/\s/.test(c)) {
+      if (current) { tokens.push(current); current = ''; }
+    } else if (c === '~' && current.length === 0) {
+      hasShellMeta = true;
+      current += c;
+    } else if (SHELL_META.includes(c) || c === '#' || c === '{' || c === '}') {
+      hasShellMeta = true;
+      current += c;
+    } else {
+      current += c;
+    }
+    i += 1;
+  }
+  if (current) tokens.push(current);
+  return { tokens, hasShellMeta };
+}
+
+/**
+ * Decide how a command string must be executed:
+ *   - 'direct' — no shell syntax; safe to spawn `tokens[0]` with `tokens[1..]`
+ *     verbatim (arguments are preserved exactly, never re-quoted).
+ *   - 'shell'  — contains shell syntax, or the first token is a shell builtin
+ *     with no standalone executable; must go through executeShellScript().
+ *   - 'invalid'— empty / no tokens.
+ */
+function resolveExecutionMode(command) {
+  if (typeof command !== 'string' || command.trim().length === 0) {
+    return { mode: 'invalid', tokens: [] };
+  }
+  const { tokens, hasShellMeta } = tokenizeShellCommand(command);
+  if (tokens.length === 0) return { mode: 'invalid', tokens };
+
+  const first = tokens[0].toLowerCase();
+  const builtins = process.platform === 'win32' ? WINDOWS_SHELL_BUILTINS : POSIX_SHELL_BUILTINS;
+  const envAssignment = /^[a-z_][a-z0-9_]*=/i.test(tokens[0]);
+
+  const needsShell = hasShellMeta || builtins.has(first) || envAssignment;
+  return needsShell ? { mode: 'shell', tokens } : { mode: 'direct', tokens };
 }
 
 module.exports = {
   executeSandboxed,
   executeSandboxedSync,
+  executeShellScript,
+  tokenizeShellCommand,
+  resolveExecutionMode,
+  // macOS
   generateSeatbeltProfile,
+  validateSeatbeltProfile,
+  createDarwinSandbox,
+  // Linux
   buildBubblewrapArgs,
-  buildSafeEnv,
-  // Windows AppContainer exports
-  generateJobObjectScript,
-  generateFilesystemRestrictionScript,
-  generateNetworkRestrictionScript,
-  executePowerShellScript,
+  createLinuxSandbox,
+  // Windows
   createWindowsSandbox,
   createWindowsSandboxSync,
+  getWindowsJobRunnerScript,
+  resolveWindowsPowershellPath,
+  parseWindowsHelperOutput,
+  // Env / errors
+  buildSafeEnv,
+  SandboxError,
+  createFailure,
   DEFAULT_WORKSPACE,
   DEFAULT_NETWORK_ALLOWLIST,
   SAFE_ENV_KEYS,
+  WINDOWS_SAFE_ENV_KEYS,
+  // allowlist helpers
   canonicalizePath: require('./directory-allowlist').canonicalizePath,
   isPathAllowed: require('./directory-allowlist').isPathAllowed,
   getSandboxDirs: require('./directory-allowlist').getSandboxDirs,

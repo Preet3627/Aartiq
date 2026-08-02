@@ -271,13 +271,11 @@ describe('Sandbox Profile Generation (§6)', () => {
       assert.ok(profile.includes('(deny network*)'));
     });
 
-    it('should allow specific network when network allowlist provided', () => {
-      const profile = generateSeatbeltProfile({
+    it('should fail closed when a domain network allowlist is requested (Seatbelt cannot express per-domain rules)', () => {
+      assert.throws(() => generateSeatbeltProfile({
         directoryAllowlist: allowlist,
         networkAllowlist: ['api.openai.com'],
-      });
-      // The domain is regex-escaped in the profile (dots become \.)
-      assert.ok(profile.includes('api\\.openai\\.com') || profile.includes('api.openai.com'));
+      }), (err) => err && err.code === 'SANDBOX_UNAVAILABLE');
     });
 
     it('should fallback to workspace-only when no allowlist', () => {

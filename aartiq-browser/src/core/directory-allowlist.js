@@ -31,9 +31,12 @@ function _getDefaultDirectories() {
   } else {
     appDataDir = path.join(os.homedir(), '.config', 'aartiq');
   }
+  // Windows has no POSIX /tmp; use the real temp directory so default
+  // allowlist entries resolve to existing paths (fail-closed validation).
+  const tmpDefault = process.platform === 'win32' ? os.tmpdir() : '/tmp';
   return [
     { path: appDataDir, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
-    { path: '/tmp', recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
+    { path: tmpDefault, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'default' },
   ];
 }
 
@@ -162,9 +165,11 @@ function getSandboxDirs(allowlist) {
       readDirs.add(canonical);
     }
 
-    // Also include /tmp for write
-    const { canonical: tmpCanonical } = canonicalizePath('/tmp');
-    if (canonical !== tmpCanonical) {
+    // Also include the platform temp dir for write (Windows has no /tmp).
+    const tmpPath = process.platform === 'win32' ? os.tmpdir() : '/tmp';
+    const { canonical: tmpCanonical } = canonicalizePath(tmpPath);
+    if (tmpCanonical) {
+      writeDirs.add(tmpCanonical);
       readDirs.add(tmpCanonical);
     }
   }

@@ -191,7 +191,7 @@ Aartiq uses structured JSON commands. Always respond with JSON format:
 3. **Syntactic Firewall** - Pattern analysis blocks dangerous shell commands and prompt injection attempts.
 4. **Human-in-the-Loop** - User approval required for critical actions (Shell, Native Clicks).
 5. **Directory Allowlist** - AI file access restricted to explicitly approved directories with read/write separation. Symlinks resolved via `fs.realpath()`.
-6. **OS-Level Sandboxing** - Platform-specific sandboxes (Seatbelt/bwrap/Job Objects) enforce filesystem, network, and process boundaries at the kernel level.
+6. **OS-Level Sandboxing** - Platform-specific sandboxes: Seatbelt (macOS) and bubblewrap (Linux) enforce filesystem and network boundaries at the kernel level; Job Objects (Windows) provide process-level containment only. Sandbox setup failures fail closed and never fall back to unsandboxed execution.
 7. **Capability-Scoped Execution** - Actions must be explicitly registered; unregistered actions are rejected entirely.
 
 ### Risk Levels

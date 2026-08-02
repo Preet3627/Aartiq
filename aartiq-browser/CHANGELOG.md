@@ -17,7 +17,7 @@ A major release focused on security hardening, DOM automation reliability, nativ
 
 #### Vault & Credential Security
 - **Vault encryption key moved to native OS keychain** — no longer stored in plaintext config files
-- **Vault migration** to AppContainer sandbox on Windows for process isolation
+- **Vault migration** to Windows Job Object containment for process isolation
 
 #### Directory Allowlist for AI File Access
 - New allowlist system restricts which directories the AI can read/write via shell commands
@@ -64,7 +64,7 @@ A major release focused on security hardening, DOM automation reliability, nativ
 
 #### MSIX / Windows Fixes
 - Fixed black taskbar icon background (cyan overlay) on Windows
-- AppContainer sandbox for Windows Store compliance
+- Job Object containment for Windows Store compliance
 
 ### Files Changed (Key)
 

@@ -477,13 +477,18 @@ describe('Fix 6: OS-level sandboxing — sandbox-executor.js', () => {
     }
     const profile = sandbox.generateSeatbeltProfile({
       workspace: '/tmp/test-workspace',
-      networkAllowlist: ['api.example.com'],
     });
     assert.ok(profile.includes('(version 1)'), 'Profile should have version header');
     assert.ok(profile.includes('/tmp/test-workspace'), 'Profile should reference workspace');
     assert.ok(profile.includes('deny file-write'), 'Profile should deny file writes');
-    assert.ok(profile.includes('deny network'), 'Profile should deny network by default');
-    assert.ok(profile.includes('api\\.example\\.com'), 'Profile should allowlist domain (escaped)');
+    assert.ok(profile.includes('(deny network*)'), 'Profile should deny all network by default');
+  });
+
+  it('should fail closed when a domain network allowlist is requested (Seatbelt cannot match domains)', () => {
+    assert.throws(() => sandbox.generateSeatbeltProfile({
+      workspace: '/tmp/test-workspace',
+      networkAllowlist: ['api.example.com'],
+    }), (err) => err && err.code === 'SANDBOX_UNAVAILABLE');
   });
 
   it('should generate profile with no network when allowlist is empty', () => {

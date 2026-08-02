@@ -35,6 +35,8 @@ class ApprovalTicketManager {
     this.ticketTTL = options.ticketTTL || 5 * 60 * 1000;
     this.logger = options.logger || DEFAULT_LOGGER;
     this._cleanupInterval = setInterval(() => this._cleanupExpiredTickets(), 60 * 1000);
+    // Do not keep the process alive for ticket cleanup; destroy() clears it.
+    if (this._cleanupInterval.unref) this._cleanupInterval.unref();
   }
 
   // =========================================================================

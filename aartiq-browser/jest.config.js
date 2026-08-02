@@ -9,7 +9,12 @@ module.exports = {
       },
       module: { type: 'commonjs' },
     }],
+    '^.+\\.(js|jsx|mjs|cjs)$': ['@swc/jest', {
+      jsc: { parser: { syntax: 'ecmascript' } },
+      module: { type: 'commonjs' },
+    }],
   },
+  transformIgnorePatterns: [],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },

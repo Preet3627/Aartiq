@@ -1,53 +1,21 @@
-const { exec } = require('child_process');
 const { validateCommand, checkShellPermission, permissionStore, analyzeCommandRisk, explainCommand } = require('./command-validator');
 
+/**
+ * Legacy shell-execution entry point. All execution is routed through the
+ * fail-closed sandboxed pipeline in utils.execShellCommand — there is no
+ * unsandboxed `exec()` path left here. The result shape matches the
+ * frontend contract: { success, output, error, code, sandboxed }.
+ */
 async function executeShellCommand({ rawCommand, preApproved, reason, riskLevel }) {
-  let command;
-  try {
-    if (preApproved) {
-      command = rawCommand.trim();
-      if (!command) throw new Error('Invalid command: empty command');
-      if (command.length > 10000) throw new Error('Command too long (max 10000 characters)');
-    } else {
-      command = validateCommand(rawCommand);
-    }
-  } catch (e) {
-    return { success: false, error: e.message };
-  }
-
-  if (!preApproved) {
-    const authorized = await checkShellPermission(command, reason, riskLevel);
-    if (!authorized) {
-      return { success: false, error: 'User blocked the command.' };
-    }
-  }
-
-  return new Promise((resolve) => {
-    const execOptions = { timeout: 30000 };
-    exec(command, execOptions, (error, stdout, stderr) => {
-      if (process.platform === 'darwin' && !error) {
-        const macosPermKey = 'MACOS_TERMINAL_PERMISSION';
-        if (!permissionStore.isGranted(macosPermKey)) {
-          permissionStore.grant(macosPermKey, 'execute', 'macOS Shell access', false);
-        }
-      }
-
-      if (error) {
-        if (error.message.includes('Operation not permitted')) {
-          resolve({ success: false, error: 'Permission denied! Please go to Settings > Permissions in Aartiq to configure macOS system permissions.', output: stderr });
-        } else {
-          resolve({ success: false, error: error.message, output: stderr });
-        }
-      } else {
-        resolve({ success: true, output: stdout.trim(), error: stderr });
-      }
-    });
-  });
+  const { execShellCommand } = require('../main/handlers/utils');
+  return execShellCommand(rawCommand, preApproved, reason, riskLevel);
 }
 
 module.exports = {
   executeShellCommand,
   validateCommand,
+  checkShellPermission,
+  permissionStore,
   analyzeCommandRisk,
-  explainCommand
+  explainCommand,
 };

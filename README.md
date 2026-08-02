@@ -1,11 +1,8 @@
-Aartiq™ — For the questions that matter
+# Aartiq™ — For the Questions That Matter
 
->The most important question isn't what you ask AI. It's what AI asks you before it acts.
-
-
+> “The most important question isn't what you ask AI. It's what AI asks you before it acts.”
 
 Aartiq™ is an open-source AI browser that plans tasks, explains every non-trivial action, asks for permission, and only then executes it.
-
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.3.5-blue.svg)](https://github.com/Preet3627/Aartiq/releases/tag/v0.3.5)
@@ -23,37 +20,29 @@ Aartiq™ is an open-source AI browser that plans tasks, explains every non-triv
 ## Table of Contents
 
 - [Why Aartiq?](#why-aartiq)
+- [Permission-First AI](#permission-first-ai)
 - [How It Works](#how-it-works)
 - [Example Prompts](#example-prompts)
+- [See Aartiq in Action](#see-aartiq-in-action)
 - [Installation](#installation)
-- [Performance](#performance)
-- [Security](#security)
 - [Documentation](#documentation)
 - [Contributors](#contributors)
-- [Contributing](#contributing)
+- [🚧 Project Status](#project-status)
 - [License](#license)
 
 ---
 
-
-> "Aartiq™ exists because one unasked question taught me that the questions we don't ask matter most."
-
-That idea became the foundation of Aartiq's permission-first design: before any non-trivial action, the AI explains its plan, asks for your approval, and only then executes it.
-
-
-
-
-## Why Aartiq™?
+## Why Aartiq?
 
 Traditional browsers help you navigate the web. AI chatbots answer questions. Aartiq helps you complete real tasks.
+
 Instead of opening 15 tabs yourself, you tell Aartiq what you need. It plans the steps, explains every non-trivial action, asks for your approval, and only then executes them.
 
----
 ## Permission-First AI
 
-Aartiq makes planning, explanation, and user approval part of the action workflow—not an afterthought.
+Unlike most AI assistants that immediately execute actions, Aartiq explains **exactly what it intends to do**, asks for your approval, and only then proceeds.
 
-## Permission Workflow
+### Permission Workflow
 
 | Plan | Permission | Results |
 |:----:|:----------:|:-------:|
@@ -63,11 +52,11 @@ Aartiq makes planning, explanation, and user approval part of the action workflo
 
 Before accessing files, running shell commands, or performing sensitive actions, Aartiq:
 
--  Explains exactly what it wants to do
--  Shows the affected files, directories, or commands
--  Waits for your approval
--  Executes only after permission is granted
----
+- Explains exactly what it wants to do
+- Shows the affected files, directories, or commands
+- Waits for your approval
+- Executes only after permission is granted
+
 ## How It Works
 
 1. You type a task in the AI chat sidebar (e.g. "search for Rust tutorials and save the top 3 as a PDF")
@@ -75,67 +64,61 @@ Before accessing files, running shell commands, or performing sensitive actions,
 3. Aartiq parses the commands and shows a permission dialog for anything non-trivial
 4. You approve, and Aartiq executes the actions in the browser
 
+```text
+                ┌───────────────────────────┐
+                │           USER            │
+                └─────────────┬─────────────┘
+                              │
+                              ▼
+                  Natural Language Request
+                              │
+                              ▼
+                ┌───────────────────────────┐
+                │      AI ORCHESTRATOR      │
+                │ GPT • Claude • Gemini ... │
+                └─────────────┬─────────────┘
+                              │
+                      Structured Commands
+                              │
+                              ▼
+                ┌───────────────────────────┐
+                │      COMMAND PARSER       │
+                └─────────────┬─────────────┘
+                              │
+                              ▼
 
-   ```text
-                   ┌───────────────────────────┐
-                   │           USER            │
-                   └─────────────┬─────────────┘
-                                 │
-                                 ▼
-                     Natural Language Request
-                                 │
-                                 ▼
-                   ┌───────────────────────────┐
-                   │      AI ORCHESTRATOR      │
-                   │ GPT • Claude • Gemini ... │
-                   └─────────────┬─────────────┘
-                                 │
-                         Structured Commands
-                                 │
-                                 ▼
-                   ┌───────────────────────────┐
-                   │      COMMAND PARSER       │
-                   └─────────────┬─────────────┘
-                                 │
-                                 ▼
-
-          ┌──────────────────────────────────────────────┐
-          │      DEFENSE-IN-DEPTH SECURITY (7 Layers)    │
-          │                                              │
-          │  Regex Blocklist                             │
-          │        ↓                                     │
-          │  Permission Store                            │
-          │        ↓                                     │
-          │  Capability Controller                       │
-          │        ↓                                     │
-          │  Directory Allowlist                         │
-          │        ↓                                     │
-          │  OS-Level Sandboxing                         │
-          │        ↓                                     │
-          │  Native File API Bypass                      │
-          │        ↓                                     │
-          │  Renderer Approval                           │
-          └──────────────────┬───────────────────────────┘
-                             │
-                        Approved?
-                       Yes │   │ No
-                           ▼   ▼
-              ┌────────────────────────────┐
-              │ Browser / Desktop / Files  │
-              │ OCR / Office / Automation  │
-              └─────────────┬──────────────┘
-                            ▼
-                    ┌──────────────┐
-                    │   Results    │
-                    └──────────────┘
+      ┌──────────────────────────────────────────────┐
+      │      DEFENSE-IN-DEPTH SECURITY (7 Layers)    │
+      │                                              │
+      │  Regex Blocklist                             │
+      │        ↓                                     │
+      │  Permission Store                            │
+      │        ↓                                     │
+      │  Capability Controller                       │
+      │        ↓                                     │
+      │  Directory Allowlist                         │
+      │        ↓                                     │
+      │  OS-Level Sandboxing                         │
+      │        ↓                                     │
+      │  Native File API Bypass                      │
+      │        ↓                                     │
+      │  Renderer Approval                           │
+      └──────────────────┬───────────────────────────┘
+                         │
+                    Approved?
+                   Yes │   │ No
+                       ▼   ▼
+          ┌────────────────────────────┐
+          │ Browser / Desktop / Files  │
+          │ OCR / Office / Automation  │
+          └─────────────┬──────────────┘
+                        ▼
+                ┌──────────────┐
+                │   Results    │
+                └──────────────┘
 ```
-```
-
-
 
 **Supported providers:** Gemini, GPT, Claude, Groq, xAI, Azure OpenAI, Ollama (offline), Apple Intelligence (macOS).
-
----
 
 ## Example Prompts
 
@@ -152,32 +135,26 @@ Try these after installing:
 | `"Fill this form with my details"` | Detects fields, fills them atomically |
 | `"Search Google for 'electron performance' and extract results"` | Real browser search, extracts page text |
 
-
-
----
 ## See Aartiq in Action
 
 > **Prompt:** *"Search for today's news, create a PDF summary, move it to my Desktop, and open it."*
 
 <p align="center">
   <img width="744" height="480" alt="3" src="https://github.com/user-attachments/assets/051f5188-6e20-4b58-8087-74b9dd61b2e2" />
-
 </p>
 
 Aartiq doesn't just answer questions—it plans the task, explains every non-trivial action, asks for your approval, and then executes it.
 
 **What happens in this demo:**
 
-1.  Searches the web for today's news
-2.  Summarizes the results into a formatted PDF
-3.  Moves the PDF to the Desktop
-4.  Opens the generated document
-5.  Shows the completed result
+1. Searches the web for today's news
+2. Summarizes the results into a formatted PDF
+3. Moves the PDF to the Desktop
+4. Opens the generated document
+5. Shows the completed result
 
 **Plan → Explain → Ask → Execute**
 
-
----
 ## Installation
 
 ### Pre-built Binaries
@@ -194,6 +171,7 @@ Aartiq doesn't just answer questions—it plans the task, explains every non-tri
 Download from the [releases page](https://github.com/Preet3627/Aartiq/releases).
 
 If macOS blocks the app:
+
 ```bash
 xattr -cr /Applications/Aartiq.app
 ```
@@ -216,82 +194,36 @@ flutter pub get
 flutter run
 ```
 
----
-
 ## Performance
 
-Measured on a MacBook Pro M4 Pro (12-core, 24 GB), macOS 26.5:
-
-| Metric | Value |
-|--------|-------|
-| Cold start (window visible) | **0.32s** |
-| Warm start (OS cache) | **0.31s** |
-| CPU (idle after init) | **< 1%** |
-| Total memory (all processes) | **~1.7 GB** |
-| App bundle size | **1.2 GB** |
+Measured on a MacBook Pro M4 Pro (12-core, 24 GB), macOS 26.5: **0.32s cold start**, **0.31s warm start**, **< 1% CPU idle**, **~1.7 GB total memory**, **1.2 GB app bundle**.
 
 > Measures time to first visible window, not full initialization. Aartiq displays the Chromium window immediately while AI providers, MCP bridge, sync, and OCR continue loading asynchronously.
 
-For the full benchmark methodology, per-run data, and reproduction scripts, see [Performance Benchmarks](https://aartiq.ponsrischool.in/docs/overview#performance-benchmarks).
-
----
+Full benchmark methodology, per-run data, and reproduction scripts are on the [Performance Benchmarks](https://aartiq.ponsrischool.in/docs/overview#performance-benchmarks) page.
 
 ## Security
 
-Every non-trivial action requires explicit approval before execution:
+Aartiq uses a defense-in-depth security model with risk-based permissions, capability controls, directory allowlists, platform-specific sandboxing, encrypted vault storage, and explicit approval for sensitive actions.
 
-- **Low risk** (read tabs, navigate, search) — auto-approved based on user preferences
-- **Medium risk** (shell commands, file writes, clipboard) — per-action approval dialog
-- **High risk** (destructive operations, `rm -rf`, `dd`) — biometric confirmation (Touch ID / Windows Hello)
-- **Critical risk** (remote shell commands, privilege escalation) — always requires explicit approval; never auto-approved
-
-### Defense-in-depth layers
-
-Aartiq enforces security through multiple independent layers:
-
-1. **Regex blocklist** (`SecurityValidator.js`) — fast first-pass reject of obvious dangerous patterns. Cheap to run but bypassable by construction; not relied upon as the primary defense.
-2. **Permission store** (`command-validator.js:checkShellPermission`) — risk-tiered permission checks against an explicit grant store. Commands are denied unless a matching grant exists at a sufficient level.<img width="324" height="422" alt="Screenshot 2026-07-25 at 12 02 56 PM" src="https://github.com/user-attachments/assets/5ca82b06-5643-492c-b1df-db36e1db296e" />
-
-3. **Capability controller** (`capability-controller.js`) — ticket-based approval system that prevents param tampering across the IPC trust boundary. Every shell-execution and system-command entry point is routed through registered actions; unregistered actions are rejected outright.
-4. **Directory allowlist** (`directory-allowlist.js`) — user-controlled set of directories the AI can access, replacing the single hardcoded sandbox workspace. Paths are canonicalized via `fs.realpath()` before checking (follows symlinks, prevents `../` traversal). Each entry specifies read-only or read-write access. The AI must request permission for directories not on the list.<img width="485" height="710" alt="Screenshot 2026-07-25 at 12 03 12 PM" src="https://github.com/user-attachments/assets/3ba9c577-36a6-4526-9364-8228426b82e4" />
-
-5. **OS-level sandboxing** (`sandbox-executor.js`) — filesystem and network confinement via platform-specific mechanisms (macOS Seatbelt, Linux bubblewrap, Windows Job Objects with ACL-based filesystem restrictions and Windows Firewall network rules). Sandbox profiles are generated dynamically from the directory allowlist — read-only entries get `--ro-bind`/`file-read*`, read-write entries get `--bind`/`file-write*`. The spawned process physically cannot write outside the allowlisted directories.
-6. **File management bypass** — `move_file`, `copy_file`, `open_file`, `print_file` route directly through `fs` APIs with `isPathAllowed()` checks on both source and destination. No subprocess spawn for common file operations: faster, more auditable, no shell injection surface.
-7. **Renderer-side approval dialog** (`AIChatSidebar.tsx:requestActionPermission`) — user-facing confirmation before command dispatch.
-
-### Encryption & vault migration
-
-- **AES-256-GCM encryption** (E2EE2 format) — PBKDF2 with 600K iterations and per-entry random salt
-- **Legacy vault migration** — automatic detection and re-encryption of old LCL (plaintext base64) and E2EE (PBKDF2 100K iterations, no salt) formats to modern E2EE2
-- **Atomic vault writes** — backup before migration, rollback on failure
-
-### Remote device security
-
-WiFi Sync commands from paired mobile devices undergo the same validation and permission checks as local commands, with risk levels automatically elevated by one tier (remote origin = elevated risk). Power actions (shutdown, restart, sleep, lock) and shell commands require QR/PIN approval.
-
-The MCP server binds to `127.0.0.1` only — no external network exposure. Pairing tokens expire after 10 minutes.
-
-For the full security model, see [Security Documentation](https://aartiq.ponsrischool.in/docs/security).
-
----
+The full model — risk levels, defense-in-depth layers, encryption & vault migration, and remote-device security — is documented on the [Security Model](https://aartiq.ponsrischool.in/docs/security) page.
 
 ## Documentation
 
 | Topic | Link |
 |-------|------|
 | Features | [aartiq.ponsrischool.in/features](https://aartiq.ponsrischool.in/features) |
-| Architecture | [aartiq.ponsrischool.in/docs/overview](https://aartiq.ponsrischool.in/docs/overview) |
-| AI Commands | [aartiq.ponsrischool.in/docs/ai-commands](https://aartiq.ponsrischool.in/docs/ai-commands) |
+| Overview / Architecture | [aartiq.ponsrischool.in/docs/overview](https://aartiq.ponsrischool.in/docs/overview) |
+| Performance | [aartiq.ponsrischool.in/docs/overview#performance-benchmarks](https://aartiq.ponsrischool.in/docs/overview#performance-benchmarks) |
 | Security Model | [aartiq.ponsrischool.in/docs/security](https://aartiq.ponsrischool.in/docs/security) |
-| MCP Server (64 tools) | [aartiq.ponsrischool.in/docs/api-reference](https://aartiq.ponsrischool.in/docs/api-reference) |
+| AI Commands | [aartiq.ponsrischool.in/docs/ai-commands](https://aartiq.ponsrischool.in/docs/ai-commands) |
+| MCP Server / API Reference | [aartiq.ponsrischool.in/docs/api-reference](https://aartiq.ponsrischool.in/docs/api-reference) |
 | Components | [aartiq.ponsrischool.in/docs/components](https://aartiq.ponsrischool.in/docs/components) |
 | Automation | [aartiq.ponsrischool.in/docs/automation](https://aartiq.ponsrischool.in/docs/automation) |
 | Cloud Sync | [aartiq.ponsrischool.in/docs/cloud-sync](https://aartiq.ponsrischool.in/docs/cloud-sync) |
 | Troubleshooting | [aartiq.ponsrischool.in/docs/troubleshooting](https://aartiq.ponsrischool.in/docs/troubleshooting) |
 | Changelog | [aartiq.ponsrischool.in/docs/changelog](https://aartiq.ponsrischool.in/docs/changelog) |
 | v0.3.5 Release Notes | [release_notes/v0.3.5.md](release_notes/v0.3.5.md) |
-
----
 
 ## Contributors
 
@@ -302,37 +234,48 @@ Built by [Preet3627](https://github.com/Preet3627) with contributions from the c
 </a>
 
 ---
+
 > [!IMPORTANT]
 > ## 🚧 Project Status
 >
-> **Aartiq™ is temporarily on hold.**
+> **Aartiq™ is entering an AI-assisted maintenance phase.**
 >
-> This project started as a simple experiment called **Comet-AI** — a question about what AI could become. Over time, that question evolved into **Aartiq™**, an AI-native browser built around the idea that AI should not only answer questions, but help execute tasks while keeping humans in control.
+> This project began as a simple experiment called **Comet-AI**—a question about what AI could become. Over time, that question evolved into **Aartiq™**, an AI-native browser built around the idea that AI should not only answer questions, but help execute tasks while keeping humans in control.
 >
-> After five months of building Aartiq independently, including its AI systems, security architecture, MCP integration, synchronization features, and multi-platform releases, I am taking a temporary pause to focus on my studies and recharge after balancing development with academics.
+> After five months of independently building Aartiq—including its AI systems, security architecture, MCP integration, synchronization features, and multi-platform releases—I am temporarily shifting my primary focus to my studies and upcoming exams.
 >
-> Development, feature work, and issue responses will be limited until my exams are over.
+> During this period, AI agents may assist with:
 >
-> The repository will remain public, and existing releases will continue to be available. Once Exam is completed, development will resume with new features, improvements, and bug fixes.
+> - Reviewing and organizing issues
+> - Analyzing bugs
+> - Improving documentation
+> - Maintaining the codebase
+> - Preparing proposed fixes and updates
 >
-> **"What happened to my private diary should never happen to a computer system."**
+> AI agents do not replace human responsibility. Important changes—especially those involving security, permissions, user data, releases, or project direction—remain subject to human review, approval, and repository safeguards.
+>
+> The repository will remain public, and existing releases will continue to be available. Development, feature work, and community responses may be more limited while I focus on my exams, but the project will remain active through AI-assisted maintenance.
+>
+> Once my exams are complete, I plan to return to active development and continue building new features, improvements, and bug fixes.
+>
+> **“What happened to my private diary should never happen to a computer system.”**
 >
 > Aartiq was built on one belief:
 >
-> **"Aartiq exists because one unasked question taught me that the questions we don't ask matter most."**
+> **“Aartiq exists because one unasked question taught me that the questions we don't ask matter most.”**
 >
 > This is not the end of the journey.
 >
 > **Aartiq is just 1 CM away from the future.**
 >
-> “The ‘1 CM’ in Aartiq is a personal reminder that respecting a boundary often begins with asking before crossing it.”
+> The “1 CM” in Aartiq is a personal reminder that respecting a boundary often begins with asking before crossing it.
 >
 > Thank you for your patience and support. ❤️
 >
 > — Preet Patel
 
-
 ---
+
 ## License
 
 Aartiq uses a **dual-license** model:
@@ -344,8 +287,6 @@ Aartiq uses a **dual-license** model:
 
 The MCP server is MIT-licensed for maximum compatibility with Claude Desktop and other MCP clients. All other components remain Apache 2.0.
 
-
-"Aartiq™ is a trademark of Preet3627(Latestinssan). While our source code is freely available under the Apache 2.0 License, this license does not grant permission to use the trade name, logos, or branding of Aartiq. Any modified distributions of this browser must be rebranded under a completely different name."
-
+"Aartiq™ is a trademark of Preet Patel (Latestinssan, Preet3627). While our source code is freely available under the Apache 2.0 License, this license does not grant permission to use the trade name, logos, or branding of Aartiq. Any modified distributions of this browser must be rebranded under a completely different name."
 
 © 2026 Aartiq™. All rights reserved.

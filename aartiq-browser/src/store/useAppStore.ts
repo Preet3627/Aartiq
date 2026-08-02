@@ -368,7 +368,7 @@ export const useAppStore = create<BrowserState>()(
                 const defaults = {
                     clientId: '601898745585-8g9t0k72gq4q1a4s1o4d1t6t7e5v4c4g.apps.googleusercontent.com',
                     clientSecret: '',
-                    redirectUri: 'https://aartiq.vercel.app/oauth2callback'
+                    redirectUri: 'https://aartiq.ponsrischool.in/oauth2callback'
                 };
                 
                 try {

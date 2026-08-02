@@ -147,7 +147,7 @@ function extractPathsFromCommand(command) {
 exports.execShellCommand = async function(rawCommand, preApproved, reason, riskLevel) {
   const { validateCommand, checkShellPermission, analyzeCommandRisk } = require('../../core/command-validator');
   const { validateCommand: securityValidate } = require('../../lib/SecurityValidator');
-  const { executeSandboxed } = require('../../core/sandbox-executor');
+  const { executeSandboxed, executeShellScript } = require('../../core/sandbox-executor');
 
   let command;
   try {
@@ -241,14 +241,31 @@ exports.execShellCommand = async function(rawCommand, preApproved, reason, riskL
     }
   }
 
-  // 5. Execute via sandboxed executor (OS-level confinement)
-  //    For high/critical risk, disable sandbox escape and enforce stricter limits
+  // 5. Execute via sandboxed executor (OS-level confinement).
+  //
+  //    The sandbox is FAIL-CLOSED: if the platform sandbox cannot be built or
+  //    verified, the command is NOT run and a structured error is returned.
+  //    There is no automatic fallback to unsandboxed execution.
+  //
+  //    Risk-tiered policy:
+  //      - low risk      → unsandboxed (explicit escape hatch; env still
+  //                        sanitized, result reports sandboxed:false)
+  //      - medium+ risk  → sandboxed (filesystem confined, network denied on
+  //                        macOS/Linux where the sandbox enforces it)
+  //      - high/critical → sandboxed + deny all network
+  //
+  //    Windows cannot enforce per-process network policy in this release
+  //    (Job Object containment only), so networkAllowlist is never passed on
+  //    win32 — requesting it there would fail closed.
   const useSandbox = effectiveRisk !== 'low';
-  const cmdParts = command.trim().split(/\s+/);
-  const cmdBinary = cmdParts[0];
-  const cmdArgs = cmdParts.slice(1);
+  const denyNetwork = effectiveRisk === 'high' || effectiveRisk === 'critical';
+  const networkAllowlist = process.platform === 'win32'
+    ? undefined
+    : (denyNetwork ? [] : undefined);
 
-  // Build directory allowlist for sandbox profile
+  // Build the directory allowlist for the sandbox profile. Missing/removed
+  // directories are a policy error inside the sandbox (fail closed); the
+  // command simply does not run.
   let directoryAllowlist = null;
   try {
     const { PermissionStore } = require('../../lib/permission-store');
@@ -256,33 +273,48 @@ exports.execShellCommand = async function(rawCommand, preApproved, reason, riskL
     await store.load();
     directoryAllowlist = store.getAllowedDirectories();
   } catch (e) {
-    // Fall through with null allowlist (sandbox will use workspace-only fallback)
+    // Fall through with null allowlist (sandbox grants workspace + system only).
   }
 
-  const raw = await executeSandboxed(cmdBinary, cmdArgs, {
+  const { resolveExecutionMode } = require('../../core/sandbox-executor');
+  const sandboxOptions = {
     useSandbox,
     timeout: 30000,
     directoryAllowlist,
-    networkAllowlist: effectiveRisk === 'high' || effectiveRisk === 'critical' ? [] : undefined,
-  });
+    networkAllowlist,
+  };
 
-  // Normalize stdout → output so the frontend (res.output) always gets a value.
-  // executeSandboxed returns { success, code, stdout, stderr } but the frontend
-  // and shell-executor.js both use { success, output, error }.
-  if (raw.stdout !== undefined || raw.stderr !== undefined) {
-    const combinedOutput = [
-      raw.stdout ? raw.stdout.trim() : '',
-      !raw.success && raw.stderr ? raw.stderr.trim() : '',
-    ].filter(Boolean).join('\n');
-    return {
-      success: raw.success,
-      output: combinedOutput || (raw.success ? '(no output)' : undefined),
-      error: raw.error || (!raw.success && raw.stderr ? raw.stderr.trim() : undefined) || (raw.success ? undefined : `Command exited with code ${raw.code ?? 'unknown'}`),
-      code: raw.code,
-    };
+  // Direct execution (spawn binary + verbatim args) is preferred. Commands
+  // containing shell syntax (pipes, redirects, globs, builtins, env prefixes)
+  // go through explicit shell mode — never via string-reconstructed sh -c.
+  const mode = resolveExecutionMode(command);
+
+  let raw;
+  if (mode.mode === 'invalid') {
+    return { success: false, error: 'Invalid command: empty command' };
+  }
+  if (mode.mode === 'shell') {
+    raw = await executeShellScript(command, sandboxOptions);
+  } else {
+    raw = await executeSandboxed(mode.tokens[0], mode.tokens.slice(1), sandboxOptions);
   }
 
-  return raw;
+  // Normalize the sandbox result → frontend { success, output, error }.
+  // Fail-closed results carry { success:false, code, error, sandboxed:false }.
+  const success = raw.success === true;
+  const stdoutText = raw.stdout ? String(raw.stdout).trim() : '';
+  const stderrText = raw.stderr ? String(raw.stderr).trim() : '';
+  const combinedOutput = [stdoutText, !success && stderrText ? stderrText : ''].filter(Boolean).join('\n');
+  return {
+    success,
+    output: combinedOutput || (success ? '(no output)' : undefined),
+    error: raw.error
+      || (!success && stderrText ? stderrText : undefined)
+      || (success ? undefined : `Command exited with code ${raw.code ?? 'unknown'}`),
+    code: raw.code,
+    sandboxed: raw.sandboxed === true,
+    sandboxPlatform: raw.sandboxPlatform,
+  };
 };
 
 exports.deriveKey = async function(passphrase, salt) {
