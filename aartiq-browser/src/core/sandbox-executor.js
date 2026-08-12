@@ -26,6 +26,20 @@
  *            are NOT claimed. Requests for per-process network policy on
  *            Windows fail closed.
  *
+ * RESULT CONTRACT
+ * ---------------
+ * Every result carries an `isolation` object so callers cannot mistake
+ * process containment for filesystem/network isolation:
+ *   { filesystem: boolean, network: boolean, process: boolean }
+ *   darwin : { true,  true,  true  }
+ *   linux  : { true,  true,  true  }
+ *   win32  : { false, false, true  }   (process-only — documented)
+ *   failure/unsandboxed : { false, false, false }
+ *
+ * bubblewrap gets an extra capability pre-flight: `--version` succeeds even
+ * when user namespaces are disabled, so we run a real `--unshare-*` probe and
+ * fail closed if the namespaces we require cannot be created.
+ *
  * The regex blocklist in SecurityValidator.js remains a fast first-pass reject
  * but is NOT treated as sufficient on its own.
  */
@@ -80,13 +94,22 @@ const WINDOWS_SAFE_ENV_KEYS = [
 // pipelines/builds but still a hard ceiling against fork bombs.
 const DEFAULT_MAX_PROCESSES = 64;
 
+// Explicit isolation capabilities reported on every result. "sandboxed" alone
+// is ambiguous across platforms; these fields state exactly what each platform
+// enforces at the OS layer so callers cannot mistake process containment for
+// filesystem/network isolation (see module header — Windows is process-only).
+const NO_ISOLATION = { filesystem: false, network: false, process: false };
+const DARWIN_ISOLATION = { filesystem: true, network: true, process: true };
+const LINUX_ISOLATION = { filesystem: true, network: true, process: true };
+const WIN_ISOLATION = { filesystem: false, network: false, process: true };
+
 // ---------------------------------------------------------------------------
 // Structured failure
 // ---------------------------------------------------------------------------
 
 function createFailure(code, message, extra = {}) {
   if (!SANDBOX_ERROR_CODES.includes(code)) code = 'SANDBOX_SETUP_FAILED';
-  return { success: false, code, error: message, sandboxed: false, ...extra };
+  return { success: false, code, error: message, sandboxed: false, isolation: NO_ISOLATION, ...extra };
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +392,7 @@ function createDarwinSandbox(command, args, options) {
       timeout: options.timeout || 30000,
     },
     platform: 'darwin',
+    isolation: DARWIN_ISOLATION,
     cleanup: () => {
       try { fs.unlinkSync(profilePath); } catch (e) { /* best-effort */ }
     },
@@ -439,10 +463,40 @@ function buildBubblewrapArgs(command, args, options = {}) {
   return bwrapArgs;
 }
 
+// Cache the namespace-capability probe per bwrap path so we don't re-run it on
+// every execution. A failed probe is sticky — once a bwrap cannot create the
+// required namespaces we refuse to use it for the rest of the process.
+let _bwrapCapabilityCache = new Map();
+
+/**
+ * Verify that bwrap can actually create the namespaces we depend on. `--version`
+ * succeeds even when user namespaces are disabled (e.g. locked-down containers,
+ * some CI runners), so we run a real, harmless `--unshare-*` invocation. If that
+ * fails, bwrap would start the target UNCONTAINED — we must fail closed.
+ */
+function checkBwrapCapability(bwrapPath) {
+  if (_bwrapCapabilityCache.has(bwrapPath)) return _bwrapCapabilityCache.get(bwrapPath);
+  let cap;
+  try {
+    cap = spawnSync(
+      bwrapPath,
+      ['--ro-bind', '/', '/', '--unshare-pid', '--unshare-net', '--unshare-ipc', '--unshare-uts', '/bin/true'],
+      { encoding: 'utf8', timeout: 15000 }
+    );
+  } catch (e) {
+    _bwrapCapabilityCache.set(bwrapPath, false);
+    return false;
+  }
+  const ok = !cap.error && cap.status === 0;
+  _bwrapCapabilityCache.set(bwrapPath, ok);
+  return ok;
+}
+
 /**
  * Build the Linux sandboxed launch configuration.
  *
- * @throws {SandboxError} if bubblewrap is unavailable or the policy is invalid.
+ * @throws {SandboxError} if bubblewrap is unavailable, cannot create the
+ *   required namespaces, or the policy is invalid.
  */
 function createLinuxSandbox(command, args, options) {
   const bwrapPath = options.bwrapPath || 'bwrap';
@@ -465,6 +519,17 @@ function createLinuxSandbox(command, args, options) {
     throw new SandboxError('SANDBOX_UNAVAILABLE', `bubblewrap (bwrap) is not functional (exit ${check.status})`);
   }
 
+  // Capability check: bwrap must be able to create the namespaces we require.
+  // --version passing while namespace creation failing is the classic
+  // "bwrap present but unusable" trap (user namespaces disabled). Fail closed.
+  if (!checkBwrapCapability(bwrapPath)) {
+    throw new SandboxError(
+      'SANDBOX_UNAVAILABLE',
+      `bubblewrap (bwrap) cannot create the required namespaces on this system ` +
+      `(user namespaces may be disabled). Refusing to run uncontained.`
+    );
+  }
+
   const bwrapArgs = buildBubblewrapArgs(command, args, options);
 
   return {
@@ -476,6 +541,7 @@ function createLinuxSandbox(command, args, options) {
       timeout: options.timeout || 30000,
     },
     platform: 'linux',
+    isolation: LINUX_ISOLATION,
     cleanup: () => {},
   };
 }
@@ -568,6 +634,7 @@ function createWindowsSandbox(command, args, options = {}) {
       timeout: (options.timeout || 30000) + 10000,
     },
     platform: 'win32',
+    isolation: WIN_ISOLATION,
     cleanup: () => {
       try { fs.unlinkSync(payloadPath); } catch (e) { /* best-effort */ }
       try { fs.unlinkSync(runnerPath); } catch (e) { /* best-effort */ }
@@ -623,6 +690,7 @@ function parseWindowsHelperOutput(stdout, stderr) {
       sandboxed: true,
       sandboxPlatform: 'win32',
       jobAssigned: parsed.jobAssigned === true,
+      isolation: WIN_ISOLATION,
     };
   }
   if (parsed && parsed.sandboxed === false) {
@@ -661,7 +729,11 @@ function runProcess(command, args, spawnOptions, meta) {
 
     child.on('close', (code) => {
       if (meta.platform === 'win32') {
-        finish(parseWindowsHelperOutput(stdout, stderr));
+        const r = parseWindowsHelperOutput(stdout, stderr);
+        // On setup failure the job was never applied; do not claim process
+        // containment. On success the Job Object was verified assigned.
+        r.isolation = (r.sandboxed === true) ? meta.isolation : NO_ISOLATION;
+        finish(r);
         return;
       }
       // bubblewrap setup errors are reported on stderr prefixed with "bwrap:".
@@ -676,6 +748,7 @@ function runProcess(command, args, spawnOptions, meta) {
         stderr: String(stderr).trim(),
         sandboxed: meta.sandboxed,
         sandboxPlatform: meta.platform,
+        isolation: meta.isolation,
       });
     });
   });
@@ -737,7 +810,7 @@ async function executeSandboxed(command, args = [], options = {}) {
         env: buildSafeEnv(options),
         cwd: workspace,
         timeout: options.timeout || 30000,
-      }, { platform: 'none', sandboxed: false });
+      }, { platform: 'none', sandboxed: false, isolation: NO_ISOLATION });
       return result;
     }
 
@@ -758,17 +831,19 @@ async function executeSandboxed(command, args = [], options = {}) {
 
     // 3. Launch the target inside the verified sandbox. The target never
     //    starts before mandatory sandbox setup succeeds.
-    const result = await runProcess(config.command, config.args, config.spawnOptions, {
-      platform: config.platform,
-      sandboxed: true,
-    });
-
-    // 4. Clean up sandbox resources (idempotent).
-    if (config.cleanup) {
-      try { config.cleanup(); } catch (e) { /* best-effort */ }
+    // 4. Clean up sandbox resources in a finally block so cleanup runs even if
+    //    the process lifecycle is interrupted (e.g. promise rejection).
+    try {
+      return await runProcess(config.command, config.args, config.spawnOptions, {
+        platform: config.platform,
+        sandboxed: true,
+        isolation: config.isolation,
+      });
+    } finally {
+      if (config.cleanup) {
+        try { config.cleanup(); } catch (e) { /* best-effort */ }
+      }
     }
-
-    return result;
   } catch (e) {
     if (e instanceof SandboxError) return createFailure(e.code, e.message);
     return createFailure('SANDBOX_SETUP_FAILED', e.message);
@@ -808,6 +883,7 @@ function executeSandboxedSync(command, args = [], options = {}) {
         stderr: (r.stderr || '').trim(),
         sandboxed: false,
         sandboxPlatform: 'none',
+        isolation: NO_ISOLATION,
       };
     }
 
@@ -828,12 +904,11 @@ function executeSandboxedSync(command, args = [], options = {}) {
     try {
       r = spawnSync(config.command, config.args, { ...config.spawnOptions, encoding: 'utf8' });
     } catch (e) {
-      if (config.cleanup) { try { config.cleanup(); } catch (e2) { /* best-effort */ } }
       return createFailure('SANDBOX_SETUP_FAILED', `Failed to launch sandbox: ${e.message}`);
-    }
-
-    if (config.cleanup) {
-      try { config.cleanup(); } catch (e) { /* best-effort */ }
+    } finally {
+      if (config.cleanup) {
+        try { config.cleanup(); } catch (e) { /* best-effort */ }
+      }
     }
 
     if (r.error) {
@@ -844,7 +919,9 @@ function executeSandboxedSync(command, args = [], options = {}) {
     }
 
     if (platform === 'win32') {
-      return parseWindowsHelperOutput(r.stdout, r.stderr);
+      const res = parseWindowsHelperOutput(r.stdout, r.stderr);
+      res.isolation = (res.sandboxed === true) ? config.isolation : NO_ISOLATION;
+      return res;
     }
     if (platform === 'linux' && r.status !== 0 && /^bwrap:/m.test(String(r.stderr))) {
       return createFailure('SANDBOX_SETUP_FAILED', String(r.stderr).trim());
@@ -856,6 +933,7 @@ function executeSandboxedSync(command, args = [], options = {}) {
       stderr: (r.stderr || '').trim(),
       sandboxed: true,
       sandboxPlatform: platform,
+      isolation: config.isolation,
     };
   } catch (e) {
     if (e instanceof SandboxError) return createFailure(e.code, e.message);
@@ -911,11 +989,16 @@ const WINDOWS_SHELL_BUILTINS = new Set([
 ]);
 
 /**
- * Tokenize a command string the way a POSIX shell would, WITHOUT evaluating
- * it. Quotes are respected, backslash escapes are honored inside/outside
- * double quotes, and any shell metacharacter found outside quotes sets
- * `hasShellMeta`. Used to decide between direct execution (spawn binary+args)
- * and explicit shell-script mode (sh -c / cmd /c).
+ * Tokenize a command string for EXECUTION-MODE CLASSIFICATION ONLY.
+ *
+ * This is a lightweight heuristic tokenizer, NOT a shell parser and NOT a
+ * security boundary. It roughly honors quotes and backslash escapes so it can
+ * tell "this string needs a real shell" from "this is a plain argv", but it
+ * does NOT implement shell grammar (expansion, arithmetic, process
+ * substitution, $'' ANSI-C, etc.). It must never be used to validate or
+ * "sanitize" a command — any decision it makes is advisory input to
+ * resolveExecutionMode(), and the resulting mode only changes HOW the command
+ * is spawned (direct argv vs sh -c / cmd /c), never whether it is allowed.
  *
  * @param {string} command
  * @returns {{tokens: string[], hasShellMeta: boolean}}

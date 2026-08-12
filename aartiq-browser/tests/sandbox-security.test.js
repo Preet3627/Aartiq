@@ -33,6 +33,7 @@ describe('createFailure / SandboxError', () => {
       code: 'SANDBOX_UNAVAILABLE',
       error: 'bwrap missing',
       sandboxed: false,
+      isolation: { filesystem: false, network: false, process: false },
     });
   });
 
@@ -252,7 +253,9 @@ describe('Linux bubblewrap (buildBubblewrapArgs / createLinuxSandbox)', () => {
   it('should produce a linux launch config when bwrap is functional', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sandbox-security-'));
     const fakeBwrap = path.join(tmpDir, 'fake-bwrap-ok');
-    fs.writeFileSync(fakeBwrap, '#!/bin/sh\nif [ "$1" = "--version" ]; then exit 0; fi\nexit 1\n');
+    // Must satisfy both the --version probe and the namespace-capability probe
+    // (which invokes bwrap with --unshare-* and a trailing /bin/true).
+    fs.writeFileSync(fakeBwrap, '#!/bin/sh\nif [ "$1" = "--version" ]; then exit 0; fi\ncase "$*" in *"/bin/true"*) exit 0;; esac\nexit 1\n');
     fs.chmodSync(fakeBwrap, 0o755);
     try {
       const config = sandbox.createLinuxSandbox('/bin/ls', ['-la'], { bwrapPath: fakeBwrap });
@@ -589,5 +592,129 @@ describe('Seatbelt integration (macOS only)', () => {
     });
     assert.strictEqual(res.success, false, 'write outside allowlist must fail');
     assert.ok(!fs.existsSync(target), 'file must not exist after denied write');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Seatbelt adversarial enforcement (macOS only) — proves the ACTUAL Seatbelt
+// semantics at runtime rather than trusting the generated profile text. These
+// are the "throw pathological inputs / try to disprove the claim" tests.
+// ---------------------------------------------------------------------------
+
+describe('Seatbelt adversarial enforcement (macOS only)', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sandbox-adversarial-'));
+  const ws = path.join(tmpDir, 'workspace');
+  fs.mkdirSync(ws, { recursive: true });
+  // Outside the allowlist AND outside the system read paths (home is not
+  // broadly readable under the generated profile).
+  const secretOutside = path.join(os.homedir(), '.aartiq-secret-' + Date.now());
+  fs.writeFileSync(secretOutside, 'topsecret', { mode: 0o600 });
+
+  // python3 may be absent on some macOS installs; gate network/interpreter tests.
+  const hasPython = fs.existsSync('/usr/bin/python3') || fs.existsSync('/usr/bin/python');
+  const pyBin = hasPython ? (fs.existsSync('/usr/bin/python3') ? '/usr/bin/python3' : '/usr/bin/python') : null;
+
+  afterAll(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    try { fs.unlinkSync(secretOutside); } catch (e) { /* best-effort */ }
+  });
+
+  const run = (cmd, args, extra = {}) =>
+    sandbox.executeSandboxed(cmd, args, {
+      useSandbox: true,
+      workspace: ws,
+      directoryAllowlist: [{ path: ws, access: 'read-write' }],
+      ...extra,
+    });
+
+  it('should DENY reading a file outside the allowlist (home not readable)', async function () {
+    if (process.platform !== 'darwin') return this.skip();
+    const res = await run('/bin/cat', [secretOutside]);
+    assert.strictEqual(res.sandboxed, true);
+    assert.strictEqual(res.success, false, 'read outside allowlist must be denied');
+  });
+
+  it('should ALLOW writing inside the workspace', async function () {
+    if (process.platform !== 'darwin') return this.skip();
+    const target = path.join(ws, 'ok.txt');
+    const res = await run('/usr/bin/touch', [target]);
+    assert.strictEqual(res.sandboxed, true);
+    assert.strictEqual(res.success, true, res.stderr || '');
+    assert.ok(fs.existsSync(target), 'file should be created in workspace');
+  });
+
+  it('should ALLOW writing to /tmp (granted temp directory)', async function () {
+    if (process.platform !== 'darwin') return this.skip();
+    const target = path.join('/tmp', 'aartiq-tmp-' + Date.now() + '.txt');
+    const res = await run('/usr/bin/touch', [target]);
+    assert.strictEqual(res.sandboxed, true, 'sandbox must be active');
+    assert.strictEqual(res.success, true, res.stderr || '');
+    try { fs.unlinkSync(target); } catch (e) { /* best-effort */ }
+  });
+
+  it('should DENY a network bind (network isolation is enforced)', async function () {
+    if (process.platform !== 'darwin') return this.skip();
+    if (!hasPython) return this.skip();
+    // Binding a socket is a network operation Seatbelt denies regardless of
+    // external connectivity — a deterministic network-isolation proof.
+    const script = 'import socket\ns=socket.socket()\ns.bind(("127.0.0.1",0))\ns.listen()\n';
+    const res = await run(pyBin, ['-c', script]);
+    assert.strictEqual(res.sandboxed, true);
+    assert.strictEqual(res.success, false, 'network bind must be denied under Seatbelt');
+  });
+
+  it('should DENY reading through a symlink that escapes the allowlist', async function () {
+    if (process.platform !== 'darwin') return this.skip();
+    const link = path.join(ws, 'escape-link');
+    try { fs.unlinkSync(link); } catch (e) { /* best-effort */ }
+    fs.symlinkSync(secretOutside, link);
+    const res = await run('/bin/cat', [link]);
+    assert.strictEqual(res.sandboxed, true);
+    assert.strictEqual(res.success, false, 'symlink-escape read must be denied');
+  });
+
+  it('should DENY writing through a symlink that escapes the allowlist', async function () {
+    if (process.platform !== 'darwin') return this.skip();
+    // /tmp is allowlisted for write, so escape to a HOME subdirectory instead.
+    const safeOutside = path.join(os.homedir(), '.aartiq-escape-' + Date.now());
+    fs.mkdirSync(safeOutside, { recursive: true });
+    const link = path.join(ws, 'write-escape');
+    try { fs.unlinkSync(link); } catch (e) { /* best-effort */ }
+    fs.symlinkSync(safeOutside, link);
+    const target = path.join(link, 'written.txt');
+    const res = await run('/usr/bin/touch', [target]);
+    assert.strictEqual(res.sandboxed, true);
+    assert.strictEqual(res.success, false, 'symlink-escape write must be denied');
+    assert.ok(!fs.existsSync(target), 'escaped file must not be created');
+    try { fs.rmSync(safeOutside, { recursive: true, force: true }); } catch (e) { /* best-effort */ }
+  });
+
+  it('should keep child processes contained (subprocess cannot read outside)', async function () {
+    if (process.platform !== 'darwin') return this.skip();
+    // /bin/sh is on the exec allowlist; the child cat is still denied the read.
+    const script = '/bin/cat ' + JSON.stringify(secretOutside);
+    const res = await run('/bin/sh', ['-c', script]);
+    assert.strictEqual(res.sandboxed, true);
+    assert.strictEqual(res.success, false, 'child-process read outside must be denied');
+  });
+
+  it('should run an interpreter script located inside the workspace', async function () {
+    if (process.platform !== 'darwin') return this.skip();
+    if (!hasPython) return this.skip();
+    const scriptPath = path.join(ws, 'hello.py');
+    fs.writeFileSync(scriptPath, 'print("hello-from-sandbox")\n');
+    const res = await run(pyBin, [scriptPath]);
+    assert.strictEqual(res.sandboxed, true);
+    assert.strictEqual(res.success, true, res.stderr || '');
+    assert.ok(String(res.stdout).includes('hello-from-sandbox'));
+  });
+
+  it('should report explicit isolation capabilities (filesystem/network/process = true)', async function () {
+    if (process.platform !== 'darwin') return this.skip();
+    const res = await run('/bin/echo', ['iso']);
+    assert.deepStrictEqual(
+      res.isolation,
+      { filesystem: true, network: true, process: true }
+    );
   });
 });

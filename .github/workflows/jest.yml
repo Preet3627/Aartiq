@@ -44,3 +44,32 @@ jobs:
 
       - name: Run Jest
         run: npm test -- --ci --runInBand
+
+  # Windows runtime verification for the Job Object sandbox. The macOS/Linux
+  # runtime tests skip on Windows, but windows-job-sandbox.test.js's runtime
+  # matrix (suspended start, verified job assignment, grandchild containment,
+  # secret isolation, KILL_ON_JOB_CLOSE) only executes here — on real Windows.
+  windows-sandbox:
+    name: Run Jest (Windows sandbox runtime)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: aartiq-browser
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: aartiq-browser/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Windows sandbox tests
+        run: npx jest tests/sandbox-security.test.js tests/windows-job-sandbox.test.js tests/linux-bwrap-sandbox.test.js --ci --runInBand
