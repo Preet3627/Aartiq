@@ -1,8 +1,10 @@
-# Aartiq™ — For the Questions That Matter
+# Aartiq™ — For The Questions That Matter
 
 > “The most important question isn't what you ask AI. It's what AI asks you before it acts.”
 
-Aartiq™ is an open-source AI browser that plans tasks, explains every non-trivial action, asks for permission, and only then executes it.
+Aartiq™ is an open-source AI browser that plans tasks, explains non-trivial actions, requests permission when required, and executes through controlled capabilities.
+
+**Plan → Explain → Ask → Execute**
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-cyan.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-0.3.5-blue.svg)](https://github.com/Preet3627/Aartiq/releases/tag/v0.3.5)
@@ -10,233 +12,291 @@ Aartiq™ is an open-source AI browser that plans tasks, explains every non-triv
 [![Windows](https://img.shields.io/badge/Windows-Supported-blue?logo=windows)](https://github.com/Preet3627/Aartiq/releases/latest)
 [![macOS](https://img.shields.io/badge/macOS-Supported-blue?logo=apple)](https://github.com/Preet3627/Aartiq/releases/latest)
 [![Linux](https://img.shields.io/badge/Linux-Supported-blue?logo=linux)](https://github.com/Preet3627/Aartiq/releases/latest)
-[![Android](https://img.shields.io/badge/Android-Supported-blue?logo=android)](https://github.com/Preet3627/Aartiq/releases/latest)
+[![Android](https://img.shields.io/badge/Android-Supported-blue?logo=android)](hzttps://github.com/Preet3627/Aartiq/releases/latest)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Listed-blue?logo=microsoft)](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN)
 
-<img width="1912" height="1168" alt="Screenshot 2026-07-25 at 2 28 01 PM" src="https://github.com/user-attachments/assets/fe9131d4-cfcf-4d3b-aea5-9cc451b4fbd1" />
-
----
-
-## Table of Contents
-
-- [Why Aartiq?](#why-aartiq)
-- [Permission-First AI](#permission-first-ai)
-- [How It Works](#how-it-works)
-- [Example Prompts](#example-prompts)
-- [See Aartiq in Action](#see-aartiq-in-action)
-- [Installation](#installation)
-- [Documentation](#documentation)
-- [Contributors](#contributors)
-- [🚧 Project Status](#project-status)
-- [License](#license)
+<p align="center">
+  <img width="1912" height="1168" alt="Aartiq Browser" src="https://github.com/user-attachments/assets/fe9131d4-cfcf-4d3b-aea5-9cc451b4fbd1" />
+</p>
 
 ---
 
 ## Why Aartiq?
 
-Traditional browsers help you navigate the web. AI chatbots answer questions. Aartiq helps you complete real tasks.
+Traditional browsers help you navigate the web.
 
-Instead of opening 15 tabs yourself, you tell Aartiq what you need. It plans the steps, explains every non-trivial action, asks for your approval, and only then executes them.
+AI assistants help you understand information.
 
-## Permission-First AI
+**Aartiq is built for the space between the two: helping AI carry out tasks while keeping the user in control.**
 
-Aartiq is designed around explicit approval for non-trivial actions, so users can review what the AI intends to do before execution.
+Instead of manually opening tabs, searching websites, filling forms, creating documents, moving files, and repeating workflows, you describe the goal.
 
-### Permission Workflow
+Aartiq can turn that goal into structured actions, evaluate those actions against its permission model, request approval when required, and execute through registered capabilities.
 
-| Plan | Permission | Results |
-|:----:|:----------:|:-------:|
-| <img src="https://github.com/user-attachments/assets/c55e93c0-fa3c-4ae1-b6ec-e4423b87a9c4" width="250" alt="Plan"> | <img src="https://github.com/user-attachments/assets/e554869b-b156-4538-bf5e-062468752c6c" width="250" alt="Permission"> | <img src="https://github.com/user-attachments/assets/ecdbd0d6-b673-4473-9f54-68d74ddb75c9" width="250" alt="Results"> |
+> **AI can act. You decide what it is allowed to do.**
 
-**Plan → Explain → Ask → Execute**
-
-Before accessing files, running shell commands, or performing sensitive actions, Aartiq:
-
-- Explains exactly what it wants to do
-- Shows the affected files, directories, or commands
-- Waits for your approval
-- Executes only after permission is granted
-
-## How It Works
-
-1. You type a task in the AI chat sidebar (e.g. "search for Rust tutorials and save the top 3 as a PDF")
-2. The LLM returns structured commands (`NAVIGATE`, `CLICK_ELEMENT`, `SHELL_COMMAND`, etc.)
-3. Aartiq parses the commands and shows a permission dialog for anything non-trivial
-4. You approve, and Aartiq executes the actions in the browser
-
-```text
-                ┌───────────────────────────┐
-                │           USER            │
-                └─────────────┬─────────────┘
-                              │
-                              ▼
-                  Natural Language Request
-                              │
-                              ▼
-                ┌───────────────────────────┐
-                │      AI ORCHESTRATOR      │
-                │ GPT • Claude • Gemini ... │
-                └─────────────┬─────────────┘
-                              │
-                      Structured Commands
-                              │
-                              ▼
-                ┌───────────────────────────┐
-                │      COMMAND PARSER       │
-                └─────────────┬─────────────┘
-                              │
-                              ▼
-
-      ┌──────────────────────────────────────────────┐
-      │      DEFENSE-IN-DEPTH SECURITY (7 Layers)    │
-      │                                              │
-      │  Regex Blocklist                             │
-      │        ↓                                     │
-      │  Permission Store                            │
-      │        ↓                                     │
-      │  Capability Controller                       │
-      │        ↓                                     │
-      │  Directory Allowlist                         │
-      │        ↓                                     │
-      │  OS-Level Sandboxing                         │
-      │        ↓                                     │
-      │  Native File API Mediation                   │
-      │        ↓                                     │
-      │  Renderer Approval                           │
-      └──────────────────┬───────────────────────────┘
-                         │
-                    Approved?
-                   Yes │   │ No
-                       ▼   ▼
-          ┌────────────────────────────┐
-          │ Browser / Desktop / Files  │
-          │ OCR / Office / Automation  │
-          └─────────────┬──────────────┘
-                        ▼
-                ┌──────────────┐
-                │   Results    │
-                └──────────────┘
-```
-
-**Supported providers:** Gemini, GPT, Claude, Groq, xAI, Azure OpenAI, Ollama (offline), Apple Intelligence (macOS).
-
-## Example Prompts
-
-Try these after installing:
-
-| Task | What Aartiq does |
-|------|------------------|
-| `"Search for React tutorials and open the top 3"` | Searches DuckDuckGo, opens results in new tabs |
-| `"Summarize this page and save as PDF"` | Reads page content, generates a formatted PDF |
-| `"Set brightness to 50% and open VS Code"` | Runs system commands via OS bridge |
-| `"Create a PowerPoint about climate change"` | Generates slides with charts from AI-written content |
-| `"Schedule a daily backup at 9 AM"` | Creates a cron-based background task |
-| `"Read the text in this screenshot"` | OCR via Tesseract.js on screen region |
-| `"Fill this form with my details"` | Detects fields, fills them atomically |
-| `"Search Google for 'electron performance' and extract results"` | Real browser search, extracts page text |
+---
 
 ## See Aartiq in Action
 
-> **Prompt:** *"Search for today's news, create a PDF summary, move it to my Desktop, and open it."*
+**Prompt:**
+
+> *“Search for today's news, create a PDF summary, move it to my Desktop, and open it.”*
 
 <p align="center">
-  <img width="744" height="480" alt="3" src="https://github.com/user-attachments/assets/051f5188-6e20-4b58-8087-74b9dd61b2e2" />
+  <img width="744" height="480" alt="Aartiq task execution demo" src="https://github.com/user-attachments/assets/051f5188-6e20-4b58-8087-74b9dd61b2e2" />
 </p>
 
-Aartiq doesn't just answer questions—it plans the task, explains every non-trivial action, asks for your approval, and then executes it.
+The workflow:
 
-**What happens in this demo:**
+```text
+Understand
+    ↓
+Plan
+    ↓
+Explain
+    ↓
+Ask
+    ↓
+Execute
+    ↓
+Result
+````
 
-1. Searches the web for today's news
-2. Summarizes the results into a formatted PDF
-3. Moves the PDF to the Desktop
-4. Opens the generated document
-5. Shows the completed result
+Aartiq searches the web, gathers information, creates the document, requests approval for actions that require it, moves the resulting file, and opens it.
 
-**Plan → Explain → Ask → Execute**
+---
+
+## Permission-First AI
+
+Aartiq evaluates each command against its registered capability and permission policy.
+
+Actions that require approval are presented before execution with information about what will happen and what resource or capability is involved.
+
+### Risk-Based Permissions
+
+| Risk         | Typical behavior                                     |
+| ------------ | ---------------------------------------------------- |
+| **Low**      | Automatic / policy-controlled                        |
+| **Medium**   | Explicit approval                                    |
+| **High**     | Stronger confirmation                                |
+| **Critical** | Explicit authorization; never silently auto-approved |
+
+Risk is assigned to the **capability being invoked**, rather than being inferred solely from the wording of the user's prompt.
+
+For the complete command catalog, risk assignments, approval behavior, and implementation details:
+
+**[AI Command Reference](https://aartiq.ponsrischool.in/docs/ai-commands)**
+
+---
+
+## How It Works
+
+Aartiq converts natural-language goals into structured, permission-aware execution.
+
+```text
+┌───────────────────────────┐
+│           USER            │
+│     Natural-language      │
+│           goal            │
+└─────────────┬─────────────┘
+              │
+              ▼
+┌───────────────────────────┐
+│      AI ORCHESTRATOR      │
+│ GPT • Claude • Gemini ... │
+└─────────────┬─────────────┘
+              │
+              ▼
+┌───────────────────────────┐
+│      TASK PLANNING        │
+│   Structured Commands     │
+└─────────────┬─────────────┘
+              │
+              ▼
+┌───────────────────────────┐
+│   PERMISSION & SECURITY   │
+│ Risk • Capability • Scope │
+└─────────────┬─────────────┘
+              │
+              ▼
+        ┌──────────────┐
+        │   APPROVAL   │
+        │   REQUIRED?  │
+        └──────┬───────┘
+               │
+               ▼
+┌───────────────────────────┐
+│     CONTROLLED EXECUTION  │
+│ Browser • Files • OS • OCR│
+└─────────────┬─────────────┘
+              │
+              ▼
+┌───────────────────────────┐
+│          RESULT           │
+└───────────────────────────┘
+```
+
+Actions are exposed through registered capabilities rather than allowing the model unrestricted access to arbitrary system primitives.
+
+---
+
+## Security
+
+Aartiq uses a **defense-in-depth security model** combining:
+
+* Risk-based permission policies
+* Capability-scoped execution
+* Human-in-the-loop authorization
+* Directory allowlists
+* Platform-specific sandboxing
+* Input and command validation
+* Encrypted sensitive data storage
+* Remote-device security controls
+
+The security architecture is implemented across multiple enforcement layers. The README intentionally keeps the overview brief; the documentation contains the implementation details, threat model, permission tiers, encryption architecture, sandbox behavior, and remote-device security.
+
+**[Read the Aartiq Security Model →](https://aartiq.ponsrischool.in/docs/security)**
+
+---
+
+## Example Prompts
+
+Try Aartiq with tasks such as:
+
+| Prompt                                                    | Example workflow                              |
+| --------------------------------------------------------- | --------------------------------------------- |
+| `Search for React tutorials and open the top 3`           | Searches the web and opens relevant results   |
+| `Summarize this page and save it as a PDF`                | Reads the page and generates a structured PDF |
+| `Set brightness to 50% and open VS Code`                  | Uses supported system capabilities            |
+| `Create a PowerPoint about climate change`                | Generates a structured presentation           |
+| `Schedule a daily backup at 9 AM`                         | Creates a recurring background task           |
+| `Read the text in this screenshot`                        | Uses OCR / visual intelligence                |
+| `Fill this form with my details`                          | Identifies and fills supported form fields    |
+| `Search for electron performance and extract the results` | Performs browser-based research               |
+
+For every available command and its risk classification:
+
+**[AI Command Reference →](https://aartiq.ponsrischool.in/docs/ai-commands)**
+
+---
+
+## AI Providers
+
+Aartiq supports multiple AI backends, including:
+
+* Google Gemini
+* OpenAI GPT
+* Anthropic Claude
+* Groq
+* xAI
+* Azure OpenAI
+* Ollama
+* Apple Intelligence on macOS
+
+Provider availability depends on the platform and configuration.
+
+---
+
+## Performance
+
+Aartiq initializes the Chromium window immediately while background services continue loading asynchronously.
+
+### Benchmark
+
+Measured on a **MacBook Pro M4 Pro**, 12-core CPU, 24 GB RAM, macOS 26.5.
+
+**Benchmark version:** v0.3.4
+**Current release:** v0.3.5
+**Date:** 2026-07-20
+
+| Metric                        | Result    |
+| ----------------------------- | --------- |
+| First visible window          | **0.32s** |
+| Warm start                    | **0.31s** |
+| Idle CPU after initialization | **<1%**   |
+
+> Startup measurements represent time to the first visible window, not complete service initialization. Results vary by hardware, operating system, and configuration.
+>first visible window ≠ complete service initialization
+Detailed measurements and methodology:
+
+**[Performance Benchmarks →](https://aartiq.ponsrischool.in/docs/overview#performance-benchmarks)**
+
+---
 
 ## Installation
 
 ### Pre-built Binaries
 
-| Platform | Format |
-|----------|--------|
-| Windows | `.exe` / `.msix` |
-| Windows | [Microsoft Store](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN) |
-| macOS (Apple Silicon) | `.dmg` |
-| macOS (Intel) | `.dmg` |
-| Linux | `.AppImage` |
-| Android | `.apk` |
+| Platform              | Format           |
+| --------------------- | ---------------- |
+| Windows               | `.exe` / `.msix` |
+| Windows               | Microsoft Store  |
+| macOS — Apple Silicon | `.dmg`           |
+| macOS — Intel         | `.dmg`           |
+| Linux                 | `.AppImage`      |
+| Android               | `.apk`           |
 
-Download from the [releases page](https://github.com/Preet3627/Aartiq/releases).
+Download the latest release from:
 
-If macOS blocks the app:
+**[Aartiq Releases →](https://github.com/Preet3627/Aartiq/releases)**
+
+### macOS
+
+If macOS blocks the application:
 
 ```bash
 xattr -cr /Applications/Aartiq.app
 ```
 
-### Build from Source
+### Build From Source
 
 ```bash
 git clone https://github.com/Preet3627/Aartiq.git
 cd Aartiq/aartiq-browser
+
 npm install
-npm run dev              # Next.js frontend
-npm run electron-start   # Electron shell
+
+# Next.js development server
+npm run dev
+
+# Electron shell
+npm run electron-start
 ```
 
-### Mobile (Android)
+### Android
 
 ```bash
 cd flutter_browser_app
+
 flutter pub get
 flutter run
 ```
 
-## Performance
-
-Measured on a MacBook Pro M4 Pro (12-core, 24 GB), macOS 26.5 (app v0.3.4, 2026-07-20):
-
-| Metric | Value | Notes |
-|--------|-------|-------|
-| Cold Start (Window Visible) | 0.32s | Average of 3 runs, ±0.00s |
-| Warm Start (Window Visible) | 0.31s | From OS file cache (second launch) |
-| Main Process RSS | 430 MB | Stabilizes to ~610 MB after tab activity |
-| Total RSS (all processes) | 1,712 MB | Main, renderer, GPU, utility, and helper processes |
-| CPU (idle after init) | < 1% | After background services finish loading |
-| App Bundle Size | 1.2 GB | Frameworks: 276 MB, Resources: 958 MB |
-
-> Measures time to first visible window, not full initialization. Aartiq displays the Chromium window immediately while AI providers, MCP bridge, sync, and OCR continue loading asynchronously. Results may vary depending on hardware, OS version, and installed extensions.
-
-Full benchmark methodology, per-run data, and reproduction scripts are on the [Performance Benchmarks](https://aartiq.ponsrischool.in/docs/overview#performance-benchmarks) page.
-
-## Security
-
-Aartiq uses a defense-in-depth security model with risk-based permissions, capability controls, directory allowlists, platform-specific sandboxing, encrypted vault storage, and explicit approval for sensitive actions.
-
-The full model — risk levels, defense-in-depth layers, encryption & vault migration, and remote-device security — is documented on the [Security Model](https://aartiq.ponsrischool.in/docs/security) page.
+---
 
 ## Documentation
 
-| Topic | Link |
-|-------|------|
-| Features | [aartiq.ponsrischool.in/features](https://aartiq.ponsrischool.in/features) |
-| Overview / Architecture | [aartiq.ponsrischool.in/docs/overview](https://aartiq.ponsrischool.in/docs/overview) |
-| Performance | [aartiq.ponsrischool.in/docs/overview#performance-benchmarks](https://aartiq.ponsrischool.in/docs/overview#performance-benchmarks) |
-| Security Model | [aartiq.ponsrischool.in/docs/security](https://aartiq.ponsrischool.in/docs/security) |
-| AI Commands | [aartiq.ponsrischool.in/docs/ai-commands](https://aartiq.ponsrischool.in/docs/ai-commands) |
-| MCP Server / API Reference | [aartiq.ponsrischool.in/docs/api-reference](https://aartiq.ponsrischool.in/docs/api-reference) |
-| Components | [aartiq.ponsrischool.in/docs/components](https://aartiq.ponsrischool.in/docs/components) |
-| Automation | [aartiq.ponsrischool.in/docs/automation](https://aartiq.ponsrischool.in/docs/automation) |
-| Cloud Sync | [aartiq.ponsrischool.in/docs/cloud-sync](https://aartiq.ponsrischool.in/docs/cloud-sync) |
-| Troubleshooting | [aartiq.ponsrischool.in/docs/troubleshooting](https://aartiq.ponsrischool.in/docs/troubleshooting) |
-| Changelog | [aartiq.ponsrischool.in/docs/changelog](https://aartiq.ponsrischool.in/docs/changelog) |
-| v0.3.5 Release Notes | [release_notes/v0.3.5.md](release_notes/v0.3.5.md) |
+The GitHub README provides the product overview. Detailed architecture and implementation documentation lives on the Aartiq documentation site.
+
+| Topic                   | Documentation                                                          |
+| ----------------------- | ---------------------------------------------------------------------- |
+| Overview & Architecture | [Overview](https://aartiq.ponsrischool.in/docs/overview)               |
+| Security Model          | [Security](https://aartiq.ponsrischool.in/docs/security)               |
+| AI Commands             | [Command Reference](https://aartiq.ponsrischool.in/docs/ai-commands)   |
+| API Reference           | [API Reference](https://aartiq.ponsrischool.in/docs/api-reference)     |
+| Components              | [Components](https://aartiq.ponsrischool.in/docs/components)           |
+| Automation              | [Automation](https://aartiq.ponsrischool.in/docs/automation)           |
+| Cloud Sync              | [Cloud Sync](https://aartiq.ponsrischool.in/docs/cloud-sync)           |
+| Troubleshooting         | [Troubleshooting](https://aartiq.ponsrischool.in/docs/troubleshooting) |
+| Changelog               | [Changelog](https://aartiq.ponsrischool.in/docs/changelog)             |
+| v0.3.5 Release Notes    | [Release Notes](release_notes/v0.3.5.md)                               |
+
+---
 
 ## Contributors
 
-Built by [Preet3627](https://github.com/Preet3627) with contributions from the community — see all [contributors](https://github.com/Preet3627/Aartiq/graphs/contributors).
+Built by [Preet3627](https://github.com/Preet3627) with contributions from the community.
 
 <a href="https://github.com/Preet3627/Aartiq/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=Preet3627/Aartiq" />
@@ -245,13 +305,40 @@ Built by [Preet3627](https://github.com/Preet3627) with contributions from the c
 ---
 
 > [!IMPORTANT]
+>
 > ## 🚧 Project Status
 >
 > **Aartiq™ is entering an AI-assisted maintenance phase.**
 >
-> This project began as a simple experiment called **Comet-AI**—a question about what AI could become. Over time, that question evolved into **Aartiq™**, an AI-native browser built around the idea that AI should not only answer questions, but help execute tasks while keeping humans in control.
+> Aartiq began as a small experiment called **Comet-AI**—built around a question about what AI could become.
 >
-> After five months of independently building Aartiq—including its AI systems, security architecture, MCP integration, synchronization features, and multi-platform releases—I am temporarily shifting my primary focus to my studies and upcoming exams.
+> It started with almost nothing:
+>
+> **One student.  
+> An Intel i5.  
+> 8 GB of RAM.  
+> Essentially zero-cost tooling.  
+> And one question.**
+>
+> For the first 3–4 months, I built it on that machine while balancing school and JEE preparation—learning, experimenting, breaking things, and rebuilding them.
+>
+> There was no team, company, or large budget behind it. Just a computer, a lot of code, and a reason to keep building.
+>
+> Comet-AI eventually became **Aartiq™**—an open-source AI-native browser with permission-gated automation, native OS integrations, MCP support, local AI, synchronization, document generation, and multi-platform releases.
+>
+> Today, Aartiq is developed on a MacBook Pro with an M4 Pro.
+>
+> **The hardware changed.  
+> The project evolved.  
+> The question remained.**
+>
+> One moment that changed Aartiq philosophy, however, stayed constant:
+>
+> > **“What happened to my private diary should never happen to a computer system.”**
+>
+> That belief became part of Aartiq's approach to permission and control: AI can prepare and act, but important actions should not happen silently.
+>
+> After five months of independently building Aartiq, I am temporarily shifting my primary focus to my studies and upcoming exams.
 >
 > During this period, AI agents may assist with:
 >
@@ -261,43 +348,63 @@ Built by [Preet3627](https://github.com/Preet3627) with contributions from the c
 > - Maintaining the codebase
 > - Preparing proposed fixes and updates
 >
-> AI agents do not replace human responsibility. Important changes—especially those involving security, permissions, user data, releases, or project direction—remain subject to human review, approval, and repository safeguards.
+> **AI assistance does not replace human responsibility.** Changes involving security, permissions, user data, releases, or project direction remain subject to human review, approval, and repository safeguards.
 >
-> The repository will remain public, and existing releases will continue to be available. Development, feature work, and community responses may be more limited while I focus on my exams, but the project will remain active through AI-assisted maintenance.
+> **Aartiq isn't abandoned. It's paused.**
 >
-> Once my exams are complete, I plan to return to active development and continue building new features, improvements, and bug fixes.
+> Once my exams are complete, I plan to return with a stronger foundation, better ideas, and hopefully people to build it with.
 >
-> **“What happened to my private diary should never happen to a computer system.”**
+> There is a reason this project began with a question.
 >
-> Aartiq was built on one belief:
+> There is a reason the project is called **Aartiq**.
 >
-> **“Aartiq exists because one unasked question taught me that the questions we don't ask matter most.”**
+> And there is a reason I still haven't written that original question here.
 >
-> This is not the end of the journey.
+> **Maybe someday I'll tell you what it was.**
+>
+> Until then:
 >
 > **Aartiq is just 1 CM away from the future.**
 >
-> The “1 CM” in Aartiq is a personal reminder that respecting a boundary often begins with asking before crossing it.
+> The **“1 CM”** is a personal reminder that respecting a boundary often begins with asking before crossing it.
 >
 > Thank you for your patience and support. ❤️
 >
-> — Preet Patel
-
+> — **Preet Patel**
 ---
 
 ## License
 
 Aartiq uses a **dual-license** model:
 
-| Component | License |
-|-----------|---------|
-| **Aartiq Browser** (desktop, mobile, all core code) | [Apache License 2.0](LICENSE) |
-| **Aartiq MCP Server** (`aartiq-mcp/`) | [MIT License](aartiq-mcp/LICENSE) |
+| Component                                           | License                           |
+| --------------------------------------------------- | --------------------------------- |
+| **Aartiq Browser** — desktop, mobile, and core code | [Apache License 2.0](LICENSE)     |
+| **Aartiq MCP Server** — `aartiq-mcp/`               | [MIT License](aartiq-mcp/LICENSE) |
 
-The MCP server is MIT-licensed for maximum compatibility with Claude Desktop and other MCP clients. All other components remain Apache 2.0.
+The MCP server is MIT-licensed for compatibility with Claude Desktop and other MCP clients. All other components remain Apache 2.0.
 
-"Aartiq™ is a trademark of Preet Patel (Latestinssan, Preet3627). While our source code is freely available under the Apache 2.0 License, this license does not grant permission to use the trade name, logos, or branding of Aartiq. Any modified distributions of this browser must be rebranded under a completely different name."
+---
 
-The source code may be used, modified, and redistributed under its applicable open-source license. The Aartiq name, logo, and visual identity are not granted by that license and may not be used for modified or unofficial distributions.
+## Trademark
+
+**Aartiq™** is a trademark of Preet Patel (Latestinssan, Preet3627).
+
+The applicable open-source license permits the use, modification, and redistribution of the source code. It does **not** grant permission to use the Aartiq name, logo, trademarks, or visual identity for modified or unofficial distributions.
+
+Modified distributions must be rebranded under a different name and must not present themselves as official Aartiq releases.
+
+---
+
+<p align="center">
+
+### For The Questions That Matter.
+
+**The most important question isn't what you ask AI.
+It's what AI asks you before it acts.**
+
+**Plan → Explain → Ask → Execute**
+
+**Aartiq™**
 
 © 2026 Aartiq™. All rights reserved.
