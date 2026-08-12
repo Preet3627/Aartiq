@@ -12,7 +12,7 @@ Aartiq™ is an open-source AI browser that plans tasks, explains non-trivial ac
 [![Windows](https://img.shields.io/badge/Windows-Supported-blue?logo=windows)](https://github.com/Preet3627/Aartiq/releases/latest)
 [![macOS](https://img.shields.io/badge/macOS-Supported-blue?logo=apple)](https://github.com/Preet3627/Aartiq/releases/latest)
 [![Linux](https://img.shields.io/badge/Linux-Supported-blue?logo=linux)](https://github.com/Preet3627/Aartiq/releases/latest)
-[![Android](https://img.shields.io/badge/Android-Supported-blue?logo=android)](hzttps://github.com/Preet3627/Aartiq/releases/latest)
+[![Android](https://img.shields.io/badge/Android-Supported-blue?logo=android)](https://github.com/Preet3627/Aartiq/releases/latest)
 [![Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Listed-blue?logo=microsoft)](https://apps.microsoft.com/detail/9nd6wg2rp7cm?hl=en-GB&gl=IN)
 
 <p align="center">
