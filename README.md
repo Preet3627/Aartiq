@@ -143,20 +143,13 @@ Actions are exposed through registered capabilities rather than allowing the mod
 
 ## Security
 
-Aartiq uses a **six-layer defense-in-depth security model** — each layer independently constrains what the AI can do, so no single bypass defeats the system:
+Aartiq uses a defense-in-depth security model with risk-based permissions, capability controls, directory allowlists, platform-specific sandboxing, encrypted vault storage, and explicit approval for sensitive actions.
 
-1. **Visual Sandbox** — the AI reads the page through screenshots, OCR, and a sanitized DOM extractor rather than raw, unprocessed HTML.
-2. **Syntactic Firewall** — every command is scanned for destructive primitives, encoded payloads, and obfuscation before execution.
-3. **Human-in-the-Loop** — critical actions require explicit approval (and high-risk actions require QR/mobile confirmation).
-4. **Directory Allowlist** — file access is scoped to explicitly approved paths with read/write separation and symlink-resolution.
-5. **OS-Level Sandboxing** — shell commands run inside a fail-closed Seatbelt / bubblewrap / Job-Object sandbox (deny-by-default filesystem + network).
-6. **Capability-Scoped Execution** — actions must be explicitly registered; unregistered actions simply do not exist as callable surfaces.
+The full model — risk levels, defense-in-depth layers, encryption & vault migration, and remote-device security — is documented on the [Security Model page](https://aartiq.ponsrischool.in/docs/security).
 
-On top of these layers, Aartiq applies risk-based permission policies, encrypted sensitive-data storage (AES-256-GCM, 600K PBKDF2 iterations), and remote-device security controls. The full threat model, encryption architecture, and sandbox behavior are documented on the docs site.
-
-> **Verified by tests.** The security invariants are protected by an automated Jest suite — **488 tests** in total, including a dedicated **17-test** regression file (`aartiq-browser/tests/approval-ticket-security.test.js`) for the approval-ticket and capability-controller system. CI runs the full suite on every push.
-
-**[Read the Aartiq Security Model →](https://aartiq.ponsrischool.in/docs/security)**
+> **Verified in CI — and honest about its limits.** These invariants are covered by an automated Jest suite — **488 tests** in total, including a dedicated **17-test** regression file (`aartiq-browser/tests/approval-ticket-security.test.js`) for the approval-ticket and capability-controller system. The suite runs on every push.
+>
+> What it proves: the security logic we wrote behaves as designed — approval gating, params-hash verification, fail-closed sandboxing, directory allowlists, and capability scoping do not regress. What it does **not** prove: the absence of vulnerabilities. Automated tests guard against known regressions in code we control; they are not a substitute for a formal security audit, adversarial review, or fuzzing, and they cannot account for platform misconfiguration or zero-day attack classes. Treat the test suite as a safety net, not a guarantee.
 
 ---
 
@@ -200,14 +193,7 @@ Provider availability depends on the platform and configuration.
 
 ## Performance
 
-Aartiq initializes the Chromium window immediately while background services continue loading asynchronously, so the UI is usable well before every subsystem is online.
-
-### Overview
-
-* **Fast startup** — the visible window appears in ~0.3s; heavy services (AI providers, sync, scheduler) stream in afterward.
-* **Low idle cost** — under 1% CPU once initialized; automation runs as a separate OS-level background service.
-* **Local-first inference** — Ollama integration keeps capable models on-device for low-latency, privacy-focused responses.
-* **Async architecture** — rendering and automation are decoupled, so a long-running task never blocks the browser UI.
+Aartiq opens the Chromium window immediately and loads background services asynchronously, so the interface is usable before every subsystem has finished starting. Long-running automation runs as a separate background process, so it does not block the browser UI, and Ollama support allows capable models to run on-device.
 
 ### Benchmark
 
