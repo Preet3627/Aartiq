@@ -148,6 +148,7 @@ class ApprovalTicketManager {
       paramsHash: paramsHash,
       context: structuredClone(context),
       metadata: structuredClone(metadata),
+      capabilityVersion: metadata.capabilityVersion,
       createdAt: Date.now(),
       expiresAt: expiresAt,
       status: 'pending',
@@ -164,9 +165,9 @@ class ApprovalTicketManager {
       ticketId,
       expiresAt,
       action: actionName,
-      params: ticket.params,
+      params: structuredClone(ticket.params),
       paramsHash,
-      metadata: ticket.metadata,
+      metadata: structuredClone(ticket.metadata),
     };
   }
 
@@ -192,9 +193,9 @@ class ApprovalTicketManager {
     return {
       success: true,
       action: ticket.action,
-      params: ticket.params,
+      params: structuredClone(ticket.params),
       paramsHash: ticket.paramsHash,
-      metadata: ticket.metadata,
+      metadata: structuredClone(ticket.metadata),
     };
   }
 
@@ -233,6 +234,31 @@ class ApprovalTicketManager {
     }
 
     const ticket = validation.ticket;
+
+    const expectedHash = this._hashParams(
+      ticket.action,
+      ticket.params,
+      ticket.context
+    );
+
+    if (
+      !crypto.timingSafeEqual(
+        Buffer.from(ticket.paramsHash, 'hex'),
+        Buffer.from(expectedHash, 'hex')
+      )
+    ) {
+      ticket.status = 'tampered';
+
+      this.logger.audit(
+        `Ticket ${ticketId} failed integrity verification`
+      );
+
+      return {
+        success: false,
+        reason: 'Ticket integrity verification failed',
+      };
+    }
+
     ticket.status = 'redeemed';
     ticket.redeemedAt = Date.now();
 
@@ -241,9 +267,10 @@ class ApprovalTicketManager {
     return {
       success: true,
       action: ticket.action,
-      params: ticket.params,
-      context: ticket.context,
-      metadata: ticket.metadata,
+      params: structuredClone(ticket.params),
+      context: structuredClone(ticket.context),
+      metadata: structuredClone(ticket.metadata),
+      capabilityVersion: ticket.capabilityVersion,
     };
   }
 
@@ -328,8 +355,8 @@ class ApprovalTicketManager {
   /**
    * Verify a call matches an approved call shape.
    */
-  verifyCallShape(actionName, params) {
-    const paramsHash = this._hashParams(actionName, params);
+  verifyCallShape(actionName, params, context = {}) {
+    const paramsHash = this._hashParams(actionName, params, context);
     const exactShapeId = `${actionName}:${paramsHash}`;
 
     if (this.approvedCallShapes.has(exactShapeId)) {
@@ -369,11 +396,17 @@ class ApprovalTicketManager {
     const compiled = {};
     for (const [key, constraint] of Object.entries(constraints)) {
       if (constraint && constraint.type === 'regex' && typeof constraint.pattern === 'string') {
+        if (constraint.pattern.length > 500) {
+          throw new Error('Regex pattern exceeds maximum length limit (500 chars)');
+        }
         compiled[key] = { ...constraint, _compiledRegex: new RegExp(constraint.pattern) };
       } else if (constraint && constraint.type === 'all' && Array.isArray(constraint.constraints)) {
         compiled[key] = { ...constraint, constraints: constraint.constraints.map(c => {
           const inner = {};
           for (const [k, v] of Object.entries(c)) {
+            if (v && v.type === 'regex' && typeof v.pattern === 'string' && v.pattern.length > 500) {
+              throw new Error('Regex pattern exceeds maximum length limit (500 chars)');
+            }
             inner[k] = v && v.type === 'regex' ? { ...v, _compiledRegex: new RegExp(v.pattern) } : v;
           }
           return inner;
@@ -382,6 +415,9 @@ class ApprovalTicketManager {
         compiled[key] = { ...constraint, constraints: constraint.constraints.map(c => {
           const inner = {};
           for (const [k, v] of Object.entries(c)) {
+            if (v && v.type === 'regex' && typeof v.pattern === 'string' && v.pattern.length > 500) {
+              throw new Error('Regex pattern exceeds maximum length limit (500 chars)');
+            }
             inner[k] = v && v.type === 'regex' ? { ...v, _compiledRegex: new RegExp(v.pattern) } : v;
           }
           return inner;
@@ -414,8 +450,15 @@ class ApprovalTicketManager {
   }
 
   _matchSingleConstraint(constraint, value) {
+    if (!constraint) return false;
+
+    if (constraint.type === 'optional') {
+      if (value === undefined || value === null) return true;
+      return this._matchSingleConstraint(constraint.constraint || constraint.inner, value);
+    }
+
     if (value === undefined || value === null) {
-      return constraint.type === 'exists' ? false : true;
+      return constraint.type === 'exists' ? false : false;
     }
 
     switch (constraint.type) {

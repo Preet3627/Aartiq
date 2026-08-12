@@ -22,12 +22,35 @@ class CapabilityController {
     if (this.actions.has(action.name)) {
       throw new Error(`Action "${action.name}" is already registered.`);
     }
+    const capabilityVersion = action.capabilityVersion || 1;
     this.actions.set(action.name, {
       name: action.name,
       handler: action.handler,
       requiresApproval: action.requiresApproval || 'never',
       riskLevel: action.riskLevel || 'low',
       description: action.description || '',
+      capabilityVersion,
+      registeredAt: Date.now(),
+    });
+  }
+
+  /**
+   * Replace an action's handler/definition while bumping its capability version.
+   * Any outstanding tickets bound to the previous version become unredeemable.
+   */
+  replaceAction(action) {
+    if (!this.actions.has(action.name)) {
+      throw new Error(`Action "${action.name}" is not registered.`);
+    }
+    const prev = this.actions.get(action.name);
+    this.actions.set(action.name, {
+      name: action.name,
+      handler: action.handler,
+      requiresApproval: action.requiresApproval || 'never',
+      riskLevel: action.riskLevel || 'low',
+      description: action.description || '',
+      capabilityVersion: (prev.capabilityVersion || 1) + 1,
+      registeredAt: Date.now(),
     });
   }
 
@@ -64,8 +87,12 @@ class CapabilityController {
       }
     }
 
-    // Check permission store
-    if (needsApproval && this.permissionStore) {
+    // Check permission store - DO NOT override 'always'
+    if (
+      needsApproval &&
+      action.requiresApproval !== 'always' &&
+      this.permissionStore
+    ) {
       const permKey = `CAPABILITY:${name}`;
       if (this.permissionStore.isGranted(permKey)) {
         needsApproval = false;
@@ -78,6 +105,7 @@ class CapabilityController {
         riskLevel: action.riskLevel,
         description: action.description,
         approvalReason,
+        capabilityVersion: action.capabilityVersion,
       });
 
       // Notify renderer about pending approval
@@ -180,13 +208,38 @@ class CapabilityController {
       };
     }
 
+    // Yellow 11: the action definition may have changed since the ticket was
+    // issued. If the capability version differs, refuse to redeem — the ticket
+    // was bound to a specific (action, version) and is no longer valid.
+    if (
+      redemption.capabilityVersion !== undefined &&
+      action.capabilityVersion !== undefined &&
+      redemption.capabilityVersion !== action.capabilityVersion
+    ) {
+      this._resolvePendingApproval(ticketId, {
+        approved: false,
+        reason: `Action "${redemption.action}" definition changed since ticket issued`,
+        ticketId,
+      });
+      return {
+        approved: false,
+        reason: `Action "${redemption.action}" definition changed since ticket issued`,
+        ticketId,
+      };
+    }
+
     // Mark as first-time-approved if applicable
     if (action.requiresApproval === 'first-time-per-session') {
       this.firstTimeApprovals.add(redemption.action);
     }
 
-    // Store in permission store if available
-    if (this.permissionStore) {
+    // Store in permission store ONLY for explicitly persistent capabilities.
+    // 'always' and 'first-time-per-session' must NOT become persistent grants
+    // (they would silently bypass their own approval policy).
+    if (
+      this.permissionStore &&
+      action.requiresApproval === 'explicit-persistent'
+    ) {
       const permKey = `CAPABILITY:${redemption.action}`;
       this.permissionStore.grant(permKey, {
         approvedBy,
@@ -267,7 +320,10 @@ class CapabilityController {
    * @param {object} metadata - Who approved, risk level, etc.
    * @returns {{ registered, shapeId, paramsHash }}
    */
-  registerCallShape(actionName, params, metadata = {}) {
+  registerCallShape(actionName, params, metadata = {}, requireTicket = false) {
+    if (requireTicket && !metadata.ticketId) {
+      throw new Error('Call shape registration requires a validated approval ticket');
+    }
     return this.ticketManager.registerCallShape(actionName, params, {
       approvedBy: metadata.approvedBy || 'interactive-session',
       riskLevel: metadata.riskLevel || 'low',
@@ -286,7 +342,13 @@ class CapabilityController {
    * @param {object} metadata - Who approved, risk level, etc.
    * @returns {{ registered, patternId }}
    */
-  registerCallShapePattern(actionName, paramPatterns, metadata = {}) {
+  registerCallShapePattern(actionName, paramPatterns, metadata = {}, requireTicket = false) {
+    if (requireTicket && !metadata.ticketId) {
+      throw new Error('Call shape pattern registration requires a validated approval ticket');
+    }
+    if (!this.actions.has(actionName)) {
+      throw new Error(`Cannot register call shape pattern for unregistered action "${actionName}"`);
+    }
     return this.ticketManager.registerCallShapePattern(actionName, paramPatterns, {
       approvedBy: metadata.approvedBy || 'interactive-session',
       riskLevel: metadata.riskLevel || 'low',
@@ -311,7 +373,7 @@ class CapabilityController {
     }
 
     // Verify call shape is approved
-    const shapeCheck = this.ticketManager.verifyCallShape(actionName, params);
+    const shapeCheck = this.ticketManager.verifyCallShape(actionName, params, {});
     
     if (!shapeCheck.approved) {
       console.warn(`[CapabilityController] Unattended execution denied: ${shapeCheck.reason}`);
