@@ -266,11 +266,14 @@ class ApprovalTicketManager {
 
     return {
       success: true,
+      ticketId: ticket.id,
       action: ticket.action,
       params: structuredClone(ticket.params),
       context: structuredClone(ticket.context),
       metadata: structuredClone(ticket.metadata),
+      paramsHash: ticket.paramsHash,
       capabilityVersion: ticket.capabilityVersion,
+      expiresAt: ticket.expiresAt,
     };
   }
 

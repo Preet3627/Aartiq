@@ -286,3 +286,89 @@ describe('Yellow 12: returned params are defensive copies', () => {
     assert.strictEqual(mgr.tickets.get(t.ticketId).params.path, '/a');
   });
 });
+
+// ===========================================================================
+// AuthorizationDecision — pure, inspectable executor boundary (architectural)
+// ===========================================================================
+describe('AuthorizationDecision — v1 ticket invalidated by v2 replacement', () => {
+  it('MUST NOT execute a ticket issued for a since-replaced action', async () => {
+    const cc = new CapabilityController({});
+    let ticketId;
+    cc.onApprovalRequired = (ticket) => { ticketId = ticket.ticketId; };
+
+    let executed = 0;
+    cc.registerAction({
+      name: 'repl',
+      handler: async () => { executed++; return 'v1'; },
+      requiresApproval: 'always',
+      capabilityVersion: 1,
+    });
+
+    // 1-3: request approval → ticket issued, bound to capabilityVersion 1
+    const pending = cc.executeAction('repl', {});
+    assert.ok(ticketId, 'a ticket should have been issued');
+
+    // 4: replace the action with a new definition (bumps capabilityVersion → 2)
+    cc.replaceAction({
+      name: 'repl',
+      handler: async () => { executed++; return 'v2'; },
+      requiresApproval: 'always',
+      capabilityVersion: 2,
+    });
+
+    // 5-6: approving the OLD ticket must NOT execute the action
+    const r = await cc.approveAndExecute(ticketId, 'user');
+    assert.strictEqual(r.approved, false);
+    assert.ok(/definition changed/.test(r.reason), r.reason);
+    assert.strictEqual(executed, 0, 'the handler must never run for a stale ticket');
+
+    // The original executeAction() promise must also settle as denied.
+    const pr = await pending;
+    assert.strictEqual(pr.approved, false);
+  });
+});
+
+describe('AuthorizationDecision — executor boundary', () => {
+  const sampleDecision = (overrides = {}) => ({
+    allowed: true,
+    action: 'x',
+    capabilityVersion: 1,
+    authorizationType: 'ticket',
+    ticketId: 'missing',
+    paramsHash: 'abc',
+    riskLevel: 'low',
+    matchedPolicy: 'never',
+    expiresAt: Date.now() + 1000,
+    origin: 'interactive',
+    ...overrides,
+  });
+
+  it('rejects a decision referencing an unknown ticket', async () => {
+    const cc = new CapabilityController({});
+    cc.registerAction({ name: 'x', handler: async () => 'ok', requiresApproval: 'never' });
+    const r = await cc.executeAuthorizationDecision(sampleDecision());
+    assert.strictEqual(r.approved, false);
+    assert.ok(/unknown ticket/.test(r.reason), r.reason);
+  });
+
+  it('rejects a non-allowed decision', async () => {
+    const cc = new CapabilityController({});
+    cc.registerAction({ name: 'x', handler: async () => 'ok', requiresApproval: 'never' });
+    const r = await cc.executeAuthorizationDecision(sampleDecision({ allowed: false }));
+    assert.strictEqual(r.approved, false);
+    assert.ok(/not allowed/.test(r.reason), r.reason);
+  });
+
+  it('executes through a valid decision and binds the authorized params', async () => {
+    const cc = new CapabilityController({});
+    let ticketId;
+    cc.onApprovalRequired = (t) => { ticketId = t.ticketId; };
+    cc.registerAction({ name: 'y', handler: async (p) => `ran:${p.v}`, requiresApproval: 'always' });
+
+    const pending = cc.executeAction('y', { v: 42 });
+    const r = await cc.approveAndExecute(ticketId, 'user');
+    assert.strictEqual(r.approved, true);
+    assert.strictEqual(r.result, 'ran:42', 'executor must use the params bound to the ticket');
+    await pending;
+  });
+});

@@ -162,84 +162,53 @@ class CapabilityController {
    * It validates the ticket, verifies params hash, and executes.
    */
   async approveAndExecute(ticketId, approvedBy = 'user') {
-    // Step 1: Approve the ticket (pending → approved)
+    // === Authorization Engine ===
+    // 1. Approve the ticket (pending → approved)
     const approval = this.ticketManager.approveTicket(ticketId, approvedBy);
     if (!approval.success) {
-      // Resolve any pending callback with failure
-      this._resolvePendingApproval(ticketId, {
-        approved: false,
-        reason: approval.reason,
-        ticketId,
-      });
-      return {
-        approved: false,
-        reason: approval.reason,
-        ticketId,
-      };
+      this._resolvePendingApproval(ticketId, { approved: false, reason: approval.reason, ticketId });
+      return { approved: false, reason: approval.reason, ticketId };
     }
 
-    // Step 2: Redeem the ticket (approved → redeemed, uses stored immutable params)
+    // 2. Redeem the ticket (approved → redeemed, params hash-verified)
     const redemption = this.ticketManager.redeemTicket(ticketId);
-    
     if (!redemption.success) {
-      this._resolvePendingApproval(ticketId, {
-        approved: false, 
-        reason: redemption.reason,
-        ticketId,
-      });
-      return { 
-        approved: false, 
-        reason: redemption.reason,
-        ticketId,
-      };
+      this._resolvePendingApproval(ticketId, { approved: false, reason: redemption.reason, ticketId });
+      return { approved: false, reason: redemption.reason, ticketId };
     }
 
     const action = this.actions.get(redemption.action);
     if (!action) {
       this._resolvePendingApproval(ticketId, {
-        approved: false, 
-        reason: `Action "${redemption.action}" no longer registered`,
-        ticketId,
+        approved: false, reason: `Action "${redemption.action}" no longer registered`, ticketId,
       });
-      return { 
-        approved: false, 
-        reason: `Action "${redemption.action}" no longer registered`,
-        ticketId,
-      };
+      return { approved: false, reason: `Action "${redemption.action}" no longer registered`, ticketId };
     }
 
     // Yellow 11: the action definition may have changed since the ticket was
-    // issued. If the capability version differs, refuse to redeem — the ticket
-    // was bound to a specific (action, version) and is no longer valid.
+    // issued. If the capability version differs, refuse — the ticket is bound
+    // to a specific (action, capabilityVersion) and is no longer valid.
     if (
       redemption.capabilityVersion !== undefined &&
       action.capabilityVersion !== undefined &&
       redemption.capabilityVersion !== action.capabilityVersion
     ) {
       this._resolvePendingApproval(ticketId, {
-        approved: false,
-        reason: `Action "${redemption.action}" definition changed since ticket issued`,
-        ticketId,
+        approved: false, reason: `Action "${redemption.action}" definition changed since ticket issued`, ticketId,
       });
       return {
-        approved: false,
-        reason: `Action "${redemption.action}" definition changed since ticket issued`,
-        ticketId,
+        approved: false, reason: `Action "${redemption.action}" definition changed since ticket issued`, ticketId,
       };
     }
 
-    // Mark as first-time-approved if applicable
+    // Side effects of granting approval are recorded by the engine, not the
+    // executor: first-time session tracking and explicit persistent grants.
     if (action.requiresApproval === 'first-time-per-session') {
       this.firstTimeApprovals.add(redemption.action);
     }
-
-    // Store in permission store ONLY for explicitly persistent capabilities.
-    // 'always' and 'first-time-per-session' must NOT become persistent grants
-    // (they would silently bypass their own approval policy).
-    if (
-      this.permissionStore &&
-      action.requiresApproval === 'explicit-persistent'
-    ) {
+    // Persistent grants ONLY for explicit-permanent capabilities. 'always' and
+    // 'first-time-per-session' must never become persistent grants.
+    if (this.permissionStore && action.requiresApproval === 'explicit-persistent') {
       const permKey = `CAPABILITY:${redemption.action}`;
       this.permissionStore.grant(permKey, {
         approvedBy,
@@ -248,25 +217,90 @@ class CapabilityController {
       });
     }
 
-    // Execute the action with the EXACT params that were approved
-    try {
-      const result = await action.handler(redemption.params);
-      const execResult = { 
-        approved: true, 
-        result,
-        ticketId,
-        action: redemption.action,
+    // 3. Produce a pure, inspectable decision and hand it to the executor.
+    const decision = this._buildAuthorizationDecision(redemption, action, approvedBy, 'interactive');
+    return this.executeAuthorizationDecision(decision);
+  }
+
+  /**
+   * Build a pure, inspectable authorization decision from a redeemed ticket.
+   *
+   * This object is the single source of truth that answers the audit question
+   * "why was this action allowed?":
+   *
+   *   {
+   *     allowed, action, capabilityVersion, authorizationType, ticketId,
+   *     paramsHash, riskLevel, matchedPolicy, expiresAt, origin, approvedBy
+   *   }
+   *
+   * It contains no logic — only the facts of the authorization. The executor
+   * consumes it and never reconstructs the decision itself.
+   */
+  _buildAuthorizationDecision(redemption, action, approvedBy, origin) {
+    return {
+      allowed: true,
+      action: redemption.action,
+      capabilityVersion: redemption.capabilityVersion ?? action.capabilityVersion,
+      authorizationType: 'ticket',
+      ticketId: redemption.ticketId,
+      paramsHash: redemption.paramsHash,
+      riskLevel: action.riskLevel,
+      matchedPolicy: action.requiresApproval,
+      expiresAt: redemption.expiresAt,
+      origin,
+      approvedBy,
+    };
+  }
+
+  /**
+   * Executor boundary.
+   *
+   * Accepts an AuthorizationDecision and executes the registered action with the
+   * params bound to the authorized ticket. It does NOT re-derive approval —
+   * authorization was already decided by the engine that produced the decision.
+   *
+   * Params are fetched from the trusted ticket store by ticketId (they were
+   * hash-verified at redeem time) and are never reconstructed from the request.
+   */
+  async executeAuthorizationDecision(decision) {
+    if (!decision || !decision.allowed) {
+      return {
+        approved: false,
+        reason: 'Authorization decision is not allowed',
+        ticketId: decision && decision.ticketId,
       };
-      // Resolve any pending callback (from executeAction waiting for approval)
-      this._resolvePendingApproval(ticketId, execResult);
+    }
+
+    const ticket = this.ticketManager.tickets.get(decision.ticketId);
+    if (!ticket) {
+      return {
+        approved: false,
+        reason: 'Authorization decision references an unknown ticket',
+        ticketId: decision.ticketId,
+      };
+    }
+
+    const action = this.actions.get(decision.action);
+    if (!action) {
+      return {
+        approved: false,
+        reason: `Action "${decision.action}" no longer registered`,
+        ticketId: decision.ticketId,
+      };
+    }
+
+    try {
+      const result = await action.handler(ticket.params);
+      const execResult = { approved: true, result, ticketId: decision.ticketId, action: decision.action };
+      this._resolvePendingApproval(decision.ticketId, execResult);
       return execResult;
     } catch (e) {
-      const failResult = { 
-        approved: false, 
-        reason: `Action "${redemption.action}" failed: ${e.message}`,
-        ticketId,
+      const failResult = {
+        approved: false,
+        reason: `Action "${decision.action}" failed: ${e.message}`,
+        ticketId: decision.ticketId,
       };
-      this._resolvePendingApproval(ticketId, failResult);
+      this._resolvePendingApproval(decision.ticketId, failResult);
       return failResult;
     }
   }
