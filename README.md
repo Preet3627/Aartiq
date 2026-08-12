@@ -143,18 +143,18 @@ Actions are exposed through registered capabilities rather than allowing the mod
 
 ## Security
 
-Aartiq uses a **defense-in-depth security model** combining:
+Aartiq uses a **six-layer defense-in-depth security model** — each layer independently constrains what the AI can do, so no single bypass defeats the system:
 
-* Risk-based permission policies
-* Capability-scoped execution
-* Human-in-the-loop authorization
-* Directory allowlists
-* Platform-specific sandboxing
-* Input and command validation
-* Encrypted sensitive data storage
-* Remote-device security controls
+1. **Visual Sandbox** — the AI reads the page through screenshots, OCR, and a sanitized DOM extractor rather than raw, unprocessed HTML.
+2. **Syntactic Firewall** — every command is scanned for destructive primitives, encoded payloads, and obfuscation before execution.
+3. **Human-in-the-Loop** — critical actions require explicit approval (and high-risk actions require QR/mobile confirmation).
+4. **Directory Allowlist** — file access is scoped to explicitly approved paths with read/write separation and symlink-resolution.
+5. **OS-Level Sandboxing** — shell commands run inside a fail-closed Seatbelt / bubblewrap / Job-Object sandbox (deny-by-default filesystem + network).
+6. **Capability-Scoped Execution** — actions must be explicitly registered; unregistered actions simply do not exist as callable surfaces.
 
-The security architecture is implemented across multiple enforcement layers. The README intentionally keeps the overview brief; the documentation contains the implementation details, threat model, permission tiers, encryption architecture, sandbox behavior, and remote-device security.
+On top of these layers, Aartiq applies risk-based permission policies, encrypted sensitive-data storage (AES-256-GCM, 600K PBKDF2 iterations), and remote-device security controls. The full threat model, encryption architecture, and sandbox behavior are documented on the docs site.
+
+> **Verified by tests.** The security invariants are protected by an automated Jest suite — **488 tests** in total, including a dedicated **17-test** regression file (`aartiq-browser/tests/approval-ticket-security.test.js`) for the approval-ticket and capability-controller system. CI runs the full suite on every push.
 
 **[Read the Aartiq Security Model →](https://aartiq.ponsrischool.in/docs/security)**
 
@@ -200,7 +200,14 @@ Provider availability depends on the platform and configuration.
 
 ## Performance
 
-Aartiq initializes the Chromium window immediately while background services continue loading asynchronously.
+Aartiq initializes the Chromium window immediately while background services continue loading asynchronously, so the UI is usable well before every subsystem is online.
+
+### Overview
+
+* **Fast startup** — the visible window appears in ~0.3s; heavy services (AI providers, sync, scheduler) stream in afterward.
+* **Low idle cost** — under 1% CPU once initialized; automation runs as a separate OS-level background service.
+* **Local-first inference** — Ollama integration keeps capable models on-device for low-latency, privacy-focused responses.
+* **Async architecture** — rendering and automation are decoupled, so a long-running task never blocks the browser UI.
 
 ### Benchmark
 
