@@ -2,8 +2,9 @@ const { app, session } = require('electron');
 const EventEmitter = require('events');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 const Store = require('electron-store');
-const { extractCRX, isCRXFile, isExtensionDirectory } = require('./crx-extractor');
+const { extractCRX, extractZip, isCRXFile, isExtensionDirectory } = require('./crx-extractor');
 
 class ChromeExtensionManager extends EventEmitter {
   constructor() {
@@ -250,6 +251,81 @@ class ChromeExtensionManager extends EventEmitter {
       }
     }
     return icons;
+  }
+
+  /**
+   * Install an extension from the Chrome Web Store by URL. The CRX3 package
+   * signature is verified before any code is extracted (fail-closed): a package
+   * that fails verification is rejected and never loaded.
+   */
+  async installFromWebStore(crxUrl) {
+    const buf = await this._downloadBuffer(crxUrl);
+    const { verifyCrx } = require('./crx-verifier');
+    const verified = verifyCrx(buf);
+    if (!verified.valid) {
+      throw new Error(`CRX signature invalid: ${verified.error}`);
+    }
+    const zipBuf = buf.subarray(verified.zipStart);
+    const tempDir = path.join(app.getPath('temp'), `cws-${Date.now()}`);
+    extractZip(zipBuf, tempDir);
+    const manifest = this.readManifest(tempDir);
+    const extId = verified.extensionId || this.generateExtensionId(manifest.name);
+    const destPath = path.join(this.extensionsDir, extId);
+    if (fs.existsSync(destPath)) fs.rmSync(destPath, { recursive: true });
+    this.copyDirectory(tempDir, destPath);
+    fs.rmSync(tempDir, { recursive: true });
+    const extension = await this.loadExtensionFromPath(destPath);
+    const extensionInfo = this.extensionToInfo(extension, destPath, true);
+    this.addToStore(extensionInfo);
+    this.emit('extension-installed', extensionInfo);
+    return extensionInfo;
+  }
+
+  /**
+   * Import extensions from a real Chrome/Chromium profile into Aartiq. The
+   * profile path is auto-detected when omitted.
+   */
+  async importFromChrome(profileDir) {
+    const { importFromChrome: importChrome, findChromeProfile } = require('./chrome-importer');
+    const dir = profileDir || findChromeProfile();
+    if (!dir) throw new Error('Chrome profile not found.');
+    const imported = importChrome(dir, this.extensionsDir);
+    const loaded = [];
+    for (const ext of imported) {
+      try {
+        const extension = await this.loadExtensionFromPath(ext.destPath);
+        const info = this.extensionToInfo(extension, ext.destPath, true);
+        this.addToStore(info);
+        loaded.push(info);
+        this.emit('extension-installed', info);
+      } catch (e) {
+        console.error('[ChromeExtensionManager] import failed', ext.id, e);
+      }
+    }
+    return loaded;
+  }
+
+  /** Grade an installed extension's permission footprint. */
+  analyzePermissions(extensionId) {
+    const ext = this.getExtensionById(extensionId);
+    if (!ext) throw new Error('Extension not found');
+    const manifest = this.readManifest(ext.path);
+    const { analyzePermissions } = require('./permission-analyzer');
+    return analyzePermissions(manifest);
+  }
+
+  _downloadBuffer(url) {
+    return new Promise((resolve, reject) => {
+      https.get(url, (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        }
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+      }).on('error', reject);
+    });
   }
 
   addToStore(extensionInfo) {
