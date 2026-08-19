@@ -147,9 +147,40 @@ Aartiq uses a defense-in-depth security model with risk-based permissions, capab
 
 The full model — risk levels, defense-in-depth layers, encryption & vault migration, and remote-device security — is documented on the [Security Model page](https://aartiq.ponsrischool.in/docs/security).
 
-> **Verified in CI — and honest about its limits.** These invariants are covered by an automated Jest suite that runs in GitHub Actions on every push and pull request (`.github/workflows/jest.yml`) — **525 tests** in total, including a dedicated **21-test** regression file (`aartiq-browser/tests/approval-ticket-security.test.js`) for the approval-ticket and capability-controller system. Authorization decisions are emitted as pure, inspectable `AuthorizationDecision` objects that the executor consumes without re-deriving approval.
+> **Verified in CI — and honest about its limits.** These invariants are covered by an automated Jest suite that runs in GitHub Actions on every push and pull request (`.github/workflows/jest.yml`), including a dedicated **21-test** regression file (`aartiq-browser/tests/approval-ticket-security.test.js`) for the approval-ticket and capability-controller system. The newer agent-facing modules add their own coverage: a prompt-injection guard, the fail-closed origin/verb policy, the agent-trust registry, the CRX3 signature verifier, the encrypted autofill vault, accessibility snapshots, and multi-agent tab locking. Authorization decisions are emitted as pure, inspectable `AuthorizationDecision` objects that the executor consumes without re-deriving approval.
 >
-> What it proves: the security logic we wrote behaves as designed — approval gating, params-hash verification, fail-closed sandboxing, directory allowlists, and capability scoping do not regress. What it does **not** prove: the absence of vulnerabilities. Automated tests guard against known regressions in code we control; they are not a substitute for a formal security audit, adversarial review, or fuzzing, and they cannot account for platform misconfiguration or zero-day attack classes. Treat the test suite as a safety net, not a guarantee.
+> What it proves: the security logic we wrote behaves as designed — approval gating, params-hash verification, fail-closed sandboxing, directory allowlists, capability scoping, and the agent tool-gate do not regress. What it does **not** prove: the absence of vulnerabilities. Automated tests guard against known regressions in code we control; they are not a substitute for a formal security audit, adversarial review, or fuzzing, and they cannot account for platform misconfiguration or zero-day attack classes. Treat the test suite as a safety net, not a guarantee.
+
+---
+
+## Agent API & Tool Server
+
+Aartiq exposes its browser capabilities to AI agents through a single, security-enforced tool registry served over two transports:
+
+* **MCP** (Model Context Protocol) for clients such as Claude Desktop, and
+* **HTTP** for local scripts, the in-product assistant, and remote access over Tailscale / LAN.
+
+Every tool call — navigation, tab control, form filling, extension management, snapshots, theming, or OS actions — is routed through the `SecurityPipeline` before it runs. The pipeline performs, in order: agent-trust checks (what verbs this agent may use), origin/verb policy enforcement (fail-closed: deny unless explicitly permitted), and, for tools returning web content, a prompt-injection scan that quarantines suspected injected text.
+
+### Multiple agents, one browser
+
+More than one agent can be connected to the same browser at once. Each connection is registered with a trust level that scopes its verbs and origins. A per-tab lock manager ensures two agents cannot drive the same tab concurrently: the first agent to claim a tab holds a lease (with a timeout and explicit handoff) until it releases or is disconnected.
+
+### Accessibility snapshots with stable `@ref` ids
+
+Instead of raw DOM dumps, agents receive an accessibility (AX) tree. Each interactive node carries an identity-bound `@ref` id derived from the page's backend node id, so a reference stays stable across snapshots and is never reused; a stale reference fails loudly rather than acting on the wrong element.
+
+### Form filling
+
+Stored credentials and profiles are kept in an encrypted vault (AES-GCM, passphrase-derived key; the same E2EE2 scheme used elsewhere). A field matcher maps page inputs to stored values by autocomplete token, name, type, and label — without the page ever seeing unrelated entries. Filling requires an explicit user action or approval.
+
+### Chrome extensions
+
+Extensions can be loaded from an on-disk unpacked directory or installed from the Chrome Web Store. Web Store packages are validated as CRX3: the signature is verified with the embedded public key (RSA-SHA256, exactly as Chromium's `sandboxed_unpacker` does) **before** any code is loaded. A package that fails verification, or that requests permissions outside the allowlist, is rejected.
+
+### UI themes and modes
+
+The interface supports selectable themes and UI modes (normal, focus, reader, zen, presentation) that adjust what is shown and how the assistant presents itself, independent of the underlying automation capabilities.
 
 ---
 
@@ -184,10 +215,11 @@ Aartiq supports multiple AI backends, including:
 * Groq
 * xAI
 * Azure OpenAI
-* Ollama
+* Ollama (local)
+* LM Studio (local, OpenAI-compatible)
 * Apple Intelligence on macOS
 
-Provider availability depends on the platform and configuration.
+Provider availability depends on the platform and configuration. Local models (Ollama, LM Studio) keep request content on the device; an OpenClaw-compatible local-agent bridge is also supported for running agent logic without a cloud provider.
 
 ---
 
