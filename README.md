@@ -62,6 +62,11 @@ Execute
     ↓
 Result
 ````
+## Permission Workflow
+
+| Plan | Permission | Results |
+|:----:|:----------:|:-------:|
+| <img width="504" height="551" alt="Plan" src="https://github.com/user-attachments/assets/5311cf81-47cf-46c9-a1f7-994113923768" /> | <img width="504" height="551" alt="Permission" src="https://github.com/user-attachments/assets/82bdb94b-522a-41fd-9928-ba4d83bae08d" /> | <img width="504" height="551" alt="image" src="https://github.com/user-attachments/assets/94d5c8cc-caee-48cb-af4f-bb7afb7e3629" /> |
 
 Aartiq searches the web, gathers information, creates the document, requests approval for actions that require it, moves the resulting file, and opens it.
 
