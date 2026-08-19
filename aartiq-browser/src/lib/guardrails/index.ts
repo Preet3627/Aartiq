@@ -6,7 +6,6 @@ export {
   containsThreat,
   wrapUserRequest,
   wrapAttachedFiles,
-  normalizeUnicode,
 } from './sanitizer';
 
 export { ALL_PATTERNS, getPatternsForMode } from './patterns';
@@ -146,19 +145,3 @@ export class SecurityPipeline {
     return { allowed: true, requiresApproval: decision.requiresApproval, reason: decision.reason };
   }
 }
-
-// ---------------------------------------------------------------------------
-
-function normalizeUnicode(input: string): string {
-  return input
-    .normalize('NFKC')
-    .replace(/[\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
-    .replace(new RegExp(
-      '[' +
-      '\\x00-\\x08' +
-      '\\x0B\\x0C' +
-      '\\x0E-\\x1F' +
-      '\\x7F' +
-      ']', 'g'), '');
-}
-export { normalizeUnicode };

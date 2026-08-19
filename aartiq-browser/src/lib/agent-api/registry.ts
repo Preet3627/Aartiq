@@ -75,7 +75,7 @@ export class ToolRegistry {
     // 4. Scan untrusted output.
     if (tool.untrustedOutput && result) {
       const text = result.content.map((c) => c.text).join('\n');
-      const verdict: IpiVerdict = await ctx.security.injection.scan(text, { untrusted: true, tool: name });
+      const verdict: IpiVerdict = await ctx.security.injection.scan(text, { untrusted: true });
       if (!verdict.safe) {
         return {
           error: `Refusing to return potentially injected content (score ${verdict.score.toFixed(2)}).`,

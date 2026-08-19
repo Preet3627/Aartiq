@@ -1,10 +1,11 @@
 import * as crypto from 'crypto';
 import { verifyCrx, buildCrx3 } from '../lib/extensions/crx-verifier';
+import { CRX_TEST_PRIVATE_PEM } from './crx-fixtures';
 
 function makeKeyPair() {
-  const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
-  const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' }) as Buffer;
-  return { publicKey, privateKey, publicKeyDer };
+  const privateKey = crypto.createPrivateKey(CRX_TEST_PRIVATE_PEM);
+  const publicKeyDer = crypto.createPublicKey(privateKey).export({ type: 'spki', format: 'der' }) as Buffer;
+  return { privateKey, publicKeyDer };
 }
 
 describe('CRX3 verifier — signature enforcement', () => {

@@ -25,12 +25,12 @@ describe('AutofillVault — encrypted form filling', () => {
   });
 
   it('round-trips through encrypted export/import', async () => {
-    const v = new AutofillVault('pw');
+    const v = new AutofillVault('supersecret');
     v.unlock();
     await v.addCredential({ domain: 'a.com', username: 'u', password: 'p' });
     const blob = await v.exportEncrypted();
     expect(blob.startsWith('E2EE2:')).toBe(true);
-    const v2 = await AutofillVault.importEncrypted(blob, 'pw');
+    const v2 = await AutofillVault.importEncrypted(blob, 'supersecret');
     expect(v2.getForDomain('a.com')[0].username).toBe('u');
   });
 });

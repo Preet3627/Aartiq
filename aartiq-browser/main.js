@@ -6056,6 +6056,18 @@ app.whenReady().then(async () => {
   // Initialize Autofill Profile Service
   const autofillProfileService = new AutofillProfileService();
 
+  // ─── Agent API: multi-agent, MCP/HTTP, security-enforced ──────────────────
+  // Starts the registry-driven tool server (MCP + HTTP) wired to the feature
+  // managers and guarded by the prompt-injection / origin-guard pipeline.
+  // Failures here are non-fatal to the rest of the browser.
+  try {
+    const { startAgentApi } = require('./src/lib/agent-api/bootstrap');
+    startAgentApi({ extensions: extensionManager }).catch((e) =>
+      console.error('[agent-api] start failed:', e && e.message));
+  } catch (e) {
+    console.error('[agent-api] not started:', e && e.message);
+  }
+
   // ─── Passkey / WebAuthn support ────────────────────────────────────────────
   // macOS: Enables Touch ID (Secure Enclave) + platform passkeys (iCloud Keychain, 1Password, etc.)
   // Windows: Chromium's built-in Windows Hello WebAuthn is active by default.

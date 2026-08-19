@@ -1,0 +1,33 @@
+/**
+ * Static test RSA key (2048-bit). Generated once and committed so the CRX3
+ * verifier tests never depend on live entropy (which is unreliable in CI and
+ * some sandboxes). Verification/signing from a fixed key is deterministic.
+ */
+export const CRX_TEST_PRIVATE_PEM = `-----BEGIN PRIVATE KEY-----
+MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDgc9if4soiDs9m
+6HLmEayLg6CMiOtNz+OOdnlonQ38amxbBsACRiwQ0M4YJub3uQ/YuDWpfs7cpkj6
+hv3iOsK7Wyz2/Kek3gk7kRRs+zNkWugnRifnq2cjJzWyaKkt0FpdU+xF4/p8dhjG
+TJb4PTx4pYN+eSnz/B7Ajvp5KucP4te/qTBmvAj68MtKb1A4uPh/0R9kbiXZVJ2h
+jtZ+qyF3beozauC0rxTQwaLEXgI4wqG7ro5VKo8YFEkXCwAiQ7QLNQjlFfIg18wf
+OrRUZNhIX9Ftwd3ETbEUASvl+tHCeE97TrRPNi4GcUT3s47vYCra+ek6+nrrEaH9
+VNx3hJVPAgMBAAECggEAWd4IXfvv8rL7V7i6SGPLMhEBt0Ma84zJD8Ff2wMHFomF
+2Oxa9I4kFpeD7SemUolGTv9yfOrI6I+rqKNkA7CDR4C6ACoo9VnxWGg+RWROr1+2
+lAMC9z8pjGmmlkhRdIZ3p+ZyM4mUQUEHql4AFGRwUd3zSDA7G/VWWsLkhp8m5LSu
+gwigrVc+yXApjHfctJlEX1lnlVKtpx1dfZpCnrBLmb3nX4EiMzl6pIwVkafP7XIZ
+DzJnxcdrjeB8TzEC2GOYKHwktJubOjSmKNBEYk7gF9M9DhOFyKzYV5UZn/U3a6dO
+yISC/PM5/HqJm3TvYZslPXFVm6fTrf4RcmqDkOlYAQKBgQD7Qegb26eMuGE06112
+Zf39jO+jSchN2e6GeNKQq0TlgZt5okElNv8PAbY7/RpIPLsbN55WB+voxzWLnGSF
+2mCyl4vtum0b8BuBjMMDYa3l932v0UsrcVaW1bi1V3ua12h5aIxQN0MHD95exmyh
+1DmX6xt4AA7yvj0+MftcyCUyqQKBgQDksGqQ5RIuhEnIWv9XhCexV73Tr+7eTVcP
+Z0FEBXptMGwHYfBFmEQuGefeXwRV3+l9wwPR+l1jTGHDQgNV+XaDNQYC9tUDjt0R
+dxZ4QnLdVWCtxiLVo6RcYq3CNvAARowk53z4ryXQ9NAHseppI8oY8OW/xs74+hS1
+Hc77W+P7NwKBgATABzpXmcBQUA4nEPpHDVk4y+MDZxUJtLe4Gwr/IetQ2vaeuaqR
+cpr/Bkn2DAQnmcX29DheJ/ibo4iDKWdabI+Ty+JvrtZjYLG/ToSG2TnKxwaG52vn
+1aI+YiKTh9OylNgOwPBXSx4cD7EtASrCD2Cu4jMPlTjDnfbKDR2A7ysZAoGARDgU
+MhEDcXjpAamTjinQJWkFKYbL/OiZVfD5WS9BLB1LvJAMutYHULFNp9o0UuGup2Nr
+WlITVbHNYA/rKtR19AH3Px8ewCb372PVAh7gYQI9CtmWPqDIQP720n7M7WgeGkwr
+zYuB/mlpPUJnqOGSQgpqnuDRkRgY4UZ5HiZ1RdUCgYA/r1fsbmq46rz3zqoZiW4j
+9QnJwsU00I1DsUJ0S7kr+Xy9PNyMNgnVyvvLkhFPGEFVcoi28Y2bJFcz7EU5VcXe
+j0u4IdNBjrqMe2miO++/FRPKrHQygAhzM8n9eiqdK0ziEwNf65fQBe1nvVEtC4Iy
+ZNKb+QfsplVRVoRPbJidSA==
+-----END PRIVATE KEY-----`;

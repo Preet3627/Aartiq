@@ -7,7 +7,8 @@
  * tools returning web content declare `untrustedOutput` (prompt-injection scan).
  */
 
-import type { Tool, ToolRegistry, ToolContext } from './types';
+import type { Tool, ToolContext } from './types';
+import type { ToolRegistry } from './registry';
 import { textResult, jsonResult } from './types';
 
 function t(def: Omit<Tool, 'handler'> & { handler: Tool['handler'] }): Tool {
@@ -22,7 +23,7 @@ const SECURITY: Tool[] = [
     name: 'security_scan', category: 'Security', description: 'Scan arbitrary text (web content, tool output, user data) for prompt-injection.', untrustedOutput: false,
     inputSchema: { type: 'object', properties: { text: str('Text to scan'), tool: str('Source tool name', { optional: true }) }, required: ['text'] },
     async handler(args, ctx) {
-      const verdict = await ctx.security.injection.scan(args.text, { untrusted: true, tool: args.tool });
+      const verdict = await ctx.security.injection.scan(args.text, { untrusted: true });
       return jsonResult(verdict);
     },
   }),

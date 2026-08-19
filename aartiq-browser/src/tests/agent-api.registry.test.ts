@@ -7,16 +7,20 @@ import { AutofillVault } from '../lib/autofill/vault';
 import { defaultConfig } from '../lib/agent-api/providers';
 import type { Bridge, ToolContext } from '../lib/agent-api/types';
 
-function makeCtx(agentId: string, bridge: Bridge, extra: Partial<ToolContext> = {}): ToolContext {
-  const security = new SecurityPipeline();
+function makeEnv() {
   const agents = new AgentRegistry();
   agents.connect({ id: 'a1', name: 'A1', trust: 'standard' });
   agents.connect({ id: 'a2', name: 'A2', trust: 'standard' });
+  const security = new SecurityPipeline({ agents: agents.trust });
+  return { agents, security };
+}
+
+function makeCtx(agentId: string, bridge: Bridge, env: ReturnType<typeof makeEnv> = makeEnv(), extra: Partial<ToolContext> = {}): ToolContext {
   const base = {
     agentId,
     bridge,
-    security,
-    agents,
+    security: env.security,
+    agents: env.agents,
     snapshots: new SnapshotManager(),
     vault: (() => { const v = new AutofillVault('pw'); v.unlock(); return v; })(),
     config: defaultConfig(),
@@ -39,8 +43,9 @@ describe('ToolRegistry — security enforcement', () => {
     reg.register({ name: 'act', category: 'x', description: 'd', inputSchema: {}, requiresTabLock: true,
       async handler() { return { content: [{ type: 'text', text: 'ok' }] }; } });
     const bridge = { call: async () => ({}), listMethods: () => [] };
-    const ctx1 = makeCtx('a1', bridge);
-    const ctx2 = makeCtx('a2', bridge);
+    const env = makeEnv();
+    const ctx1 = makeCtx('a1', bridge, env);
+    const ctx2 = makeCtx('a2', bridge, env);
     const first = await reg.call('act', { tabId: 't9' }, ctx1);
     expect(first.result).toBeDefined();
     const second = await reg.call('act', { tabId: 't9' }, ctx2);
