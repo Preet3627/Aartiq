@@ -17,6 +17,46 @@ export interface ReleaseEntry {
 
 export const releases: ReleaseEntry[] = [
   {
+    version: '0.3.6',
+    date: '2026-08-19',
+    codename: 'Aegis',
+    channel: 'stable',
+    changes: {
+      new: [
+        'Agent API Tool Server — browser capabilities exposed to AI agents through a single security-enforced tool registry over MCP and HTTP',
+        'Security-enforced tool calls — every tool call routes through the SecurityPipeline (agent trust, fail-closed origin/verb policy, prompt-injection scan)',
+        'Multiple agents, one browser — several agents can connect; each is trust-scoped and a per-tab lock prevents two agents driving the same tab',
+        'Accessibility snapshots with stable @ref ids — AX-tree nodes carry identity-bound references that stay stable and are never reused',
+        'Encrypted autofill vault — credentials and profiles stored AES-GCM under a passphrase; field matcher maps inputs without exposing unrelated entries',
+        'Chrome extension import + CRX3 verification — load from disk or the Web Store; packages are signature-verified (RSA-SHA256) before any code loads',
+        'UI themes and modes — selectable themes plus normal/focus/reader/zen/presentation modes',
+        'Local model providers — LM Studio and Ollama on-device, plus an OpenClaw-compatible local-agent bridge',
+      ],
+      fix: [
+        'Agent-trust gating no longer fails open — SecurityPipeline and AgentRegistry now share one AgentTrustRegistry so trust is enforced at the gate',
+        'Autofill vault tests use a passphrase that satisfies the minimum length requirement',
+      ],
+      change: [
+        'New src/lib/agent-api modules (types, registry, bridge, providers, tools, server, bootstrap) for the tool registry and transports',
+        'New src/lib/guardrails modules (prompt-injection, origin-guard, agent-trust, spotlight) plus a SecurityPipeline gate',
+        'New src/lib/agent modules (agent-registry, tab-lock) for multi-agent coordination and per-tab leases',
+        'New src/lib/snapshot, autofill/matcher, autofill/vault, extensions/chrome-importer, extensions/crx-verifier, extensions/permission-analyzer, theme/resolver',
+        'main.js starts the Agent API during app readiness, wrapped so a failure never blocks the browser',
+      ],
+      docs: [
+        'README documents the Agent API & Tool Server, multi-agent support, AX-tree snapshots, form filling, CRX3-verified extension install, UI modes, and local models',
+      ],
+      security: [
+        'Fail-closed origin/verb policy — actions are denied unless an explicit policy permits them; a kill switch denies everything',
+        'Agent-trust scoping — each connected agent is limited to the verbs and origins its trust level allows',
+        'Prompt-injection scan — tool output that may carry attacker content is scanned and quarantined before reaching the model',
+        'CRX3 signature verification — Web Store packages are verified before any code loads; failure rejects the package',
+        'Encrypted autofill vault — stored credentials are AES-GCM encrypted; plaintext is never written to disk',
+        'Per-tab locking — two agents cannot act on the same tab concurrently',
+      ],
+    },
+  },
+  {
     version: '0.3.5',
     date: '2026-07-22',
     codename: 'Nebula',
