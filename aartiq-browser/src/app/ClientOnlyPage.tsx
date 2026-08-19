@@ -1697,7 +1697,7 @@ export default function Home() {
 
   useEffect(() => {
     if (window.electronAPI) {
-      const hasFullScreenOverlay = !store.hasSeenWelcomePage || !store.hasCompletedStartupSetup || showSettings || activeManager !== null || showCamera || showDownloads || showCart || showExtensionsPopup || showClipboard || showSpotlightSearch || aiOverview || (isTyping && suggestions.length > 0) || showTranslateDialog || showSchedulingModal || store.activeView !== 'browser';
+      const hasFullScreenOverlay = !store.hasSeenWelcomePage || !store.hasCompletedStartupSetup || showSettings || activeManager !== null || showCamera || showDownloads || showCart || showExtensionsPopup || showClipboard || showSpotlightSearch || aiOverview || (isTyping && suggestions.length > 0) || showTranslateDialog || showSchedulingModal || store.customizationPanelOpen || store.activeView !== 'browser';
 
       if (hasFullScreenOverlay) {
         window.electronAPI.hideAllViews();
@@ -1729,7 +1729,8 @@ export default function Home() {
     store.hasSeenWelcomePage,
     store.hasCompletedStartupSetup,
     showTranslateDialog,
-    showSchedulingModal
+    showSchedulingModal,
+    store.customizationPanelOpen
   ]);
 
   useEffect(() => {

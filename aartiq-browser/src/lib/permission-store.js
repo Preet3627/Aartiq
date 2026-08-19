@@ -139,13 +139,35 @@ class PermissionStore {
       ? this.settings.allowedDirectories
       : [...DEFAULT_ALLOWED_DIRECTORIES];
 
-    // Backward compat: migrate string-only entries to object format
-    return dirs.map(d => {
-      if (typeof d === 'string') {
-        return { path: d, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'migrated' };
+    const result = [];
+    const seen = new Set();
+    for (const d of dirs) {
+      let entry = typeof d === 'string'
+        ? { path: d, recursive: true, access: 'read-write', grantedAt: 0, grantedVia: 'migrated' }
+        : { ...d };
+
+      // Expand a leading ~ to the user's home directory (covers entries added
+      // or migrated without tilde expansion) and resolve to an absolute path.
+      if (typeof entry.path === 'string') {
+        entry.path = entry.path.replace(/^~(?=\/|\\\\|$)/, os.homedir());
+        entry.path = path.resolve(entry.path);
       }
-      return { ...d };
-    });
+
+      // Drop stale / non-existent entries instead of letting them fail closed at
+      // sandbox-profile time (which would block ALL commands). Interactive
+      // permission for any *new* path a command needs is requested separately
+      // via the directory-permission bridge in execShellCommand.
+      if (!entry.path || !fs.existsSync(entry.path) || !fs.statSync(entry.path).isDirectory()) {
+        console.warn('[PermissionStore] Skipping non-existent allowlist entry:', entry.path);
+        continue;
+      }
+
+      const key = entry.path;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(entry);
+    }
+    return result;
   }
 
   addAllowedDirectory(dirPath, options = {}) {

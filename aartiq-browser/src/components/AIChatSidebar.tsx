@@ -812,6 +812,12 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
 
+  // Hide the native BrowserView while the full Customization panel is open
+  // (it's a centered DOM modal that would otherwise render behind the view).
+  useEffect(() => {
+    useAppStore.getState().setCustomizationPanelOpen(showCustomization);
+  }, [showCustomization]);
+
   // Sync visual settings to CSS
   useEffect(() => {
     const css = getCSSForAIVisual(aiVisualSettings);
@@ -6303,13 +6309,13 @@ I've successfully executed the following real tasks:
     setActiveConversationId(conv.id);
     setShowConversationHistory(false);
     // Reset live execution state, but restore THIS session's action steps.
+    // (The previous session's steps stay stored so they reappear if you return.)
     setCommandQueue([]);
     setPlanningSteps([]);
     setAgentState('idle');
     setCurrentCommandIndex(0);
-    clearActionChainForConversation(null);
     setActionChainSteps(loadActionChainForConversation(conv.id));
-  }, [conversations, loadActionChainForConversation, clearActionChainForConversation]);
+  }, [conversations, loadActionChainForConversation]);
 
   const handleDeleteConversation = useCallback((id: string) => {
     const nextList = conversations.filter((conv) => conv.id !== id);
@@ -7029,7 +7035,7 @@ I've successfully executed the following real tasks:
     return null;
   }
 
-  const effectiveSidebarWidth = props.isResizing ? store.sidebarWidth : sidebar.prefs.width;
+  const effectiveSidebarWidth = store.sidebarWidth;
 
   // Agent controls + live data surfaced to the sidebar widget system.
   // (Defined here so every referenced state variable is already initialized.)
@@ -7439,6 +7445,9 @@ I've successfully executed the following real tasks:
                 </button>
                 <button onClick={() => { setShowThemeSettings(true); setShowCustomization(false); setShowPrivacy(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
                   <Eye size={14} className="text-amber-400" /> AI Visual Theme
+                </button>
+                <button onClick={() => { setShowSidebarCustomize(true); setShowCustomization(false); setShowPrivacy(false); setShowThemeSettings(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
+                  <Sparkles size={14} className="text-fuchsia-400" /> Chat appearance
                 </button>
                 <div className="my-1 border-t border-white/10" />
                 <div className="px-3 py-1">

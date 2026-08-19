@@ -4,6 +4,15 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
+const { PermissionStore } = require('../../lib/permission-store');
+
+// Shared permission store for the sandbox-aware file handlers below. Default
+// directories (Home, Desktop, Documents, Downloads, …) are available
+// synchronously at construction; persisted user entries load asynchronously.
+const permissionStore = new PermissionStore();
+permissionStore.load().catch(() => {});
+
+
 module.exports = function registerSystemHandlers(ipcMain, handlers) {
   const { mainWindow, store, extensionsPath, tabViews, capabilityController } = handlers;
 

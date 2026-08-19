@@ -31,7 +31,7 @@ Aartiq/
 ## Version System
 
 ### Current Version
-- **Version:** `0.3.5` (stable)
+- **Version:** `0.3.6` (stable)
 - **Codename:** Nebula
 - **Release Date:** 2026-07-23
 

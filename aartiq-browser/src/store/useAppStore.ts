@@ -213,6 +213,8 @@ export interface BrowserState {
     // Sidebar
     sidebarOpen: boolean;
     sidebarWidth: number;
+    customizationPanelOpen: boolean;
+    setCustomizationPanelOpen: (v: boolean) => void;
     sidebarSide: "left" | "right";
     isSidebarCollapsed: boolean;
     toggleSidebar: () => void;
@@ -480,6 +482,7 @@ export const useAppStore = create<BrowserState>()(
             // Sidebar
             sidebarOpen: true,
             sidebarWidth: 280,
+            customizationPanelOpen: false,
             sidebarSide: "left",
             isSidebarCollapsed: false,
             macNativeSidebarMode: 'electron',
@@ -957,6 +960,7 @@ export const useAppStore = create<BrowserState>()(
             toggleSidebarCollapse: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
             setSidebarSide: (side: 'left' | 'right') => set({ sidebarSide: side }),
             setSidebarWidth: (width: number) => set({ sidebarWidth: width }),
+            setCustomizationPanelOpen: (v: boolean) => set({ customizationPanelOpen: v }),
             setMacNativeSidebarMode: (mode: 'electron' | 'swiftui') => {
                 set((state) => ({
                     macNativeSidebarMode: mode,

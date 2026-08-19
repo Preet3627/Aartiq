@@ -160,6 +160,8 @@ export const selectClientOnlyPageStore = (state: BrowserState) => ({
   sidebarOpen: state.sidebarOpen,
   sidebarSide: state.sidebarSide,
   sidebarWidth: state.sidebarWidth,
+  customizationPanelOpen: state.customizationPanelOpen,
+  setCustomizationPanelOpen: state.setCustomizationPanelOpen,
   startActiveSession: state.startActiveSession,
   studentMode: state.studentMode,
   tabs: state.tabs,

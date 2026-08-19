@@ -17,7 +17,7 @@ export interface AartiqQuestion {
   multi?: boolean;
 }
 
-const FENCE_RE = /```aartiq-question\s*\n([\s\S]*?)```/i;
+const FENCE_RE = /```aartiq-question\s*\n?([\s\S]*?)```/i;
 
 export interface ParsedQuestion {
   question: AartiqQuestion | null;
