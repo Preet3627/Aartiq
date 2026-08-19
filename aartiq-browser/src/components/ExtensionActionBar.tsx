@@ -28,7 +28,7 @@ const ACTION_BAR_KEYS = {
 
 const ExtensionActionBar = () => {
   const [actions, setActions] = useState<ExtensionAction[]>([]);
-  const pollingRef = useRef<ReturnType<typeof setInterval>>();
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchActions = useCallback(async () => {
     if (!window.electronAPI?.getExtensionActions) return;

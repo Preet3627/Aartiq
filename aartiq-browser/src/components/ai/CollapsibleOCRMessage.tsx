@@ -1,5 +1,5 @@
 import React, { useState, memo, useMemo, useCallback } from 'react';
-import { ChevronRight, Search, FileText, Globe, Camera, Terminal, ExternalLink, Folder } from 'lucide-react';
+import { ChevronDown, Search, FileText, Globe, Camera, Terminal, ExternalLink, Folder } from 'lucide-react';
 
 interface CollapsibleOCRMessageProps {
   label: string;
@@ -126,9 +126,9 @@ const CollapsibleOCRMessage = memo(function CollapsibleOCRMessage({
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] hover:bg-white/[0.03] transition-colors"
       >
-        <ChevronRight
+        <ChevronDown
           size={12}
-          className={`text-white/30 transition-transform duration-200 shrink-0 ${open ? 'rotate-90' : ''}`}
+          className={`text-white/30 transition-transform duration-200 ease-out shrink-0 ${open ? 'rotate-180' : ''}`}
         />
         <span className={config.color}>{config.icon}</span>
         <span className="text-white/50 font-medium shrink-0">{config.text}</span>

@@ -680,8 +680,13 @@ export function validateCommand(command: ParsedCommand): { valid: boolean; error
             break;
         }
 
-        // Commands that don't require values
-        case 'RELOAD':
+    // Commands that don't require values
+    case 'THINK':
+    case 'PLAN':
+        // Meta commands may legitimately carry optional/empty reasoning text
+        break;
+
+    case 'RELOAD':
         case 'GO_BACK':
         case 'GO_FORWARD':
         case 'SCREENSHOT_AND_ANALYZE':

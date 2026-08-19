@@ -6,9 +6,11 @@ import { useAppStore, BrowserState } from '@/store/useAppStore';
 import {
     Monitor, Shield, Globe, Info, Download,
     ChevronRight, ShieldCheck, Key, Package, Keyboard,
-    Briefcase, ShieldAlert, Database, LogIn, LogOut, History as HistoryIcon, User as UserIcon, Zap, RefreshCw, Languages, Music2, Eye, EyeOff, Lock, BookOpen, Sparkles, Puzzle, ScanLine
+    Briefcase, ShieldAlert, Database, LogIn, LogOut, History as HistoryIcon, User as UserIcon, Zap, RefreshCw, Languages, Music2, Eye, EyeOff, Lock, BookOpen, Sparkles, Puzzle, ScanLine, LayoutGrid
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useSidebarPrefs } from './sidebar/useSidebarPrefs';
+import CustomizationPanel from './sidebar/CustomizationPanel';
 import SearchEngineSettings from './SearchEngineSettings';
 import KeyboardShortcutSettings from './KeyboardShortcutSettings';
 import UserAgentSettings from './UserAgentSettings';
@@ -45,6 +47,8 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
     const [automationMode, setAutomationMode] = useState<'dom' | 'ocr'>('dom');
     const versionLabel = `v${useAppVersion()}`;
     const isMacOS = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+    const sidebar = useSidebarPrefs();
+    const [showSidebarCustomize, setShowSidebarCustomize] = useState(false);
 
     useEffect(() => {
       window.electronAPI?.loadPersistentData('automation_mode').then((r: any) => {
@@ -161,6 +165,7 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
     const sections = [
         { id: 'profile', icon: <UserIcon size={18} />, label: 'Neural Identity' },
         { id: 'appearance', icon: <Monitor size={18} />, label: 'Appearance' },
+        { id: 'sidebar', icon: <LayoutGrid size={18} />, label: 'Sidebar' },
         { id: 'performance', icon: <Zap size={18} />, label: 'Performance' },
         { id: 'automation', icon: <Zap size={18} />, label: 'Automation' },
         { id: 'search', icon: <Globe size={18} />, label: 'Search Engine' },
@@ -601,6 +606,58 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                                             </div>
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeSection === 'sidebar' && (
+                            <div className="space-y-8">
+                                <div className="p-8 rounded-[2rem] bg-white/[0.03] border border-white/5 space-y-8">
+                                    <div className="flex items-center justify-between gap-4">
+                                        <div>
+                                            <p className="font-bold text-white mb-1">Modular Widget Home</p>
+                                            <p className="text-xs text-white/30">When off, the empty home shows a minimal AI-suggestions surface instead of the widget grid.</p>
+                                        </div>
+                                        <button
+                                            onClick={() => sidebar.setShowWidgets(!sidebar.prefs.showWidgets)}
+                                            className={`relative w-12 h-6 rounded-full border transition-all ${sidebar.prefs.showWidgets ? 'bg-deep-space-accent-neon/20 border-deep-space-accent-neon shadow-[0_0_14px_rgba(56,189,248,0.35)]' : 'bg-white/5 border-white/10'}`}
+                                            aria-pressed={sidebar.prefs.showWidgets}
+                                            aria-label="Toggle modular widget home"
+                                        >
+                                            <span className={`absolute top-[2px] left-[2px] w-5 h-5 rounded-full transition-transform ${sidebar.prefs.showWidgets ? 'translate-x-6 bg-deep-space-accent-neon' : 'translate-x-0 bg-white/70'}`} />
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <p className="font-bold text-white">History-based Suggestions</p>
+                                        <p className="text-xs text-white/30 -mt-2">
+                                            Let Aartiq read your browsing history to suggest prompts from past and repetitive tasks.
+                                        </p>
+                                        <div className="flex gap-2 p-1 bg-black/40 rounded-xl border border-white/5">
+                                            {([
+                                                { id: 'ask', label: 'Ask each time' },
+                                                { id: 'always', label: 'Allow always' },
+                                                { id: 'never', label: 'Never' },
+                                            ] as const).map((option) => (
+                                                <button
+                                                    key={option.id}
+                                                    onClick={() => sidebar.setHistorySuggestions(option.id)}
+                                                    className={`flex-1 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${sidebar.prefs.historySuggestions === option.id ? 'bg-deep-space-accent-neon text-deep-space-bg shadow-[0_0_15px_#38bdf8]' : 'text-white/40 hover:text-white'}`}
+                                                >
+                                                    {option.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-2">
+                                        <button
+                                            onClick={() => setShowSidebarCustomize(true)}
+                                            className="w-full px-4 py-3 rounded-xl border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[10px] font-black uppercase tracking-widest transition-all"
+                                        >
+                                            Open Full Customization
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -1187,6 +1244,17 @@ const SettingsPanel = ({ onClose, defaultSection = 'profile' }: { onClose: () =>
                     </div>
                 </div>
             </motion.div>
+
+            {showSidebarCustomize && (
+                <CustomizationPanel
+                    initialPrefs={sidebar.prefs}
+                    initialGlobalTheme={useAppStore.getState().theme}
+                    onPreview={(prefs) => sidebar.preview(prefs)}
+                    onApply={(prefs) => sidebar.commit(prefs)}
+                    onClose={() => setShowSidebarCustomize(false)}
+                    setGlobalTheme={(t) => useAppStore.getState().setTheme(t)}
+                />
+            )}
         </div>
     );
 };

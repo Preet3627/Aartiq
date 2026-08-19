@@ -1,6 +1,6 @@
 {
   "name": "Aartiq",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "description": "Aartiq Browser - A high-performance, intelligence-driven browsing workspace with local LLM support and advanced productivity features.",
   "author": "Latestinssan",
@@ -121,6 +121,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/chrome": "^0.1.36",
     "@types/dompurify": "^3.0.5",
+    "@types/jest": "^30.0.0",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^20.19.33",
     "@types/react": "^19.2.8",

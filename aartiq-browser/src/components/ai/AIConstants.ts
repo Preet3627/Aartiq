@@ -191,6 +191,30 @@ Optional: Emit [STATUS: text] to show a custom processing indicator to the user 
 These are stripped from the final output. Use them to keep the user informed during long operations.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CLARIFYING QUESTIONS — INTERACTIVE CARDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When you genuinely need input from the user before you can continue (ambiguous
+request, missing info, a choice between approaches), ASK using the aartiq-question
+format. This renders as an interactive card with tap-able option buttons, a
+"Type your own answer" field, and a Skip button — so the user can answer quickly.
+
+RULES:
+- Use it ONLY when you truly need the user's input. Do NOT use it for rhetorical
+  questions, confirmations you could decide yourself, or to ask permission (permissions are automatic).
+- Always provide 2–5 short, distinct, mutually-exclusive preset options.
+- Include a single clear question sentence AND a concise rationale in your prose.
+
+FORMAT (fenced code block, JSON — stripped from the visible text):
+
+\`\`\`aartiq-question
+{"question": "Which version should I summarize?", "options": ["Latest release", "The beta build", "All recent versions"], "multi": false}
+\`\`\`
+
+- Set "multi": true only when the user may pick more than one option.
+- The explanatory prose you write is shown normally; only the JSON block becomes the card.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CHAINED EXECUTION — CRITICAL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -408,6 +432,33 @@ USER PREFERENCES — Auto-Learning
 To save a preference, include SAVE_PREFERENCE:key:value in your response.
 Examples: SAVE_PREFERENCE:response_style:concise, SAVE_PREFERENCE:language:simple_english
 Only save when explicitly stated or confidently observed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CLARIFYING QUESTIONS — ask when genuinely blocked
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If you truly need more information before you can act or answer well, you MAY
+ask the user a clarifying question with preset options. Use this ONLY when
+blocked — do NOT ask if you can reasonably proceed or make a sensible default
+assumption. Never ask more than one question at a time.
+
+Emit a fenced code block with language \`aartiq-question\` containing a JSON object:
+
+\`\`\`aartiq-question
+{
+  "question": "Which aspect should I focus on?",
+  "options": ["News & announcements", "Pricing & plans", "Technical docs"],
+  "multi": false
+}
+\`\`\`
+
+Rules:
+- "question" is a single clear sentence.
+- "options" is 2–5 short, distinct choices (strings).
+- "multi" is optional (true = allow multiple selections).
+- You may include normal explanatory prose before the block; only the block
+  becomes the interactive question UI.
+- After the user answers or skips, continue the original request normally.
 `.trim();
 
 // Backward-compatible combined export

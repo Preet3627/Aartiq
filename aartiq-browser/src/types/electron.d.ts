@@ -267,6 +267,13 @@ declare global {
             setAlarm: (alarmTime: string, message: string) => Promise<{ success: boolean; error?: string }>;
             setUserId: (userId: string | null) => void;
             getExtensions: () => Promise<any[]>;
+            getExtensionActions: () => Promise<any[]>;
+            onExtensionActionUpdated: (callback: (data: any) => void) => () => void;
+            onExtensionInstalled: (callback: (data: any) => void) => () => void;
+            onExtensionRemoved: (callback: (data: any) => void) => () => void;
+            onExtensionUpdated: (callback: (data: any) => void) => () => void;
+            openExtensionPopup: (extensionId: string) => Promise<void>;
+            selectAndInstallExtension: () => Promise<{ success: boolean; extension?: { name: string; id?: string }; error?: string }>;
             toggleExtension: (id: string) => Promise<{ success: boolean; enabled?: boolean; error?: string }>;
             uninstallExtension: (id: string) => Promise<boolean>;
             openExtensionDir: () => void;

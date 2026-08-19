@@ -1,6 +1,7 @@
 module.exports = {
   testEnvironment: 'node',
-  testMatch: ['**/src/tests/**/*.test.js', '**/tests/**/*.test.js', '**/tests/**/*.test.ts'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  testMatch: ['**/src/tests/**/*.test.ts', '**/src/tests/**/*.test.js', '**/tests/**/*.test.ts', '**/tests/**/*.test.js'],
   transform: {
     '^.+\\.tsx?$': ['@swc/jest', {
       jsc: {

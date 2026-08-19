@@ -1180,6 +1180,7 @@ export default function Home() {
   // Automatic Sidebar & AI Scaling
   useEffect(() => {
     const handleSmartScaling = () => {
+      if (isResizingRef.current) return;
       const width = window.innerWidth;
       if (width < 1200) {
         if (store.sidebarWidth > 350) store.setSidebarWidth(350);
@@ -2137,6 +2138,8 @@ export default function Home() {
   const useNativeActionChainShell = isMacOS && store.macNativeActionChainMode === 'swiftui';
   const keepNativeBridgeMounted = useNativeSidebarShell || useNativeActionChainShell;
   const showEmbeddedSidebar = store.sidebarOpen && !useNativeSidebarShell;
+  const [isResizing, setIsResizing] = useState(false);
+  const isResizingRef = useRef(false);
 
   const renderToolbarAction = (id: ToolbarActionId) => {
     if (!isToolbarActionVisible(id)) return null;
@@ -2359,7 +2362,7 @@ export default function Home() {
         <AnimatePresence>
           {(showEmbeddedSidebar || keepNativeBridgeMounted) && store.sidebarOpen && (
             <motion.div
-              drag="x"
+              drag={isResizing ? false : "x"}
               dragConstraints={{ left: 0, right: 0 }}
               onDragStart={() => {
                 window.dispatchEvent(new CustomEvent('aartiq-play-click-sound', { detail: { variant: 'drag' } }));
@@ -2382,7 +2385,7 @@ export default function Home() {
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: showEmbeddedSidebar ? (store.isSidebarCollapsed ? 70 : store.sidebarWidth) : 0, opacity: showEmbeddedSidebar ? 1 : 0 }}
               exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
+              transition={{ duration: isResizing ? 0 : 0.3, ease: 'easeOut' }}
               className={`relative h-full cursor-grab active:cursor-grabbing ${store.sidebarSide === 'left' ? (showEmbeddedSidebar ? 'order-first border-r border-border-color' : 'order-first') : (showEmbeddedSidebar ? 'order-last border-l border-border-color' : 'order-last')} no-drag-region outline-none ring-0`}
               style={{
                 background: `linear-gradient(180deg, color-mix(in srgb, var(--navbar-bg) ${store.themeOpacity - 3}%, transparent), color-mix(in srgb, var(--primary-bg) ${Math.max(0, store.themeOpacity - 7)}%, transparent), color-mix(in srgb, var(--primary-bg) ${Math.max(0, store.themeOpacity - 2)}%, transparent))`,
@@ -2396,8 +2399,13 @@ export default function Home() {
             >
               {showEmbeddedSidebar && !store.isSidebarCollapsed && (
                 <div
-                  className={`absolute top-0 bottom-0 w-1 cursor-col-resize z-50 hover:bg-deep-space-accent-neon/30 transition-colors ${store.sidebarSide === 'left' ? 'right-0' : 'left-0'}`}
+                  className={`group absolute top-0 bottom-0 z-50 flex w-3 cursor-col-resize items-center justify-center hover:bg-deep-space-accent-neon/20 transition-colors ${store.sidebarSide === 'left' ? 'right-0' : 'left-0'}`}
+                  onPointerDown={(e) => e.stopPropagation()}
                   onMouseDown={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    setIsResizing(true);
+                    isResizingRef.current = true;
                     const startX = e.clientX;
                     const startWidth = store.sidebarWidth;
 
@@ -2405,12 +2413,15 @@ export default function Home() {
                       const delta = store.sidebarSide === 'left'
                         ? moveEvent.clientX - startX
                         : startX - moveEvent.clientX;
-                      const newWidth = Math.max(280, Math.min(600, startWidth + delta));
+                      const newWidth = Math.max(280, Math.min(640, startWidth + delta));
                       store.setSidebarWidth(newWidth);
+                      window.dispatchEvent(new CustomEvent('aartiq:sidebar-resize', { detail: { width: newWidth } }));
                       if (window.electronAPI) window.dispatchEvent(new Event('resize'));
                     };
 
                     const onMouseUp = () => {
+                      setIsResizing(false);
+                      isResizingRef.current = false;
                       document.removeEventListener('mousemove', onMouseMove);
                       document.removeEventListener('mouseup', onMouseUp);
                     };
@@ -2418,7 +2429,9 @@ export default function Home() {
                     document.addEventListener('mousemove', onMouseMove);
                     document.addEventListener('mouseup', onMouseUp);
                   }}
-                />
+                >
+                  <span className="h-10 w-0.5 rounded-full bg-deep-space-accent-neon/40 group-hover:bg-deep-space-accent-neon/80 transition-colors" />
+                </div>
               )}
               <AIChatSidebar
                 studentMode={store.studentMode}
@@ -2447,6 +2460,7 @@ export default function Home() {
                 schedulingIntent={schedulingIntent}
                 setSchedulingIntent={setSchedulingIntent}
                 bridgeOnly={!showEmbeddedSidebar}
+                isResizing={isResizing}
               />
             </motion.div>
           )}

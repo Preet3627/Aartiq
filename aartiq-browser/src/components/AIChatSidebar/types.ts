@@ -1,5 +1,6 @@
 import type { ChatMessage } from '../ai/ConversationHistoryPanel';
 import type { ThinkingStep } from '../ai/ThinkingPanel';
+import type { AartiqQuestion } from '../../lib/aiQuestion';
 
 export type { ChatMessage, Conversation } from '../ai/ConversationHistoryPanel';
 export type { ThinkingStep } from '../ai/ThinkingPanel';
@@ -61,6 +62,10 @@ export type ExtendedChatMessage = ChatMessage & {
   actionLogs?: { type: string, output: string, success: boolean }[];
   mediaItems?: MediaItem[];
   loadedSkills?: string[];
+  isSkillsList?: boolean;
+  isSearchResult?: boolean;
+  /** Interactive clarifying question surfaced by the AI (rendered as a card). */
+  question?: AartiqQuestion;
 };
 
 export type VisualStage = 'idle' | 'fetching' | 'capturing';

@@ -4,12 +4,18 @@ import React, { memo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, XCircle, Loader2, Zap, ChevronDown, ChevronRight } from 'lucide-react';
 
+export interface ActionChainSite {
+  title: string;
+  url: string;
+}
+
 export interface ActionChainStep {
   id: string;
   label: string;
   status: 'pending' | 'running' | 'done' | 'error' | 'skipped';
   detail?: string;
   detailNode?: React.ReactNode;
+  sites?: ActionChainSite[];
   icon?: React.ReactNode;
   timestamp: number;
 }
@@ -79,6 +85,46 @@ function DetailDisplay({ step }: { step: ActionChainStep }) {
     );
   }
   return null;
+}
+
+function faviconFor(url?: string): string {
+  if (!url) return '';
+  try {
+    const host = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
+  } catch {
+    return '';
+  }
+}
+
+function SitesRow({ sites, compact = false }: { sites: ActionChainSite[]; compact?: boolean }) {
+  if (!sites || sites.length === 0) return null;
+  const shown = compact ? sites.slice(0, 4) : sites;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+      {shown.map((site, i) => {
+        const title = (site.title || site.url || 'site').trim();
+        return (
+          <span
+            key={`${site.url}-${i}`}
+            className="group/site inline-flex max-w-[150px] items-center gap-1 rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5"
+            title={`${title}\n${site.url}`}
+          >
+            <img
+              src={faviconFor(site.url)}
+              alt=""
+              className="h-3 w-3 flex-shrink-0 rounded-sm"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+            />
+            <span className="truncate text-[10px] text-secondary-text/80">{title}</span>
+          </span>
+        );
+      })}
+      {compact && sites.length > shown.length && (
+        <span className="text-[10px] text-secondary-text/50">+{sites.length - shown.length}</span>
+      )}
+    </div>
+  );
 }
 
 const ActionChainTimeline = memo(function ActionChainTimeline({
@@ -181,16 +227,21 @@ const ActionChainTimeline = memo(function ActionChainTimeline({
                     <div className="flex-shrink-0 w-4 flex items-center justify-center">
                       {statusIcon[step.status]}
                     </div>
-                    <span className={`text-[10px] font-medium truncate flex-1 ${
-                      step.status === 'running' ? 'text-sky-400' :
-                      step.status === 'done' ? 'text-secondary-text' :
-                      step.status === 'error' ? 'text-red-400' :
-                      'text-secondary-text/60'
-                    }`}>
-                      {displayText(step.label, 'Step')}
-                    </span>
-                    <DetailDisplay step={step} />
-                  </motion.div>
+                     <span className={`text-[10px] font-medium truncate flex-1 ${
+                       step.status === 'running' ? 'text-sky-400' :
+                       step.status === 'done' ? 'text-secondary-text' :
+                       step.status === 'error' ? 'text-red-400' :
+                       'text-secondary-text/60'
+                     }`}>
+                       {displayText(step.label, 'Step')}
+                     </span>
+                     <DetailDisplay step={step} />
+                     {step.sites && step.sites.length > 0 && (
+                       <span className="text-[9px] text-secondary-text/40 ml-1 shrink-0">
+                         🌐 {step.sites.length}
+                       </span>
+                     )}
+                   </motion.div>
                 ))}
               </div>
             </motion.div>
@@ -265,20 +316,23 @@ const ActionChainTimeline = memo(function ActionChainTimeline({
                   <div className="flex-shrink-0 w-5 flex items-center justify-center">
                     {statusIcon[step.status]}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className={`text-[11px] font-medium truncate ${
-                        step.status === 'running' ? 'text-sky-400' :
-                        step.status === 'done' ? 'text-secondary-text' :
-                        step.status === 'error' ? 'text-red-400' :
-                        step.status === 'skipped' ? 'text-yellow-400' :
-                        'text-secondary-text/60'
-                      }`}>
-                        {displayText(step.label, 'Step')}
-                      </span>
-                      <DetailDisplay step={step} />
-                    </div>
-                  </div>
+                   <div className="flex-1 min-w-0">
+                     <div className="flex items-center gap-1.5">
+                       <span className={`text-[11px] font-medium truncate ${
+                         step.status === 'running' ? 'text-sky-400' :
+                         step.status === 'done' ? 'text-secondary-text' :
+                         step.status === 'error' ? 'text-red-400' :
+                         step.status === 'skipped' ? 'text-yellow-400' :
+                         'text-secondary-text/60'
+                       }`}>
+                         {displayText(step.label, 'Step')}
+                       </span>
+                       <DetailDisplay step={step} />
+                     </div>
+                     {step.sites && step.sites.length > 0 && (
+                       <SitesRow sites={step.sites} />
+                     )}
+                   </div>
                   <div className="flex-shrink-0 text-[9px] text-secondary-text/30 font-mono">
                     {new Date(step.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                   </div>

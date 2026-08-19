@@ -210,7 +210,7 @@ const ExtensionSettings = () => {
         const result = await window.electronAPI?.toggleExtension(id);
         if (result?.success) {
             setExtensions(prev => prev.map(ext =>
-                ext.id === id ? { ...ext, enabled: result.enabled } : ext
+                ext.id === id ? { ...ext, enabled: result.enabled ?? ext.enabled } : ext
             ));
         }
     };
@@ -227,7 +227,7 @@ const ExtensionSettings = () => {
         setInstallStatus(null);
         const result = await window.electronAPI?.selectAndInstallExtension();
         if (result?.success) {
-            setInstallStatus(`Installed: ${result.extension.name}`);
+            setInstallStatus(`Installed: ${result.extension?.name ?? 'extension'}`);
             fetchExtensions();
         } else if (result?.error !== 'Cancelled') {
             setInstallStatus(`Failed: ${result?.error || 'Unknown error'}`);

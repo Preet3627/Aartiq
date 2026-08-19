@@ -1,4 +1,4 @@
-export { ThreatType, GuardrailMode } from './types';
+export type { ThreatType, GuardrailMode } from './types';
 export type { ThreatMatch, SanitizationResult } from './types';
 
 export {

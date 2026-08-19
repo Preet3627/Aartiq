@@ -412,8 +412,8 @@ describe('TabGroupingService', () => {
 
     const result = await service.organizeTabs(
       () => tabs,
-      (tabIds, name) => groups.push({ name, tabIds }),
-      (tabId) => closed.push(tabId),
+      (tabIds: string[], name: string) => groups.push({ name, tabIds }),
+      (tabId: string) => closed.push(tabId),
       async () => ({
         success: true,
         classifications: { 'tab-1': 'Work', 'tab-3': 'Search' },
@@ -465,7 +465,7 @@ describe('TabGroupingService', () => {
 
     await service.organizeTabs(
       () => tabs,
-      (tabIds, name) => groups.push({ name, tabIds }),
+      (tabIds: string[], name: string) => groups.push({ name, tabIds }),
       () => {},
       async () => ({ success: false, error: 'AI failed' }),
       { strategy: 'ai' }
@@ -487,7 +487,7 @@ describe('TabGroupingService', () => {
 
     await service.organizeTabs(
       () => tabs,
-      (tabIds, name) => groups.push({ name, tabIds }),
+      (tabIds: string[], name: string) => groups.push({ name, tabIds }),
       () => {},
       async () => ({ success: true, classifications: {} }),
       { strategy: 'domain' }
@@ -509,7 +509,7 @@ describe('TabGroupingService', () => {
 
     await service.organizeTabs(
       () => tabs,
-      (tabIds, name) => groups.push({ name, tabIds }),
+      (tabIds: string[], name: string) => groups.push({ name, tabIds }),
       () => {},
       async () => ({
         success: true,
@@ -578,7 +578,7 @@ describe('TabGroupingService', () => {
 
     service.organizeTabs(
       () => tabs,
-      (tabIds, name) => groups.push({ name, tabIds }),
+      (tabIds: string[], name: string) => groups.push({ name, tabIds }),
       () => {},
       async () => ({ success: false, error: 'fail' }),
       { strategy: 'domain' }

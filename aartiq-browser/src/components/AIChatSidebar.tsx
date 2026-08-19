@@ -8,13 +8,12 @@ import {
   Maximize2, Minimize2, FileText, Download, Wifi, WifiOff, X,
   ChevronLeft, ChevronRight, ChevronDown, Zap, Send, Paperclip,
   ScanLine,
-  Sliders,
   MoreVertical,
   Sparkles,
   Image as ImageIcon,
   Image,
   Eye, EyeOff, Search, Loader2, MousePointerClick,
-  CheckCircle2, AlertCircle, Layers,
+  CheckCircle2, AlertCircle, Layers, SlidersHorizontal,
   Share2, CopyIcon, Trash2, Printer, Cpu, Rocket, Camera, Terminal, MoreHorizontal, Play, History, Copy, Mic, Database, Shield
 } from 'lucide-react';
 import Tesseract from 'tesseract.js';
@@ -33,6 +32,7 @@ import ActionChainTimeline, { type ActionChainStep } from './ai/ActionChainTimel
 import CollapsibleOCRMessage from './ai/CollapsibleOCRMessage';
 import ProcessingIndicator from './ai/ProcessingIndicator';
 import CollapsibleSkillMessage from './ai/CollapsibleSkillMessage';
+import SkillsListMessage from './ai/SkillsListMessage';
 import MessageActions from './ai/MessageActions';
 import ConversationHistoryPanel, { type Conversation, type ChatMessage } from './ai/ConversationHistoryPanel';
 import { useAIActionSecurityManager } from './ai/useAIActionSecurityManager';
@@ -91,15 +91,22 @@ import { searchContextStore } from '@/lib/SearchContextStore';
 import { matchSkills, AVAILABLE_SKILLS, listAllSkills } from '@/lib/SkillRegistry';
 import { actionLogsStore, type ActionLog } from '@/lib/ActionLogsStore';
 import AIFallback from './sidebar/AIFallback';
-import AIHomeExperience from './sidebar/AIHomeExperience';
+import SidebarWidgets from './sidebar/SidebarWidgets';
+import AISuggestionsHome from './sidebar/AISuggestionsHome';
+import AISuggestionBubbles from './sidebar/AISuggestionBubbles';
+import { GENERIC_SUGGESTIONS } from './sidebar/AISuggestionsHome';
 import CustomizationPanel from './sidebar/CustomizationPanel';
+import { useSidebarPrefs } from './sidebar/useSidebarPrefs';
+import { SidebarDataProvider, type SidebarData, type NeedsAttentionItem } from './sidebar/SidebarContext';
+import { sidebarRootStyle } from './sidebar/theme';
 import { useTabIntelligenceStore } from '@/store/tabIntelligenceStore';
 import PrivacyControls from './sidebar/PrivacyControls';
+import QuestionCard from './QuestionCard';
+import { parseAartiqQuestion, serializeAartiqQuestion, type AartiqQuestion } from '@/lib/aiQuestion';
 import AIVisualThemeControl, { getCSSForAIVisual } from './sidebar/AIVisualTheme';
 import { injectTabAnimationCSS, removeTabAnimationCSS } from './sidebar/AITabAnimation';
 import BackgroundNotifications from './sidebar/BackgroundNotifications';
 import {
-  getSidebarPreferences, saveSidebarPreferences,
   getAIVisualSettings, saveAIVisualSettings,
   getPrivacySettings, savePrivacySettings,
   type SidebarPreferences, type AIVisualSettings, type PrivacySettings,
@@ -151,6 +158,7 @@ interface AIChatSidebarProps {
   schedulingIntent?: SchedulingIntent | null;
   setSchedulingIntent?: (intent: SchedulingIntent | null) => void;
   bridgeOnly?: boolean;
+  isResizing?: boolean;
 }
 
 interface SearchResultEntry {
@@ -474,8 +482,37 @@ const collapseRawSearchDump = (content: string): string => {
   return cleaned;
 };
 
-const sanitizeVisibleMessage = (content: string): string => {
-  if (!content) return '';
+/**
+ * Load a skill's guide content. Prefers the electron IPC bridge, but falls
+ * back to fetching the served markdown file so skills still inject in web/dev
+ * contexts where the preload bridge is unavailable.
+ */
+async function loadSkillContent(skillId: string): Promise<string> {
+  try {
+    if (typeof window !== 'undefined' && window.electronAPI?.loadSkill) {
+      const ctx = await window.electronAPI.loadSkill(skillId);
+      if (ctx && `${ctx}`.trim() && !`${ctx}`.includes('No skill instructions available')) {
+        return `${ctx}`.trim();
+      }
+    }
+  } catch {
+    // fall through to fetch
+  }
+  try {
+    if (typeof window !== 'undefined' && typeof fetch === 'function') {
+      const res = await fetch(`/skills/${skillId}.md`);
+      if (res.ok) {
+        const text = await res.text();
+        return text.replace(/^---[\s\S]*?---\s*/, '').trim();
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return '';
+}
+
+const sanitizeVisibleMessage = (content: string): string => {  if (!content) return '';
   let cleaned = stripAllCommands(content);
 
   // Strip [ACTION_CHAIN_JSON]...[/ACTION_CHAIN_JSON] paired tags with their content
@@ -735,6 +772,8 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   // Core state
   const [messages, setMessages] = useState<ExtendedChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
+  // Tracks which clarifying-question cards have been answered/skipped.
+  const [answeredQuestions, setAnsweredQuestions] = useState<Record<string, { answer?: string; skipped?: boolean }>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -742,8 +781,31 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [isOnline, setIsOnline] = useState(true);
   const [isDragOver, setIsDragOver] = useState(false);
 
-  // Sidebar widget system
-  const [sidebarPrefs, setSidebarPrefs] = useState<SidebarPreferences>(() => getSidebarPreferences());
+  // Sidebar widget system — single source of truth via the robust hook.
+  const sidebar = useSidebarPrefs();
+  const { setWidth: setSidebarWidthPref } = sidebar;
+
+  // Keep the live drag width (store.sidebarWidth, controlled by the shell
+  // resizer in ClientOnlyPage) and the persisted widget width (sidebar prefs)
+  // in lockstep, so widgets resize with the sidebar when the user drags it.
+  const seededWidthRef = useRef(false);
+  useEffect(() => {
+    if (!seededWidthRef.current) {
+      seededWidthRef.current = true;
+      if (typeof sidebarWidth === 'number' && sidebarWidth !== sidebar.prefs.width) {
+        useAppStore.getState().setSidebarWidth(sidebar.prefs.width);
+      }
+    }
+  }, [sidebarWidth, sidebar]);
+  useEffect(() => {
+    const onResize = (e: Event) => {
+      const w = (e as CustomEvent<{ width: number }>).detail?.width;
+      if (typeof w === 'number' && Number.isFinite(w)) setSidebarWidthPref(w);
+    };
+    window.addEventListener('aartiq:sidebar-resize', onResize);
+    return () => window.removeEventListener('aartiq:sidebar-resize', onResize);
+  }, [setSidebarWidthPref]);
+
   const [aiVisualSettings, setAiVisualSettings] = useState<AIVisualSettings>(() => getAIVisualSettings());
   const [privacySettings, setPrivacySettings] = useState<PrivacySettings>(() => getPrivacySettings());
   const [showCustomization, setShowCustomization] = useState(false);
@@ -759,9 +821,8 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     return () => { removeTabAnimationCSS(); };
   }, [aiVisualSettings]);
 
-  const activeWidgetIds = sidebarPrefs.enabledWidgets;
-  const widgetOrder = sidebarPrefs.widgetOrder.filter(id => activeWidgetIds.includes(id));
-  const sidebarMode = sidebarPrefs.sidebarMode;
+  const sidebarPrefs = sidebar.prefs;
+  const sidebarMode = sidebar.prefs.mode;
   const sessionLabel = useTabIntelligenceStore((s) => s.sessionLabel);
 
   // Command queue
@@ -834,6 +895,8 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const activeConversationIdRef = useRef<string | null>(null);
+  activeConversationIdRef.current = activeConversationId;
   const [userPreferences, setUserPreferences] = useState<Record<string, { value: any; updatedAt: number }>>({});
   const [ollamaModels, setOllamaModels] = useState<{ name: string; modified_at: string }[]>([]);
   const [groqSpeed, setGroqSpeed] = useState<string | null>(null);
@@ -1295,8 +1358,40 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     setThinkingSteps((prev) => prev.map((s) => s.id === id ? { ...s, detail } : s));
   }, []);
 
+  // Action chain steps are stored per conversation so each session shows
+  // only its own automation timeline.
   const persistActionChain = useCallback((steps: ActionChainStep[]) => {
-    try { localStorage.setItem('aartiq_action_chain', JSON.stringify(steps.slice(-20))); } catch { }
+    try {
+      const convId = activeConversationIdRef.current;
+      if (!convId) return;
+      const mapRaw = localStorage.getItem('aartiq_action_chain_map');
+      const map: Record<string, ActionChainStep[]> = mapRaw ? JSON.parse(mapRaw) : {};
+      map[convId] = steps.slice(-20);
+      localStorage.setItem('aartiq_action_chain_map', JSON.stringify(map));
+    } catch { }
+  }, []);
+
+  const loadActionChainForConversation = useCallback((convId: string | null): ActionChainStep[] => {
+    if (!convId) return [];
+    try {
+      const mapRaw = localStorage.getItem('aartiq_action_chain_map');
+      const map: Record<string, ActionChainStep[]> = mapRaw ? JSON.parse(mapRaw) : {};
+      const steps = map[convId];
+      return Array.isArray(steps) ? steps.map((s) => ({ ...s, status: s.status as ActionChainStep['status'] })) : [];
+    } catch {
+      return [];
+    }
+  }, []);
+
+  const clearActionChainForConversation = useCallback((convId: string | null) => {
+    try {
+      const id = convId ?? activeConversationIdRef.current;
+      if (!id) return;
+      const mapRaw = localStorage.getItem('aartiq_action_chain_map');
+      const map: Record<string, ActionChainStep[]> = mapRaw ? JSON.parse(mapRaw) : {};
+      delete map[id];
+      localStorage.setItem('aartiq_action_chain_map', JSON.stringify(map));
+    } catch { }
   }, []);
 
   const addActionChainStep = useCallback((label: string, detail?: string): string => {
@@ -1326,24 +1421,25 @@ const AIChatSidebar: React.FC<AIChatSidebarProps> = (props) => {
     });
   }, [persistActionChain]);
 
+  const updateActionChainStepSites = useCallback((id: string, sites: Array<{ title: string; url: string }>) => {
+    setActionChainSteps((prev) => {
+      const next = prev.map((s) => s.id === id ? { ...s, sites } : s);
+      persistActionChain(next);
+      return next;
+    });
+  }, [persistActionChain]);
+
   const resetActionChainSteps = useCallback(() => {
     setActionChainSteps([]);
     actionChainStepIdCounter.current = 0;
-    try { localStorage.removeItem('aartiq_action_chain'); } catch { }
-  }, []);
+    clearActionChainForConversation(activeConversationIdRef.current);
+  }, [clearActionChainForConversation]);
 
-  // Restore action chain from localStorage on mount
+  // Restore this session's action chain on mount (per-conversation, not global).
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('aartiq_action_chain');
-      if (saved) {
-        const parsed: ActionChainStep[] = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setActionChainSteps(parsed.map(s => ({ ...s, status: s.status as ActionChainStep['status'] })));
-        }
-      }
-    } catch { }
-  }, []);
+    const steps = loadActionChainForConversation(activeConversationIdRef.current);
+    if (steps.length > 0) setActionChainSteps(steps);
+  }, [loadActionChainForConversation]);
 
   const preloadAartiqIconLocal = useCallback(async (): Promise<void> => {
     if (typeof window === 'undefined') return;
@@ -1537,6 +1633,114 @@ I couldn't schedule the task. The background service may not be running. Please 
     }
   ), [localLlmMode, normalizedProvider, ollamaBaseUrl, selectedProviderModel, store.azureOpenaiEndpoint]);
 
+  // ── LLM-generated proactive suggestions ────────────────────────────────
+  // Shown above the composer when the chat is empty. Generated from the
+  // user's browsing history + past AI tasks so they are useful and distinct.
+  const [llmSuggestions, setLlmSuggestions] = useState<{ id: string; label: string; command: string }[]>([]);
+  const [llmSuggestionsLoading, setLlmSuggestionsLoading] = useState(false);
+
+  const generateLlmSuggestions = useCallback(async () => {
+    setLlmSuggestionsLoading(true);
+    try {
+      if (typeof window === 'undefined' || !window.electronAPI?.generateChatContent) {
+        throw new Error('no-engine');
+      }
+
+      const hist: any[] = (store.history as any[]) ?? [];
+      const historyLines = hist
+        .slice(0, 12)
+        .map((h) => `- ${h?.title || h?.url || ''}`.trim())
+        .filter(Boolean);
+
+      const pastTasks = (conversations || [])
+        .slice(0, 8)
+        .map((c: any) => {
+          const firstUser = (c?.messages || []).find((m: any) => m?.role === 'user');
+          return (c?.title || firstUser?.content || '').toString().trim();
+        })
+        .filter(Boolean)
+        .slice(0, 8);
+
+      const activeTab = (tabs || []).find((t: any) => t.id === activeTabId) || (tabs || [])[0];
+      const activePage = activeTab
+        ? `ACTIVE PAGE the user is currently looking at:\n- Title: ${activeTab?.title || 'Unknown'}\n- URL: ${activeTab?.url || currentUrl || 'N/A'}${currentUrl && activeTab?.url && activeTab.url !== currentUrl ? `\n- Current URL: ${currentUrl}` : ''}`
+        : (currentUrl ? `ACTIVE PAGE the user is currently looking at:\n- URL: ${currentUrl}` : '');
+
+      const userCtx = [
+        activePage,
+        historyLines.length ? `Recent browsing history:\n${historyLines.join('\n')}` : '',
+        pastTasks.length ? `Recent AI tasks the user has done:\n${pastTasks.map((t) => `- ${t}`).join('\n')}` : '',
+      ].filter(Boolean).join('\n\n');
+
+      const sys = `You are a proactive AI browser assistant. Prioritize the user's ACTIVE PAGE when suggesting useful next actions — propose things they can do with the page they are currently viewing (summarize it, extract data, translate, answer questions about it, automate a task on it, compare it, etc.). Also consider their recent browsing history and past AI tasks. Good examples: "Summarize this page", "Extract key points from this article", "Translate this page", "Answer questions about this site", "Generate a PDF of this page", "Compare this product with alternatives", "Automate filling this form", "Research related to this topic".\nReturn ONLY a JSON array of 4 short strings (each 3-8 words). All entries must be distinct. No numbering, no markdown, no extra text.`;
+      const userMsg = userCtx
+        ? `${userCtx}\n\nSuggest 4 distinct next actions for this user, prioritizing what they can do with the page they are currently viewing, while also building on what they have been doing.`
+        : `The user just opened the AI sidebar. Suggest 4 distinct, useful next actions they might want to do (summarize the current page, research news, generate a PDF, automate a task). Return ONLY a JSON array of 4 short strings.`;
+
+      const messagesPayload = [
+        { role: 'system', content: sys },
+        { role: 'user', content: userMsg },
+      ];
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 15000)
+      );
+      const aiCall = window.electronAPI.generateChatContent(messagesPayload as any, reasoningOptions as any);
+      const res: any = await Promise.race([aiCall, timeoutPromise]);
+
+      if (res?.error) throw new Error(res.error);
+      const raw = (res?.text || '').trim();
+      let items: string[] = [];
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) items = parsed.map((x: any) => String(x)).filter(Boolean);
+      } catch {
+        items = raw
+          .split('\n')
+          .map((l: string) => l.replace(/^[\d.\-\*\s"`]+/, '').replace(/[`"']/g, '').trim())
+          .filter(Boolean);
+      }
+
+      const seen = new Set<string>();
+      items = items
+        .filter((s) => {
+          const k = s.toLowerCase();
+          if (seen.has(k) || s.length < 3) return false;
+          seen.add(k);
+          return true;
+        })
+        .slice(0, 4);
+
+      if (items.length === 0) throw new Error('empty');
+      setLlmSuggestions(items.map((s, i) => ({ id: `llm-${i}`, label: s, command: s })));
+    } catch {
+      // Fallback to generic prompts if the model/engine is unavailable.
+      setLlmSuggestions(
+        GENERIC_SUGGESTIONS.slice(0, 4).map((s, i) => ({ id: `llm-${i}`, label: s.label, command: s.command }))
+      );
+    } finally {
+      setLlmSuggestionsLoading(false);
+    }
+  }, [store.history, conversations, reasoningOptions, tabs, activeTabId, currentUrl]);
+
+  // Generate suggestions on mount (covers app refresh and a full sidebar
+  // close/reopen, since the component remounts). We deliberately do NOT
+  // regenerate on every new conversation — suggestions persist until the
+  // user closes the sidebar or refreshes.
+  useEffect(() => {
+    if (messages.length === 0 && !isLoading) generateLlmSuggestions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Also regenerate when the sidebar is reopened after being collapsed.
+  const wasCollapsedRef = useRef(props.isCollapsed);
+  useEffect(() => {
+    if (wasCollapsedRef.current && !props.isCollapsed && messages.length === 0 && !isLoading) {
+      generateLlmSuggestions();
+    }
+    wasCollapsedRef.current = props.isCollapsed;
+  }, [props.isCollapsed, messages.length, isLoading, generateLlmSuggestions]);
+
   const getStreamingResponse = useCallback(async (history: ChatMessage[], messageId?: string, onFirstChunk?: () => void): Promise<any> => {
     return new Promise((resolve) => {
       let fullText = '';
@@ -1704,14 +1908,19 @@ I couldn't schedule the task. The background service may not be running. Please 
     const skillsToLoad = new Set(loadedSkillIds);
     const loadedSkills: Promise<string>[] = [];
     const skillSteps: Map<string, string> = new Map();
-    if (window.electronAPI?.loadSkill) {
+    if (skillsToLoad.size > 0) {
       for (const skillId of skillsToLoad) {
         const stepId = addThinkingStep(`📖 Loading ${skillId} skill guide...`);
         skillSteps.set(skillId, stepId);
         loadedSkills.push(
-          window.electronAPI.loadSkill(skillId).then(ctx => {
-            resolveThinkingStep(stepId, 'done', `Loaded ${skillId} guide`);
-            console.log(`[SkillLoader] ✅ Loaded ${skillId}: ${ctx.length} chars`);
+          loadSkillContent(skillId).then(ctx => {
+            if (ctx) {
+              resolveThinkingStep(stepId, 'done', `Loaded ${skillId} guide`);
+              console.log(`[SkillLoader] ✅ Loaded ${skillId}: ${ctx.length} chars`);
+            } else {
+              resolveThinkingStep(stepId, 'error', `Failed to load ${skillId}`);
+              console.warn(`[SkillLoader] ❌ Failed to load ${skillId}`);
+            }
             return ctx;
           }).catch(e => {
             resolveThinkingStep(stepId, 'error', `Failed to load ${skillId}`);
@@ -1724,6 +1933,24 @@ I couldn't schedule the task. The background service may not be running. Please 
     const skillResults = await Promise.all(loadedSkills);
     skillContexts = skillResults.filter(Boolean);
     const skillContext = skillContexts.join('\n\n');
+
+    // When the Research skill is active, force a structured multi-topic plan
+    // with a defined number of sources so the AI never does a single generic search.
+    const isResearchSkill = loadedSkillIds.includes('research');
+    const researchDirective = isResearchSkill
+      ? `
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📑 RESEARCH PLANNING MANDATE (auto-applied)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Because this request matches the Research skill, you MUST:
+1. DECOMPOSE the request into 3–6 distinct sub-topics (e.g. for "latest AI news": product launches, funding, major-lab announcements, regulation, security).
+2. DECIDE how many sources/sites to visit — pick a concrete number (e.g. 8–14 sites for a briefing, up to 20 for a deep dive) based on the request's depth.
+3. EMIT a plan FIRST using: [PLAN: "Sub-topics: 1) X 2) Y 3) Z — visiting ~N sources across M searches"]
+4. THEN run one [WEB_SEARCH: <targeted query>] per sub-topic (use pages:1–3), picking the best 1–2 URLs per search and navigating to read them.
+5. Always state the number of sites you intend to visit before searching, and keep the Action Chain visible so the user sees each site as you go.
+Do NOT perform a single broad search for the whole request.`
+      : '';
 
     // Skill loaded — status shown via thinking steps, continue processing
 
@@ -1822,7 +2049,7 @@ I couldn't schedule the task. The background service may not be running. Please 
       let currentHistory: ChatMessage[] = [
         {
           role: 'system',
-          content: `${systemInstructions}${skillContext ? `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 SKILL INSTRUCTIONS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${skillContext}\n\n✅ Required skills are already loaded above. Do NOT use the [LOAD_SKILL] command — the skill guide is already in context.` : `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 AVAILABLE SKILLS (use [LIST_SKILLS] to see all, [LOAD_SKILL: id] to load)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${AVAILABLE_SKILLS.map(s => `${s.icon} ${s.label} (\`${s.id}\`) — ${s.description}`).join('\n')}`}${userPrefsBlock}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
+          content: `${systemInstructions}${skillContext ? `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 SKILL INSTRUCTIONS\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${skillContext}\n\n✅ Required skills are already loaded above. Do NOT use the [LOAD_SKILL] command — the skill guide is already in context.` : `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n📖 AVAILABLE SKILLS (use [LIST_SKILLS] to see all, [LOAD_SKILL: id] to load)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n${AVAILABLE_SKILLS.map(s => `${s.icon} ${s.label} (\`${s.id}\`) — ${s.description}`).join('\n')}`}${researchDirective}${userPrefsBlock}\n\n[CURRENT TIME]: ${new Date().toLocaleString()}\n[LOCATION]: India`
         },
         ...messages.map(m => ({ role: m.role, content: m.content.replace(INTERNAL_TAG_RE, '').trim() })),
         {
@@ -1888,6 +2115,14 @@ I couldn't schedule the task. The background service may not be running. Please 
         resolveThinkingStep(aiId, response.error ? 'error' : 'done');
 
         if (response.error) throw new Error(response.error);
+
+        // Extract a clarifying question (if the AI is blocked and asks). The
+        // fenced JSON block is stripped from the visible/command text.
+        const parsedQuestion = parseAartiqQuestion(response.text);
+        const questionPayload: AartiqQuestion | null = parsedQuestion.question;
+        if (questionPayload) {
+          response.text = parsedQuestion.text;
+        }
 
         // Clean up text format to remove the action commands from the visible message
         // parseAICommands now handles ALL formats (JSON, brackets, HTML comments) with built-in deduplication
@@ -1976,6 +2211,25 @@ I couldn't schedule the task. The background service may not be running. Please 
             activeStreamingMessageIdRef.current = null;
           }
         }, 1200);
+
+        // If the AI asked a clarifying question, surface it as an interactive
+        // card and pause the action chain until the user answers or skips.
+        if (questionPayload) {
+          const qId = createMessageId('assistant');
+          setMessages(prev => [...prev, {
+            id: qId,
+            role: 'model',
+            content: '',
+            question: questionPayload,
+          } as ExtendedChatMessage]);
+          // Keep the question in model history so the next turn has context.
+          currentHistory = [
+            ...currentHistory,
+            { role: 'assistant', content: `${response.text}\n${serializeAartiqQuestion(questionPayload)}` },
+          ];
+          finalSynthesisDone = true;
+          break;
+        }
 
         if (commands.length === 0) {
           // Only show error if there are genuinely unsupported commands AND no useful response text.
@@ -2153,6 +2407,19 @@ I couldn't schedule the task. The background service may not be running. Please 
         currentHistory = compactMessages(currentHistory, { maxTokens: 64000 });
       }
 
+      // ── Prune empty model messages created as command-only streaming placeholders ──
+      setMessages(prev => {
+        const pruned = prev.filter(m => {
+          if (m.role !== 'model') return true;
+          const hasContent = !!(m.content && m.content.trim());
+          const hasRichContent = !!(m as ExtendedChatMessage).ocrText
+            || ((m as ExtendedChatMessage).loadedSkills && (m as ExtendedChatMessage).loadedSkills!.length > 0)
+            || !!(m as ExtendedChatMessage).isSkillsList
+            || ((m as ExtendedChatMessage).mediaItems && (m as ExtendedChatMessage).mediaItems!.length > 0);
+          return hasContent || hasRichContent;
+        });
+        return pruned.length === prev.length ? prev : pruned;
+      });
 
     } catch (err: any) {
       console.error('Core AI execution failure:', err);
@@ -2263,6 +2530,10 @@ I couldn't schedule the task. The background service may not be running. Please 
                 </span>
               ) : undefined
             );
+            const navUrl = targetUrl.startsWith('http') ? targetUrl : `https://${targetUrl}`;
+            updateActionChainStepSites(currentActionChainStepIdRef.current, [
+              { title: navHostname || targetUrl, url: navUrl },
+            ]);
           }
           if (targetUrl.startsWith('comet://')) {
             const page = targetUrl.replace('comet://', '');
@@ -2819,6 +3090,10 @@ I couldn't schedule the task. The background service may not be running. Please 
                 totalPages > 1 ? `${websites.length} sites · ${totalPages} pages fetched` : `${websites.length} site`,
                 websiteDetailNode
               );
+              updateActionChainStepSites(
+                currentActionChainStepIdRef.current,
+                websites.map(w => ({ title: w.title, url: w.url }))
+              );
             }
 
             // Navigate to specific result if requested, or show summary
@@ -2881,9 +3156,9 @@ I couldn't schedule the task. The background service may not be running. Please 
               const resultsText = resultLines.join('\n\n');
               const resultCount = resultLines.length;
 
-              output = `✅ Found ${resultCount} result${resultCount !== 1 ? 's' : ''} for "${originalQuery}" via ${usedEngine}`;
+              output = `Found ${resultCount} result${resultCount !== 1 ? 's' : ''} for "${originalQuery}" via ${usedEngine}`;
 
-              // Store full results as collapsible message
+              // Store full results as a compact, headerless collapsible note
               setMessages(prev => {
                 const last = prev[prev.length - 1];
                 if (last && last.role === 'model') {
@@ -2891,6 +3166,7 @@ I couldn't schedule the task. The background service may not be running. Please 
                     ...last,
                     content: output,
                     isOcr: true,
+                    isSearchResult: true,
                     ocrLabel: 'WEB_SEARCH_RESULTS',
                     ocrText: resultsText,
                   }];
@@ -2899,6 +3175,7 @@ I couldn't schedule the task. The background service may not be running. Please 
                   role: 'model',
                   content: output,
                   isOcr: true,
+                  isSearchResult: true,
                   ocrLabel: 'WEB_SEARCH_RESULTS',
                   ocrText: resultsText,
                 } as ExtendedChatMessage];
@@ -4856,12 +5133,12 @@ I couldn't schedule the task. The background service may not be running. Please 
         }
 
         case 'LIST_SKILLS': {
-          const skillsList = listAllSkills();
           const acsId = addActionChainStep('📋 Listing Available Skills');
           setMessages(prev => [...prev, {
             role: 'model',
-            content: `## 📋 Available Skills\n\n${skillsList}\n\n---\n*Use \`[LOAD_SKILL: skill-id]\` to load a specific skill guide.*`
-          }]);
+            content: '📋 Here are the AI skills I can use.',
+            isSkillsList: true,
+          } as ExtendedChatMessage]);
           resolveActionChainStep(acsId, 'done', `${AVAILABLE_SKILLS.length} skills available`);
           output = `Listed ${AVAILABLE_SKILLS.length} available skills`;
           break;
@@ -5952,7 +6229,13 @@ I've successfully executed the following real tasks:
     setInputMessage('');
     setActiveConversationId(null);
     setShowConversationHistory(false);
-  }, []);
+    // Reset all automation/action state so each session starts clean.
+    setCommandQueue([]);
+    setPlanningSteps([]);
+    setAgentState('idle');
+    setCurrentCommandIndex(0);
+    resetActionChainSteps();
+  }, [resetActionChainSteps]);
 
   const saveConversation = useCallback(() => {
     if (messages.length === 0) return;
@@ -6019,7 +6302,14 @@ I've successfully executed the following real tasks:
     setMessages(conv.messages as ExtendedChatMessage[]);
     setActiveConversationId(conv.id);
     setShowConversationHistory(false);
-  }, [conversations]);
+    // Reset live execution state, but restore THIS session's action steps.
+    setCommandQueue([]);
+    setPlanningSteps([]);
+    setAgentState('idle');
+    setCurrentCommandIndex(0);
+    clearActionChainForConversation(null);
+    setActionChainSteps(loadActionChainForConversation(conv.id));
+  }, [conversations, loadActionChainForConversation, clearActionChainForConversation]);
 
   const handleDeleteConversation = useCallback((id: string) => {
     const nextList = conversations.filter((conv) => conv.id !== id);
@@ -6029,11 +6319,21 @@ I've successfully executed the following real tasks:
       if (nextList.length > 0) {
         setMessages(nextList[0].messages as ExtendedChatMessage[]);
         setActiveConversationId(nextList[0].id);
+        // Reset live execution state, restore the switched-to session's steps.
+        setCommandQueue([]);
+        setPlanningSteps([]);
+        setAgentState('idle');
+        setCurrentCommandIndex(0);
+        clearActionChainForConversation(null);
+        setActionChainSteps(loadActionChainForConversation(nextList[0].id));
       } else {
         clearChat();
       }
+    } else {
+      // Removing a non-active conversation: drop its stored steps.
+      clearActionChainForConversation(id);
     }
-  }, [activeConversationId, conversations, clearChat]);
+  }, [activeConversationId, conversations, clearChat, loadActionChainForConversation, clearActionChainForConversation]);
 
   const handleNewConversation = useCallback(() => {
     clearChat();
@@ -6729,7 +7029,86 @@ I've successfully executed the following real tasks:
     return null;
   }
 
-  const effectiveSidebarWidth = sidebarWidth;
+  const effectiveSidebarWidth = props.isResizing ? store.sidebarWidth : sidebar.prefs.width;
+
+  // Agent controls + live data surfaced to the sidebar widget system.
+  // (Defined here so every referenced state variable is already initialized.)
+  const handlePause = useCallback(() => setAgentState("paused"), []);
+  const handleResume = useCallback(
+    () => setAgentState(isLoading ? "executing" : "thinking"),
+    [isLoading],
+  );
+  const handleStop = useCallback(() => {
+    setCommandQueue([]);
+    setPlanningSteps([]);
+    setAgentState("idle");
+    try {
+      resetActionChainSteps();
+    } catch {
+      /* noop */
+    }
+  }, [resetActionChainSteps]);
+
+  const sidebarData = useMemo<SidebarData>(() => {
+    const total = actionChainSteps.length;
+    const done = actionChainSteps.filter((s) => s.status === "done" || s.status === "error").length;
+    const progress = total > 0 ? done / total : undefined;
+    const needs: NeedsAttentionItem[] = [];
+    if (agentState === "waiting") {
+      needs.push({
+        id: "permission",
+        type: "permission",
+        title: "Permission required",
+        detail: "Aartiq needs your approval to continue this action.",
+      });
+    }
+    if (agentState === "paused") {
+      needs.push({
+        id: "paused",
+        type: "paused",
+        title: "Agent paused",
+        detail: customStatusText || "The agent is paused and waiting for you.",
+        actionLabel: "Resume",
+        onAction: handleResume,
+      });
+    }
+    return {
+      agentState,
+      currentTask: customStatusText || planningSteps[0]?.label,
+      progress,
+      isPaused: agentState === "paused",
+      onPause: handlePause,
+      onResume: handleResume,
+      onStop: handleStop,
+      actionChainSteps,
+      goal: customStatusText
+        ? { text: customStatusText }
+        : planningSteps[0]
+          ? { text: planningSteps[0].label }
+          : undefined,
+      needsAttention: needs,
+      tabs: store.tabs,
+      activeTabId: store.activeTabId,
+      history: store.history,
+      onAction: (cmd) => setInputMessage(cmd),
+      isWorking: isLoading,
+      sessionLabel,
+      showSecondaryInfo: sidebar.prefs.showSecondaryInfo,
+    };
+  }, [
+    agentState,
+    actionChainSteps,
+    planningSteps,
+    customStatusText,
+    isLoading,
+    store.tabs,
+    store.activeTabId,
+    store.history,
+    sessionLabel,
+    handlePause,
+    handleResume,
+    handleStop,
+  ]);
 
   const glowActive = workspacePrefs.glowMode !== 'off';
   const isRgbGlow = workspacePrefs.glowMode === 'rgb';
@@ -6737,9 +7116,12 @@ I've successfully executed the following real tasks:
   const glowSecondary = workspacePrefs.glowColorSecondary;
   const glowTertiary = workspacePrefs.glowColorTertiary;
 
+  // Floating suggestion bubbles are generated by the LLM (see
+  // generateLlmSuggestions) from the user's history + past tasks.
+
   return (
     <div
-      className={`ai-sidebar-theme adaptive-theme-surface flex flex-col h-full overflow-hidden relative transition-[width,box-shadow,border-radius] duration-[180ms] ease-[var(--ease-spring)] backdrop-blur-xl ${isFullScreen ? 'fixed inset-0 z-[9999]' : ''}`}
+      className={`ai-sidebar-theme adaptive-theme-surface flex flex-col h-full overflow-hidden relative transition-[width,box-shadow,border-radius] duration-[180ms] ease-[var(--ease-spring)] backdrop-blur-xl ${props.isResizing ? '!duration-0' : ''} ${isFullScreen ? 'fixed inset-0 z-[9999]' : ''}`}
       style={{ width: isFullScreen ? '100%' : typeof effectiveSidebarWidth === 'number' ? `${effectiveSidebarWidth}px` : effectiveSidebarWidth, ...sidebarShellStyle }}
       onMouseEnter={markSidebarInteraction}
       onMouseDown={markSidebarInteraction}
@@ -7049,7 +7431,7 @@ I've successfully executed the following real tasks:
                   </span>
                   Theme: {props.theme === 'light' ? 'Light' : props.theme === 'minimal' ? 'Minimal' : props.theme === 'vibrant' ? 'Vibrant' : props.theme === 'custom' ? 'Custom' : 'Dark'}
                 </button>
-                <button onClick={() => { setShowCustomization(true); setShowThemeSettings(false); setShowPrivacy(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
+                <button onClick={() => { props.setShowSettings?.(true); props.setSettingsSection?.('sidebar'); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
                   <Layers size={14} className="text-purple-400" /> Customize Workspace
                 </button>
                 <button onClick={() => { setShowPrivacy(true); setShowCustomization(false); setShowThemeSettings(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-secondary-text hover:text-primary-text transition-all">
@@ -7066,13 +7448,11 @@ I've successfully executed the following real tasks:
                       <button
                         key={mode}
                         onClick={() => {
-                          const updated = { ...sidebarPrefs, sidebarMode: mode };
-                          setSidebarPrefs(updated);
-                          saveSidebarPreferences(updated);
+                          sidebar.setMode(mode);
                           if (mode === 'hidden') props.toggleCollapse();
                         }}
                         className={`flex-1 text-[9px] font-medium px-2 py-1 rounded-lg border transition-all capitalize ${
-                          sidebarPrefs.sidebarMode === mode
+                          sidebar.prefs.mode === mode
                             ? 'bg-sky-500/15 border-sky-500/30 text-sky-400'
                             : 'bg-white/[0.04] border-white/[0.06] text-secondary-text/50 hover:text-secondary-text'
                         }`}
@@ -7082,8 +7462,8 @@ I've successfully executed the following real tasks:
                     ))}
                   </div>
                   <p className="text-[8px] text-secondary-text/30 mt-1">
-                    {sidebarPrefs.sidebarMode === 'full' ? 'All widgets + chat' :
-                     sidebarPrefs.sidebarMode === 'compact' ? 'Minimal input only' :
+                    {sidebar.prefs.mode === 'full' ? 'All widgets + chat' :
+                     sidebar.prefs.mode === 'compact' ? 'Minimal input only' :
                      'Hide sidebar entirely'}
                   </p>
                 </div>
@@ -7095,11 +7475,15 @@ I've successfully executed the following real tasks:
                 </button>
               </div>
             </div>
+            <button
+              onClick={() => setShowCustomization(true)}
+              className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all"
+              title="Customize Workspace"
+            >
+              <SlidersHorizontal size={18} />
+            </button>
             <button onClick={() => setIsFullScreen(!isFullScreen)} className="p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle} title={isFullScreen ? 'Exit full screen' : 'Full screen'}>
               {isFullScreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-            </button>
-            <button onClick={() => setShowCustomization(true)} className="hidden sm:flex p-2.5 rounded-xl text-secondary-text hover:text-primary-text transition-all" style={softPanelStyle} title="Edit widgets">
-              <Sliders size={16} />
             </button>
             {store.tabs.some(t => t.groupId === 'ai-session') && (
               <button
@@ -7131,17 +7515,25 @@ I've successfully executed the following real tasks:
       <div className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden modern-scrollbar transition-[padding] duration-[180ms] ease-[var(--ease-spring)] backdrop-blur-sm px-4 py-4 pb-6 space-y-3`} style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 95%, transparent), color-mix(in srgb, var(--primary-bg) 99%, transparent))' }}>
         <AnimatePresence mode="popLayout">
           {messages.length === 0 && sidebarMode !== 'compact' && (
-            <AIHomeExperience
-              enabledWidgets={activeWidgetIds}
-              widgetOrder={widgetOrder}
-              tabs={store.tabs}
-              activeTabId={store.activeTabId}
-              history={store.history}
-              actionSteps={actionChainSteps}
-              sessionLabel={sessionLabel}
-              isWorking={isLoading}
-              onAction={(cmd) => setInputMessage(cmd)}
-            />
+            <SidebarDataProvider value={sidebarData}>
+              {sidebar.prefs.showWidgets ? (
+                <div style={sidebarRootStyle(sidebar.prefs)} className="w-full max-w-full">
+                  <SidebarWidgets
+                    prefs={sidebar.prefs}
+                    controller={{
+                      setWidgetCollapsed: sidebar.setWidgetCollapsed,
+                      setWidgetSize: sidebar.setWidgetSize,
+                      setWidgetPinned: sidebar.setWidgetPinned,
+                      toggleWidget: sidebar.toggleWidget,
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={sidebarRootStyle(sidebar.prefs)} className="w-full max-w-full">
+                  <AISuggestionsHome />
+                </div>
+              )}
+            </SidebarDataProvider>
           )}
           {messages.map((msg, i) => {
             let displayContent = msg.content;
@@ -7156,8 +7548,11 @@ I've successfully executed the following real tasks:
             displayContent = sanitizeVisibleMessage(displayContent);
 
             const isLastMessage = i === messages.length - 1;
+            const isSearchResult = !!(msg as ExtendedChatMessage).isSearchResult;
             const msgIsOcr = (msg as any).isOcr || (msg as any).ocrText;
             const hasValidOcr = msgIsOcr && ((msg as any).ocrText || (msg as any).ocrLabel);
+            const isSkillsList = !!(msg as ExtendedChatMessage).isSkillsList;
+            const isToolNote = isSearchResult || msgIsOcr || isSkillsList;
             const isStreamingEmpty = isLastMessage && isLoading && !displayContent && !hasValidOcr;
             if (isStreamingEmpty && msg.role === 'model') {
               return null;
@@ -7186,7 +7581,7 @@ I've successfully executed the following real tasks:
                     fontSize: msg.role === 'user' ? Math.max(12, workspacePrefs.fontSize - 2) : workspacePrefs.fontSize,
                   }}
                 >
-                  {msg.role === 'model' && (
+                  {msg.role === 'model' && !isToolNote && (
                     <div className="mb-1.5 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <div className="flex h-5 w-5 items-center justify-center rounded-md bg-[color-mix(in_srgb,var(--accent)_10%,transparent)]">
@@ -7203,7 +7598,22 @@ I've successfully executed the following real tasks:
                       </button>
                     </div>
                   )}
-                  {displayContent && (
+                  {isSearchResult && displayContent && (
+                    <div className="flex items-center gap-1.5 py-0.5 text-[11px] text-secondary-text/70 leading-snug">
+                      <Search
+                        size={12}
+                        className="shrink-0 text-sky-400/70 transition-transform duration-200 ease-out hover:scale-125 hover:rotate-6"
+                      />
+                      <span>{displayContent}</span>
+                    </div>
+                  )}
+                  {!isSearchResult && msgIsOcr && displayContent && (
+                    <div className="py-0.5 text-[11px] text-secondary-text/70 leading-snug">{displayContent}</div>
+                  )}
+                  {isSkillsList && displayContent && (
+                    <div className="py-0.5 text-[11px] text-secondary-text/70 leading-snug">{displayContent}</div>
+                  )}
+                  {!isToolNote && displayContent && (
                     msg.role === 'model' ? (
                       <SmartMessageContent
                         content={displayContent}
@@ -7224,6 +7634,27 @@ I've successfully executed the following real tasks:
                   )}
                   {msg.role === 'user' && (msg as ExtendedChatMessage).loadedSkills && (msg as ExtendedChatMessage).loadedSkills!.length > 0 && (
                     <CollapsibleSkillMessage skills={(msg as ExtendedChatMessage).loadedSkills!} />
+                  )}
+
+                  {(msg as ExtendedChatMessage).isSkillsList && (
+                    <SkillsListMessage />
+                  )}
+
+                  {(msg as ExtendedChatMessage).question && (
+                    <QuestionCard
+                      question={(msg as ExtendedChatMessage).question!}
+                      answered={Boolean(answeredQuestions[msg.id ?? ''])}
+                      answer={answeredQuestions[msg.id ?? '']?.answer}
+                      skipped={answeredQuestions[msg.id ?? '']?.skipped}
+                      onAnswer={(text) => {
+                        setAnsweredQuestions(prev => ({ ...prev, [msg.id ?? '']: { answer: text } }));
+                        handleSendMessage(text);
+                      }}
+                      onSkip={() => {
+                        setAnsweredQuestions(prev => ({ ...prev, [msg.id ?? '']: { skipped: true } }));
+                        handleSendMessage('[User skipped the clarifying question — please proceed with a reasonable default or continue the request]');
+                      }}
+                    />
                   )}
 
                   {/* ── Inline Media: Images & Video Cards ─────────────────── */}
@@ -7504,13 +7935,14 @@ I've successfully executed the following real tasks:
       {/* Overlays: Customization / Privacy / Theme */}
       <AnimatePresence>
         {showCustomization && (
-          <div className="absolute inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
-            <CustomizationPanel
-              currentPrefs={sidebarPrefs}
-              onUpdatePrefs={(prefs) => { setSidebarPrefs(prefs); saveSidebarPreferences(prefs); }}
-              onClose={() => setShowCustomization(false)}
-            />
-          </div>
+          <CustomizationPanel
+            initialPrefs={sidebar.prefs}
+            initialGlobalTheme={useAppStore.getState().theme}
+            onPreview={(prefs) => sidebar.preview(prefs)}
+            onApply={(prefs) => sidebar.commit(prefs)}
+            onClose={() => setShowCustomization(false)}
+            setGlobalTheme={(t) => useAppStore.getState().setTheme(t)}
+          />
         )}
         {showPrivacy && (
           <div className="absolute inset-0 z-[100] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}>
@@ -7607,6 +8039,14 @@ I've successfully executed the following real tasks:
 
       {/* Input Area */}
       <footer className="flex-shrink-0 px-4 pb-3 pt-2" suppressHydrationWarning style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--primary-bg) 72%, transparent), color-mix(in srgb, var(--primary-bg) 98%, transparent) 32%, var(--primary-bg) 100%)', backdropFilter: 'blur(18px)' }}>
+        {messages.length === 0 && (
+          <AISuggestionBubbles
+            autoSuggestions={llmSuggestions}
+            loading={llmSuggestionsLoading}
+            onRefresh={generateLlmSuggestions}
+            onAction={(cmd) => handleSendMessage(cmd)}
+          />
+        )}
         <div className={`mx-auto max-w-[650px] rounded-2xl border p-2 transition-all duration-[180ms] ease-[var(--ease-spring)] ${glowActive && composerFocused ? (isRgbGlow ? 'rgb-glow-animate' : 'ai-glow-shift') : ''} ${shiftTabGlow
           ? 'border-purple-500/70 shadow-[0_0_22px_rgba(168,85,247,0.26)]'
           : 'focus-within:border-[color-mix(in_srgb,var(--accent)_35%,var(--border-color))]'
@@ -7649,7 +8089,7 @@ I've successfully executed the following real tasks:
                 <button onClick={() => exportChat('text')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><FileText size={14} /> Export text</button>
                 <button onClick={() => exportChat('pdf')} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><Download size={14} /> Export PDF</button>
                 <button onClick={copyChatToClipboard} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><CopyIcon size={14} /> Copy context</button>
-                <button onClick={() => { setShowCustomization(true); setShowActionsMenu(false); playClickSound(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><Layers size={14} /> Customize workspace</button>
+                <button onClick={() => { props.setShowSettings?.(true); props.setSettingsSection?.('sidebar'); setShowActionsMenu(false); playClickSound(); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] text-secondary-text transition-colors hover:bg-[color-mix(in_srgb,var(--primary-text)_7%,transparent)] hover:text-primary-text"><Layers size={14} /> Customize workspace</button>
               </motion.div>
             )}
           </AnimatePresence>
