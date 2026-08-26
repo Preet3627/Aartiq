@@ -7,6 +7,7 @@ declare global {
             // BrowserView related APIs
             getIsOnline: () => Promise<boolean>;
             getPlatform: () => string;
+            isMicrosoftStore: () => Promise<boolean>;
             getAppleIntelligenceStatus: () => Promise<{ success: boolean; available?: boolean; supportsSummaries?: boolean; supportsImageGeneration?: boolean; supportsGenmoji?: boolean; summaryAvailable?: boolean; imageAvailable?: boolean; genmojiAvailable?: boolean; summaryReason?: string; imageReason?: string; genmojiReason?: string; osVersion?: string; availableStyles?: string[]; error?: string }>;
             summarizeWithAppleIntelligence: (text: string) => Promise<{ success: boolean; available?: boolean; summaryAvailable?: boolean; summaryReason?: string; osVersion?: string; summary?: string; error?: string }>;
             generateAppleIntelligenceImage: (payload: { prompt: string; outputPath?: string; style?: string }) => Promise<{ success: boolean; available?: boolean; imageAvailable?: boolean; imageReason?: string; osVersion?: string; imagePath?: string; error?: string }>;
@@ -577,6 +578,7 @@ declare global {
             openExternalUrl: (url: string) => Promise<{ success: boolean; error?: string }>;
             getVersion: () => Promise<string>;
             getPlatform: () => string;
+            isMicrosoftStore: () => Promise<boolean>;
 
             // Plugin System APIs
             plugins: {

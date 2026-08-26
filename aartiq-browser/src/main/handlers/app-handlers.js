@@ -14,6 +14,17 @@ module.exports = function registerAppHandlers(ipcMain, handlers) {
     linux: process.platform === 'linux',
   }));
 
+  // True when running as a Microsoft Store (MSIX) packaged app.
+  // electron-windows-store sets process.windowsStore; an explicit env var
+  // override is supported for build/CI scenarios.
+  ipcMain.handle('is-microsoft-store', () => {
+    try {
+      return !!process.windowsStore || process.env.AARTIQ_MICROSOFT_STORE === '1';
+    } catch {
+      return false;
+    }
+  });
+
   ipcMain.handle('get-app-icon', async (event, appPath) => {
     const { getAppIcon } = require('./utils.js');
     return await getAppIcon(appPath);
@@ -50,7 +61,9 @@ module.exports = function registerAppHandlers(ipcMain, handlers) {
   });
 
   ipcMain.handle('check-for-updates', () => {
-    if (app.isPackaged) {
+    // Microsoft Store (MSIX) packages are updated by the Store itself and must
+    // not initiate downloads of executable code (Store policy 10.2.10.1).
+    if (app.isPackaged && !process.windowsStore && process.env.AARTIQ_MICROSOFT_STORE !== '1') {
       const { autoUpdater } = require('electron-updater');
       return autoUpdater.checkForUpdatesAndNotify();
     }
@@ -58,13 +71,13 @@ module.exports = function registerAppHandlers(ipcMain, handlers) {
   });
 
   ipcMain.handle('quit-and-install', () => {
-    if (require('electron').app.isPackaged) {
+    if (require('electron').app.isPackaged && !process.windowsStore && process.env.AARTIQ_MICROSOFT_STORE !== '1') {
       require('electron-updater').autoUpdater.quitAndInstall();
     }
   });
 
   // Auto-Updater Events
-  if (require('electron').app.isPackaged) {
+  if (require('electron').app.isPackaged && !process.windowsStore && process.env.AARTIQ_MICROSOFT_STORE !== '1') {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.on('update-available', (info) => { if (mainWindow) mainWindow.webContents.send('update-available', info); });
     autoUpdater.on('update-downloaded', (info) => { if (mainWindow) mainWindow.webContents.send('update-downloaded', info); });

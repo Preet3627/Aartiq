@@ -42,6 +42,7 @@ const UpdatesSettings = () => {
   const [updateAvailable, setUpdateAvailable] = useState<UpdateInfo | null>(null);
   const [updateDownloaded, setUpdateDownloaded] = useState<boolean>(false);
   const [checkingForUpdates, setCheckingForUpdates] = useState<boolean>(false);
+  const [isStore, setIsStore] = useState<boolean>(false);
 
   useEffect(() => {
     initializeSettings();
@@ -79,6 +80,13 @@ const UpdatesSettings = () => {
       if (window.electronAPI) {
         const version = await window.electronAPI.getVersion();
         if (version) setCurrentVersion(typeof version === 'string' ? version : String(version));
+        try {
+          if (window.electronAPI.isMicrosoftStore) {
+            setIsStore(await window.electronAPI.isMicrosoftStore());
+          }
+        } catch {
+          setIsStore(false);
+        }
       }
       await fetchReleases();
     } catch (err) {
@@ -143,7 +151,10 @@ const UpdatesSettings = () => {
       let downloadUrl = release.html_url;
       
       if (window.electronAPI) {
-        const platform = await window.electronAPI.getPlatform();
+        const platformInfo: any = await window.electronAPI.getPlatform();
+        const platform = typeof platformInfo === 'string'
+          ? platformInfo
+          : (platformInfo?.platform || 'linux');
         const asset = release.assets.find(a => {
           const name = a.name.toLowerCase();
           if (platform === 'win32') return name.endsWith('.exe') || name.endsWith('.msi');
@@ -247,7 +258,7 @@ const UpdatesSettings = () => {
 
       {/* Update Available Banner */}
       <AnimatePresence>
-        {updateAvailable && (
+        {!isStore && updateAvailable && (
           <motion.div
             initial={{ opacity: 0, height: 0, y: -10 }}
             animate={{ opacity: 1, height: 'auto', y: 0 }}
@@ -293,7 +304,7 @@ const UpdatesSettings = () => {
 
       {/* Update Downloaded Banner */}
       <AnimatePresence>
-        {updateDownloaded && (
+        {!isStore && updateDownloaded && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -323,7 +334,22 @@ const UpdatesSettings = () => {
         )}
       </AnimatePresence>
 
+      {/* Microsoft Store Distribution Notice */}
+      {isStore && (
+        <div className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-start gap-3">
+          <Info className="h-5 w-5 text-cyan-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-cyan-300 font-semibold">Updates are delivered by the Microsoft Store</p>
+            <p className="text-xs text-white/40 mt-1">
+              This app is distributed through the Microsoft Store, which handles installation and updates securely.
+              In-app downloads of app packages are disabled to comply with Store policy 10.2.10.1.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
+      {!isStore && (
       <div className="flex items-center gap-3">
         <button 
           onClick={handleCheckForUpdates}
@@ -344,6 +370,7 @@ const UpdatesSettings = () => {
           </button>
         )}
       </div>
+      )}
 
       {/* Error Display */}
       <AnimatePresence>
@@ -489,7 +516,8 @@ const UpdatesSettings = () => {
                                       <p className="text-xs text-white/40">{formatFileSize(asset.size)}</p>
                                     </div>
                                   </div>
-                                  <button 
+                                   {!isStore && (
+                                   <button 
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleDownloadRelease(release);
@@ -498,6 +526,7 @@ const UpdatesSettings = () => {
                                   >
                                     Download
                                   </button>
+                                   )}
                                 </div>
                               ))}
                             </div>
@@ -505,6 +534,7 @@ const UpdatesSettings = () => {
                         )}
                         
                         {/* Action */}
+                        {!isStore && (
                         <div className="flex items-center gap-3">
                           <button
                             onClick={(e) => {
@@ -517,6 +547,7 @@ const UpdatesSettings = () => {
                             <span>Download {release.name || release.tag_name}</span>
                           </button>
                         </div>
+                        )}
                       </div>
                     </motion.div>
                   )}

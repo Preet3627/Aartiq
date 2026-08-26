@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // BrowserView related APIs
   getIsOnline: () => ipcRenderer.invoke('get-is-online'),
   getPlatform: () => ipcRenderer.invoke('get-platform'), // Use IPC for consistency
+  isMicrosoftStore: () => ipcRenderer.invoke('is-microsoft-store'),
   getAppleIntelligenceStatus: () => ipcRenderer.invoke('apple-intelligence-status'),
   summarizeWithAppleIntelligence: (text) => ipcRenderer.invoke('apple-intelligence-summary', text),
   generateAppleIntelligenceImage: (payload) => ipcRenderer.invoke('apple-intelligence-generate-image', payload),
